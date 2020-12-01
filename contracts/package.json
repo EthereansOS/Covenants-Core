@@ -1,0 +1,14 @@
+{
+  "name": "ethaffairs",
+  "version": "1.0.0",
+  "description": "ETH Affairs",
+  "main": "build-contracts.js",
+  "scripts": {
+    "build": "node build-contracts.js",
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "truffle-flattener-wrapper": "git+https://github.com/b-u-i-d-l/truffle-flattener-wrapper.git"
+  }
+}

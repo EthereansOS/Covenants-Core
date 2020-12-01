@@ -1,0 +1,7 @@
+/**/build
+/**/package-lock.json
+/**/node_modules
+/**/lib
+/**/.vscode
+/**/artifacts
+/**/contracts-out
