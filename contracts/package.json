@@ -4,7 +4,7 @@
   "description": "ETH Affairs",
   "main": "build-contracts.js",
   "scripts": {
-    "build": "node build-contracts.js",
+    "build": "node build-contracts.js"
   },
   "author": "",
   "license": "ISC",

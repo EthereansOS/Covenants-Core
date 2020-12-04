@@ -24,7 +24,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
     function addLiquidity(LiquidityProviderData memory data) public payable virtual override {
         _transferToMeAndCheckAllowance(data, data.liquidityProviderAddress, true);
         _addLiquidityWork(data, false);
-        _flushBack(msg.sender, data.tokens, data.tokens.length);
+        _flushBack(_sender(data), data.tokens, data.tokens.length);
     }
 
     function addLiquidityBatch(LiquidityProviderData[] memory data) public payable virtual override {
@@ -32,7 +32,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             _addLiquidityWork(data[i], true);
         }
-        _flushBack(msg.sender, tokens, tokensLength);
+        _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
     function _addLiquidityWork(LiquidityProviderData memory data, bool checkAllowance) internal virtual {
@@ -51,7 +51,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
 
     function removeLiquidity(LiquidityProviderData memory data) public virtual override {
         _removeLiquidityWork(data);
-        _flushBack(msg.sender, data.liquidityProviderAddress);
+        _flushBack(_sender(data), data.liquidityProviderAddress);
     }
 
     function removeLiquidityBatch(LiquidityProviderData[] memory data) public virtual override {
@@ -63,13 +63,13 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
     function _removeLiquidityWork(LiquidityProviderData memory data) internal virtual {
         require(data.receiver != address(0), "Receiver cannot be void address");
         BPool(data.liquidityProviderAddress).exitPool(data.liquidityProviderAmount, data.amounts);
-        _flushBack(payable(data.receiver), data.tokens, data.tokens.length);
+        _flushBack(_receiver(data), data.tokens, data.tokens.length);
     }
 
     function swapLiquidity(LiquidityToSwap memory data) public payable virtual override {
         _transferToMeAndCheckAllowance(data.tokens[0], data.amount, address(0));
         _swapLiquidityWork(data);
-        _flushBack(msg.sender, data.tokens, data.tokens.length);
+        _flushBack(_sender(data), data.tokens, data.tokens.length);
     }
 
     function swapLiquidityBatch(LiquidityToSwap[] memory data) public payable virtual override {
@@ -77,7 +77,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             _swapLiquidityWork(data[i]);
         }
-        _flushBack(msg.sender, tokens, tokensLength);
+        _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
     function _swapLiquidityWork(LiquidityToSwap memory data) internal virtual {
@@ -89,6 +89,10 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         if(data.exitInETH) {
             IWETH(_wethAddress).withdraw(result);
         }
-        _flushBack(payable(data.receiver), data.exitInETH ? address(0) : data.tokens[1]);
+        _flushBack(_receiver(data), data.exitInETH ? address(0) : data.tokens[1]);
+    }
+
+    function tokens(address liquidityProviderAddress) public override view returns(address[] memory) {
+        return BPool(liquidityProviderAddress).getFinalTokens();
     }
 }

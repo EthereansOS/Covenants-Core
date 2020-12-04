@@ -6,6 +6,7 @@ struct LiquidityProviderData {
     uint256 liquidityProviderAmount;
     address[] tokens;
     uint256[] amounts;
+    address sender;
     address receiver;
 }
 
@@ -16,5 +17,6 @@ struct LiquidityToSwap {
     bool exitInETH;
     address[] tokens;
     uint256 amount;
+    address sender;
     address receiver;
 }

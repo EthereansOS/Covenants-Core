@@ -16,7 +16,7 @@ contract USDExtension {
 
     constructor(address orchestrator, string memory name, string memory symbol, string memory collectionUri, string memory itemUri) {
         _controller = msg.sender;
-        (_collection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encode("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
+        (_collection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         INativeV1 coll = INativeV1(_collection);
         (_objectId, _interoperableInterfaceAddress) = coll.mint(10**18, "", "", itemUri, true);
         coll.burn(_objectId, coll.balanceOf(address(this), _objectId));
@@ -53,7 +53,7 @@ contract USDExtension {
 
     function mint(uint256 amount, address receiver) public controllerOnly {
         INativeV1(_collection).mint(_objectId, amount);
-        IERC20(_interoperableInterfaceAddress).transfer(receiver, IERC20(_interoperableInterfaceAddress).balanceOf(address(this)));
+        INativeV1(_collection).safeTransferFrom(address(this), receiver, _objectId, INativeV1(_collection).balanceOf(address(this), _objectId), "");
     }
 
     function setCollectionUri(string memory uri) public controllerOnly {

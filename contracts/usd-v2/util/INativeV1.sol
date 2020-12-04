@@ -2,7 +2,9 @@
 
 pragma solidity ^0.7.0;
 
-interface INativeV1 {
+import "./IEthItem.sol";
+
+interface INativeV1 is IEthItem {
 
     function init(string calldata name, string calldata symbol, bool hasDecimals, string calldata collectionUri, address extensionAddress, bytes calldata extensionInitPayload) external returns(bytes memory extensionInitCallResponse);
 
@@ -29,11 +31,4 @@ interface INativeV1 {
     function setUri(string calldata newUri) external;
 
     function setUri(uint256 objectId, string calldata newUri) external;
-
-    function burn(
-        uint256 objectId,
-        uint256 amount
-    ) external;
-
-    function balanceOf(address account, uint256 id) external view returns (uint256);
 }

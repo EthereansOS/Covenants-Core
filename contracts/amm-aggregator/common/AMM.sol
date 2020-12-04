@@ -12,6 +12,55 @@ abstract contract AMM is IAMM {
     receive() external virtual payable {
     }
 
+    function inPercentage(address liquidityProviderAddress, uint256 numerator, uint256 denominator) public override view returns (uint256, uint256[] memory) {
+        return this.inPercentage(liquidityProviderAddress, numerator, denominator, 0);
+    }
+
+    function byAmount(address liquidityProviderAddress, uint256 liquidityProviderAmount) public override view returns(uint256[] memory) {
+        return this.byAmount(liquidityProviderAddress, liquidityProviderAmount, 0);
+    }
+
+    function inPercentage(address liquidityProviderAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public virtual override view returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
+        providerAmount = (IERC20(liquidityProviderAddress).totalSupply() * numerator) / denominator;
+
+        address[] memory liquidityProviderTokens = this.tokens(liquidityProviderAddress);
+
+        tokenAmounts = new uint256[](liquidityProviderTokens.length);
+        for(uint256 i = 0; i < tokenAmounts.length; i++) {
+            tokenAmounts[i] = _normalizeDecimals(liquidityProviderTokens[i], (IERC20(liquidityProviderTokens[i]).balanceOf(liquidityProviderAddress) * numerator) / denominator, normalizeToDecimals);
+        }
+    }
+
+    function byAmount(address liquidityProviderAddress, uint256 liquidityProviderAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
+        IERC20 pair = IERC20(liquidityProviderAddress);
+
+        uint256 numerator = liquidityProviderAmount != 0 ? liquidityProviderAmount : pair.balanceOf(msg.sender);
+        uint256 denominator = pair.totalSupply();
+
+        address[] memory liquidityProviderTokens = this.tokens(liquidityProviderAddress);
+
+        tokenAmounts = new uint256[](liquidityProviderTokens.length);
+        for(uint256 i = 0; i < tokenAmounts.length; i++) {
+            tokenAmounts[i] = _normalizeDecimals(liquidityProviderTokens[i], (IERC20(liquidityProviderTokens[i]).balanceOf(liquidityProviderAddress) * numerator) / denominator, normalizeToDecimals);
+        }
+    }
+
+    function _sender(LiquidityProviderData memory liquidityProviderData) internal virtual returns(address payable) {
+        return payable(liquidityProviderData.sender != address(0) ? liquidityProviderData.sender : msg.sender);
+    }
+
+    function _receiver(LiquidityProviderData memory liquidityProviderData) internal virtual returns(address payable) {
+        return payable(liquidityProviderData.receiver != address(0) ? liquidityProviderData.receiver : msg.sender);
+    }
+
+    function _sender(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
+        return payable(liquidityToSwap.sender != address(0) ? liquidityToSwap.sender : msg.sender);
+    }
+
+    function _receiver(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
+        return payable(liquidityToSwap.receiver != address(0) ? liquidityToSwap.receiver : msg.sender);
+    }
+
     function _flushBack(address payable sender, address[] memory tokens, uint256 tokensLength) internal virtual {
         for(uint256 i = 0; i < tokensLength; i++) {
             if(tokens[i] != address(0)) {
@@ -100,7 +149,6 @@ abstract contract AMM is IAMM {
         }
     }
 
-
     function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
         _transferToMe(tokenAddress, value);
         _checkAllowance(tokenAddress, value, operator);
@@ -143,5 +191,31 @@ abstract contract AMM is IAMM {
             return (tokenA, tokenB);
         }
         return (tokenB, tokenA);
+    }
+
+    function _normalizeDecimals(address[] memory tokenAddresses, uint256[] memory amounts, uint256 decimals) internal virtual view returns (uint256[] memory) {
+        if(decimals == 0) {
+            return amounts;
+        }
+        uint256[] memory newAmounts = new uint256[] (amounts.length);
+        for(uint256 i = 0; i < newAmounts.length; i++) {
+            newAmounts[i] = _normalizeDecimals(tokenAddresses[i], amounts[i], decimals);
+        }
+        return newAmounts;
+    }
+
+    function _normalizeDecimals(address tokenAddress, uint256 amount, uint256 decimals) internal virtual view returns(uint256) {
+        if(decimals == 0) {
+            return amount;
+        }
+        uint256 remainingDecimals = decimals;
+        IERC20 token = IERC20(tokenAddress);
+        remainingDecimals -= token.decimals();
+
+        if(remainingDecimals == 0) {
+            return amount;
+        }
+
+        return amount * (remainingDecimals == 0 ? 1 : (10**remainingDecimals));
     }
 }

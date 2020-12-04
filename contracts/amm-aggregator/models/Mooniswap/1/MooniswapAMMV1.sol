@@ -144,4 +144,13 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
             _safeTransfer(data.tokens[1], data.receiver, result);
         }
     }
+
+    function tokens(address liquidityProviderAddress) public override view returns(address[] memory tokenAddresses) {
+        IERC20[] memory liquidityProviderTokens = Mooniswap(liquidityProviderAddress).getTokens();
+        tokenAddresses = new address[](liquidityProviderTokens.length);
+
+        for(uint256 i = 0; i < liquidityProviderTokens.length; i++) {
+            tokenAddresses[i] = address(liquidityProviderTokens[i]);
+        }
+    }
 }
