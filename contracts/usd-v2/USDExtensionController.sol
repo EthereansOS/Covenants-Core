@@ -127,9 +127,7 @@ contract USDExtensionController is ERC1155Receiver {
 
     function flushToNewController(address[] memory tokenAddresses) public {
         address controller = USDExtension(_extension).controller();
-        if(controller == address(this)) {
-            return;
-        }
+        require(controller != address(this), "This is the last controller!");
         _flushBack(payable(controller), tokenAddresses);
     }
 
