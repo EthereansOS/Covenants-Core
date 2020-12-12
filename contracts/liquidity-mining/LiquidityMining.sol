@@ -2,6 +2,9 @@
 pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
+import "../amm-aggregator/common/AMMData.sol";
+import "../amm-aggregator/common/IAMM.sol";
+
 contract LiquidityMining {
 
     // tier struct
@@ -52,13 +55,14 @@ contract LiquidityMining {
 
     /** @dev function called by the factory contract to initialize a new clone.
       * @param owner liquidity mining contract owner (a wallet or an extension).
+      * @param ownerInitData encoded call function of the owner (used from an extension).
       * @param rewardTokenAddress the address of the reward token.
       * @param acceptedTokens array containing all the accepted tokens.
       * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
       * @param whitelistedTiers array containing all the whitelisted tiers.
       * @return success if the initialize function has ended properly.
      */
-    function initialize(address owner, address rewardTokenAddress, address[] memory acceptedTokens, bool byMint, Tier[] memory whitelistedTiers, uint256 freeTierLiquidityPercentage, uint256 lockedTierLiquidityPercentage) public onlyFactory returns(bool) {
+    function initialize(address owner, bytes memory ownerInitData, address rewardTokenAddress, address[] memory acceptedTokens, bool byMint, Tier[] memory whitelistedTiers, uint256 freeTierLiquidityPercentage, uint256 lockedTierLiquidityPercentage) public onlyFactory returns(bool) {
         require(
             _owner == address(0) && 
             _rewardTokenAddress == address(0) && 
@@ -76,6 +80,10 @@ contract LiquidityMining {
         _whitelistedTiers = whitelistedTiers;
         _freeTierLiquidityPercentage = freeTierLiquidityPercentage;
         _lockedTierLiquidityPercentage = lockedTierLiquidityPercentage;
+        if (keccak256(ownerInitData) != keccak256("")) {
+            (bool result,) = _owner.call(ownerInitData);
+            require(result, "Error while initializing owner.");
+        }
         return true;
     }
 
@@ -93,8 +101,17 @@ contract LiquidityMining {
         uint256 liquidity;
         for (uint256 i = 0; i < whitelistedTiers.length; i++) {
             liquidity += whitelistedTiers[i].liquidityPercentage;
-            assert(liquidity <= 100);
+            assert(liquidity == 100);
         }
         _whitelistedTiers = whitelistedTiers;
+    }
+
+    function stake(uint256 tierIndex, uint256 liquidityProviderIndex) public {
+        Tier storage tier = _whitelistedTiers[tierIndex];
+        require(tier.ammPlugin != address(0), "Invalid tier.");
+        require(block.number >= tier.startBlock, "Staking not available.");
+        require(block.number <= tier.endBlock, "Staking ended.");
+        require(liquidityProviderIndex < tier.liquidityProviders.length, "Invalid liquidity provider.");
+        IAMM amm = IAMM(tier.ammPlugin);
     }
 }
