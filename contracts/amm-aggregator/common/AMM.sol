@@ -61,37 +61,38 @@ abstract contract AMM is IAMM {
         return payable(liquidityToSwap.receiver != address(0) ? liquidityToSwap.receiver : msg.sender);
     }
 
-    function _flushBack(address payable sender, address[] memory tokens, uint256 tokensLength) internal virtual {
+    function _flushBack(address payable sender, address[] memory tokens, uint256 tokensLength) internal virtual returns(uint256[] memory balances) {
+        balances = new uint256[](tokensLength + 1);
         for(uint256 i = 0; i < tokensLength; i++) {
             if(tokens[i] != address(0)) {
-                _flushBack(sender, tokens[i]);
+                balances[i] = _flushBack(sender, tokens[i]);
             }
         }
-        _flushBack(sender, address(0));
+        balances[tokensLength] = _flushBack(sender, address(0));
     }
 
-    function _flushBack(address payable sender, address tokenA, address tokenB) internal virtual {
+    function _flushBack(address payable sender, address tokenA, address tokenB) internal virtual returns(uint256 balance0, uint256 balance1, uint256 balanceETH) {
         if(tokenA != address(0)) {
-            _flushBack(sender, tokenA);
+            balance0 = _flushBack(sender, tokenA);
         }
         if(tokenB != address(0)) {
-            _flushBack(sender, tokenB);
+            balance1 = _flushBack(sender, tokenB);
         }
-        _flushBack(sender, address(0));
+        balanceETH = _flushBack(sender, address(0));
     }
 
-    function _flushBack(address payable sender, address tokenAddress) internal virtual {
-        uint256 balance = tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
+    function _flushBack(address payable sender, address tokenAddress) internal virtual returns (uint256 balance) {
+        balance = tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
 
         if(balance == 0) {
-            return;
+            return balance;
         }
 
         if(tokenAddress == address(0)) {
-            return sender.transfer(balance);
+            sender.transfer(balance);
+        } else {
+            _safeTransfer(tokenAddress, sender, balance);
         }
-
-        _safeTransfer(tokenAddress, sender, balance);
     }
 
     function _transferToMeAndCheckAllowance(LiquidityProviderData memory data, address operator, bool add) internal virtual {

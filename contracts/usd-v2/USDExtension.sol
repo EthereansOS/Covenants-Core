@@ -11,31 +11,14 @@ contract USDExtension {
     address private _controller;
 
     address private _collection;
-    uint256 private _objectId;
-    address private _interoperableInterfaceAddress;
 
-    constructor(address orchestrator, string memory name, string memory symbol, string memory collectionUri, string memory itemUri) {
+    constructor(address orchestrator, string memory name, string memory symbol, string memory collectionUri) {
         _controller = msg.sender;
         (_collection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
-        INativeV1 coll = INativeV1(_collection);
-        (_objectId, _interoperableInterfaceAddress) = coll.mint(10**18, "", "", itemUri, true);
-        coll.burn(_objectId, coll.balanceOf(address(this), _objectId));
     }
 
     function collection() public view returns (address) {
         return _collection;
-    }
-
-    function objectId() public view returns (uint256) {
-        return _objectId;
-    }
-
-    function interoperableInterface() public view returns (address) {
-        return _interoperableInterfaceAddress;
-    }
-
-    function info() public view returns (address, uint256, address) {
-        return (_collection, _objectId, _interoperableInterfaceAddress);
     }
 
     function controller() public view returns (address) {
@@ -51,16 +34,25 @@ contract USDExtension {
         _controller = newController;
     }
 
-    function mint(uint256 amount, address receiver) public controllerOnly {
-        INativeV1(_collection).mint(_objectId, amount);
-        INativeV1(_collection).safeTransferFrom(address(this), receiver, _objectId, INativeV1(_collection).balanceOf(address(this), _objectId), "");
+    function mint(uint256 objectId, uint256 amount, address receiver) public controllerOnly {
+        INativeV1(_collection).mint(objectId, amount);
+        INativeV1(_collection).safeTransferFrom(address(this), receiver, objectId, INativeV1(_collection).balanceOf(address(this), objectId), "");
+    }
+
+    function mint(uint256 amount, string calldata tokenName, string calldata tokenSymbol, string calldata objectUri, bool editable, address receiver) public controllerOnly returns(uint256 objectId, address interoperableInterfaceAddress) {
+        (objectId, interoperableInterfaceAddress) = INativeV1(_collection).mint(amount, tokenName, tokenSymbol, objectUri, editable);
+        INativeV1(_collection).safeTransferFrom(address(this), receiver, objectId, INativeV1(_collection).balanceOf(address(this), objectId), "");
     }
 
     function setCollectionUri(string memory uri) public controllerOnly {
         INativeV1(_collection).setUri(uri);
     }
 
-    function setItemUri(string memory uri) public controllerOnly {
-        INativeV1(_collection).setUri(_objectId, uri);
+    function setItemUri(uint256 existingObjectId, string memory uri) public controllerOnly {
+        INativeV1(_collection).setUri(existingObjectId, uri);
+    }
+
+    function makeReadOnly(uint256 objectId) public controllerOnly {
+        INativeV1(_collection).makeReadOnly(objectId);
     }
 }

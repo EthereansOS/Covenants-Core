@@ -15,14 +15,19 @@ import "../amm-aggregator/common/AMMData.sol";
 
 contract USDExtensionController is ERC1155Receiver {
 
+    uint256 private constant DECIMALS = 18;
+
     address private _doubleProxy;
 
     address private _extension;
 
     address private _collection;
-    uint256 private _objectId;
-    address private _interoperableInterfaceAddress;
-    uint256 private _decimals;
+
+    uint256 private _usdObjectId;
+    address private _usdInteroperableInterfaceAddress;
+
+    uint256 private _usdCreditObjectId;
+    address private _usdCreditInteroperableInterfaceAddress;
 
     uint256 private _lastRedeemBlock;
 
@@ -45,15 +50,26 @@ contract USDExtensionController is ERC1155Receiver {
     }
 
     function init(address orchestratorAddress,
-        string memory name, string memory symbol, string memory collectionUri, string memory itemUri) public {
-        init(address(new USDExtension(orchestratorAddress, name, symbol, collectionUri, itemUri)));
+        string calldata collectionName, string calldata collectionSymbol, string calldata collectionUri, 
+        string calldata usdName, string calldata usdSymbol, string calldata usdUri,
+        string calldata usdCreditName, string calldata usdCreditSymbol, string calldata usdCreditUri) public {
+        require(_extension == address(0), "Init already called");
+        USDExtension usdExtension = new USDExtension(orchestratorAddress, collectionName, collectionSymbol, collectionUri);
+        _extension = address(usdExtension);
+        INativeV1 usdCollection = INativeV1(_collection = usdExtension.collection());
+
+        (_usdObjectId, _usdInteroperableInterfaceAddress) = usdExtension.mint(10**DECIMALS, usdName, usdSymbol, usdUri, true, address(this));
+        usdCollection.burn(_usdObjectId, usdCollection.balanceOf(address(this), _usdObjectId));
+
+        (_usdCreditObjectId, _usdCreditInteroperableInterfaceAddress) = usdExtension.mint(10**DECIMALS, usdCreditName, usdCreditSymbol, usdCreditUri, true, address(this));
+        usdCollection.burn(_usdCreditObjectId, usdCollection.balanceOf(address(this), _usdCreditObjectId));
     }
 
-    function init(address extensionAddress) public {
+    function init(address extensionAddress, uint256 usdObjectId, uint256 usdCreditObjectId) public {
         require(_extension == address(0), "Init already called");
-        _extension = extensionAddress;
-        (_collection, _objectId, _interoperableInterfaceAddress) = USDExtension(_extension).info();
-        _decimals = INativeV1(_collection).decimals(_objectId);
+        INativeV1 usdCollection = INativeV1(_collection = USDExtension(_extension = extensionAddress).collection());
+        _usdInteroperableInterfaceAddress = address(usdCollection.asInteroperable(_usdObjectId = usdObjectId));
+        _usdCreditInteroperableInterfaceAddress = address(usdCollection.asInteroperable(_usdCreditObjectId = usdCreditObjectId));
     }
 
     function _setAllowedAMMs(bytes memory data) private {
@@ -76,16 +92,12 @@ contract USDExtensionController is ERC1155Receiver {
         return _collection;
     }
 
-    function objectId() public view returns (uint256) {
-        return _objectId;
+    function usdInfo() public view returns (address, uint256, address) {
+        return (_collection, _usdObjectId, _usdInteroperableInterfaceAddress);
     }
 
-    function interoperableInterface() public view returns (address) {
-        return _interoperableInterfaceAddress;
-    }
-
-    function info() public view returns (address, uint256, address) {
-        return (_collection, _objectId, _interoperableInterfaceAddress);
+    function usdCreditInfo() public view returns (address, uint256, address) {
+        return (_collection, _usdCreditObjectId, _usdCreditInteroperableInterfaceAddress);
     }
 
     function creditReceivers() public view returns(address[] memory) {
@@ -117,8 +129,8 @@ contract USDExtensionController is ERC1155Receiver {
         USDExtension(_extension).setCollectionUri(uri);
     }
 
-    function setItemUri(string memory uri) public byDFO {
-        USDExtension(_extension).setItemUri(uri);
+    function setItemUri(uint256 existingObjectId, string memory uri) public byDFO {
+        USDExtension(_extension).setItemUri(existingObjectId, uri);
     }
 
     function setController(address newController) public byDFO {
@@ -148,7 +160,7 @@ contract USDExtensionController is ERC1155Receiver {
         view
         returns (uint256 credit, uint256 debt)
     {
-        uint256 totalSupply = INativeV1(_collection).totalSupply(_objectId);
+        uint256 totalSupply = INativeV1(_collection).totalSupply(_usdObjectId);
         uint256 effectiveAmount = 0;
         for(uint256 i = 0; i < _allowedAMMs.length; i++) {
             for(uint256 j = 0; j < _allowedAMMs[i].liquidityProviders.length; j++) {
@@ -170,7 +182,7 @@ contract USDExtensionController is ERC1155Receiver {
     {
         IERC20 token = IERC20(tokenAddress);
         uint256 tokenDecimals = token.decimals();
-        uint256 remainingDecimals = _decimals - tokenDecimals;
+        uint256 remainingDecimals = DECIMALS - tokenDecimals;
         uint256 result = amount == 0 ? token.balanceOf(address(this)) : amount;
         if (remainingDecimals == 0) {
             return result;
@@ -189,14 +201,33 @@ contract USDExtensionController is ERC1155Receiver {
         override
         returns(bytes4) {
             require(msg.sender == _collection, "Only uSD collection allowed here");
-            require(id == _objectId, "Only uSD id allowed here");
+            _onSingleReceived(from, id, value, data);
+            return this.onERC1155Received.selector;
+    }
+
+    function _onSingleReceived(
+        address from,
+        uint256 id,
+        uint256 value,
+        bytes memory data) private {
+            require(id == _usdObjectId, "Only uSD id allowed here");
             (uint256 action, bytes memory payload) = abi.decode(data, (uint256, bytes));
             if(action == 1) {
                 _rebalanceByDebt(from, value);
             } else {
                 _burn(from, value, payload);
             }
-            return this.onERC1155Received.selector;
+    }
+
+    function _burnBatch(address from,
+        uint256[] memory ids,
+        uint256[] memory values,
+        bytes memory data) private {
+            bytes[] memory payloads = abi.decode(data, (bytes[]));
+            require(payloads.length == ids.length, "Wrong payloads length");
+            for(uint256 i = 0; i < ids.length; i++) {
+                _onSingleReceived(from, ids[i], values[i], payloads[i]);
+            }
     }
 
     function _burn(address from, uint256 value, bytes memory payload) private {
@@ -204,17 +235,17 @@ contract USDExtensionController is ERC1155Receiver {
         uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityProviderPosition, liquidityProviderAmount);
         require(value >= toBurn, "Insufficient Amount");
         if(value > toBurn) {
-            INativeV1(_collection).safeTransferFrom(address(this), from, _objectId, value - toBurn, "");
+            INativeV1(_collection).safeTransferFrom(address(this), from, _usdObjectId, value - toBurn, "");
         }
-        INativeV1(_collection).burn(_objectId, toBurn);
+        INativeV1(_collection).burn(_usdObjectId, toBurn);
         _removeLiquidity(from, ammPosition, liquidityProviderPosition, liquidityProviderAmount);
     }
 
     function _rebalanceByDebt(address from, uint256 value) private {
         (, uint256 debt) = differences();
         require(value <= debt, "Cannot Burn this amount");
-        INativeV1(_collection).burn(_objectId, value);
-        
+        INativeV1(_collection).burn(_usdObjectId, value);
+        USDExtension(_extension).mint(_usdCreditObjectId, value, from);
     }
 
     function onERC1155BatchReceived(
@@ -227,18 +258,13 @@ contract USDExtensionController is ERC1155Receiver {
         public
         override
         returns(bytes4) {
-        require(msg.sender != _collection, "Cannot send uSD to this call");
-        address[] memory tokens = new address[](ids.length);
-        uint256[] memory newValues = new uint256[](ids.length);
-        for(uint256 i = 0; i < ids.length; i++) {
-            IERC20WrapperV1 wrapper = IERC20WrapperV1(msg.sender);
-            wrapper.burn(ids[i], values[i]);
-            IERC20 token = IERC20(tokens[i] = wrapper.source(ids[i]));
-            newValues[i] = token.balanceOf(address(this));
+
+        if(msg.sender == _collection) {
+            _burnBatch(from, ids, values, data);
+        } else {
+            _addLiquidityBatch(from, ids, values, data);
         }
-        (uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount) = abi.decode(data, (uint256, uint256, uint256));
-        _addLiquidity(tokens, newValues, from, ammPosition, liquidityProviderPosition, liquidityProviderAmount);
-        USDExtension(_extension).mint(_normalizeAndSumAmounts(ammPosition, liquidityProviderPosition, liquidityProviderAmount), from);
+
         return this.onERC1155BatchReceived.selector;
     }
 
@@ -255,14 +281,14 @@ contract USDExtensionController is ERC1155Receiver {
         );
         _lastRedeemBlock = block.number;
         (uint256 credit, ) = differences();
-        USDExtension(_extension).mint(credit, address(this));
+        USDExtension(_extension).mint(_usdObjectId, credit, address(this));
         uint256 forDFO = (credit * _rebalanceByCreditMultipliers[0]) / _rebalanceByCreditMultipliers[1];
-        IERC20(_interoperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), forDFO);
+        IERC20(_usdInteroperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), forDFO);
         for(uint256 i = 0; i < _creditReceivers.length; i++) {
             uint256 numerator = _rebalanceByCreditMultipliers[2 + (2 * i)];
             uint256 denominator = _rebalanceByCreditMultipliers[3 + (2 * i)];
             uint256 value = (credit * numerator) / denominator;
-            INativeV1(_collection).safeTransferFrom(address(this), _creditReceivers[i], _objectId, value, "");
+            INativeV1(_collection).safeTransferFrom(address(this), _creditReceivers[i], _usdObjectId, value, "");
         }
     }
 
@@ -278,23 +304,42 @@ contract USDExtensionController is ERC1155Receiver {
         _;
     }
 
+    function _addLiquidityBatch(address from,
+        uint256[] memory ids,
+        uint256[] memory values,
+        bytes memory data) private {
+        address[] memory tokens = new address[](ids.length);
+        uint256[] memory newValues = new uint256[](ids.length);
+            for(uint256 i = 0; i < ids.length; i++) {
+                IERC20WrapperV1 wrapper = IERC20WrapperV1(msg.sender);
+                wrapper.burn(ids[i], values[i]);
+                IERC20 token = IERC20(tokens[i] = wrapper.source(ids[i]));
+                newValues[i] = token.balanceOf(address(this));
+            }
+            (uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount) = abi.decode(data, (uint256, uint256, uint256));
+            uint256 toMint = _addLiquidity(tokens, newValues, from, ammPosition, liquidityProviderPosition, liquidityProviderAmount, msg.sender);
+            USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityProviderPosition, toMint), from);
+    }
+
     function _addLiquidity(
         address[] memory tokens,
         uint256[] memory amounts,
         address owner,
         uint256 ammPosition,
         uint256 liquidityProviderPosition,
-        uint256 liquidityProviderAmount
+        uint256 liquidityProviderAmount,
+        address erc20WrapperForItemReconversion
     )
         private
         _forAllowedAMMAndLiquidityProvider(ammPosition, liquidityProviderPosition)
+        returns(uint256 addedAmount)
     {
         LiquidityProviderData memory data = LiquidityProviderData(
             _allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition],
             liquidityProviderAmount,
             tokens,
             amounts,
-            owner,
+            erc20WrapperForItemReconversion == address(0) ? owner : address(this),
             address(this)
         );
         bool ethInvolved = false;
@@ -307,10 +352,37 @@ contract USDExtensionController is ERC1155Receiver {
         }
         _checkAllowance(tokens, amounts, _allowedAMMs[ammPosition].ammAddress);
         if(ethInvolved) {
-            IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
-            return;
+            addedAmount = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
+        } else {
+            addedAmount = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
         }
-        IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
+
+        if(erc20WrapperForItemReconversion != address(0)) {
+            _reconvertToItemAndSendBack(erc20WrapperForItemReconversion, tokens, owner);
+        }
+    }
+
+    function _reconvertToItemAndSendBack(address erc20WrapperForItemReconversion, address[] memory tokens, address owner) private {
+        IERC20WrapperV1 wrapper = IERC20WrapperV1(erc20WrapperForItemReconversion);
+        for(uint256 i = 0; i < tokens.length; i++) {
+            uint256 balanceOf = tokens[i] == address(0) ? address(this).balance : IERC20(tokens[i]).balanceOf(address(this));
+            if(balanceOf == 0) {
+                continue;
+            }
+            _checkAllowance(tokens[i], balanceOf, erc20WrapperForItemReconversion);
+            address wrapperAddress;
+            if(tokens[i] == address(0)) {
+                (,wrapperAddress) = wrapper.mintETH{value: balanceOf}();
+            } else {
+                (,wrapperAddress) = wrapper.mint(tokens[i], balanceOf);
+            }
+            IERC20 token = IERC20(wrapperAddress);
+            balanceOf = token.balanceOf(address(this));
+            if(balanceOf == 0) {
+                continue;
+            }
+            token.transfer(owner, balanceOf);
+        }
     }
 
     function _removeLiquidity(
@@ -335,41 +407,15 @@ contract USDExtensionController is ERC1155Receiver {
         amm.removeLiquidity(data);
     }
 
-    function _normalizeAmounts(uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount)
-        private
-        view
-        returns (uint256[] memory amounts)
-    {
-        IERC20 liquidityProvider = IERC20(_allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition]);
-        amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byAmount(address(liquidityProvider), liquidityProviderAmount != 0 ? liquidityProviderAmount : liquidityProvider.balanceOf(address(this)), _decimals);
-    }
-
     function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount)
         private
         view
         returns(uint256 amount) {
-            uint256[] memory amounts = _normalizeAmounts(ammPosition, liquidityProviderPosition, liquidityProviderAmount);
+            IERC20 liquidityProvider = IERC20(_allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition]);
+            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byAmount(address(liquidityProvider), liquidityProviderAmount != 0 ? liquidityProviderAmount : liquidityProvider.balanceOf(address(this)), DECIMALS);
             for(uint256 i = 0; i < amounts.length; i++) {
                 amount += amounts[i];
             }
-        }
-
-    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator) internal virtual {
-        for(uint256 i = 0; i < tokens.length; i++) {
-            _transferToMeAndCheckAllowance(tokens[i], amounts[i], operator);
-        }
-    }
-
-    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
-        _transferToMe(tokenAddress, value);
-        _checkAllowance(tokenAddress, value, operator);
-    }
-
-    function _transferToMe(address tokenAddress, uint256 value) internal virtual {
-        if(tokenAddress == address(0)) {
-            return;
-        }
-        _safeTransferFrom(tokenAddress, msg.sender, address(this), value);
     }
 
     function _checkAllowance(address[] memory tokens, uint256[] memory amounts, address operator) internal virtual {
