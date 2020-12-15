@@ -17,6 +17,7 @@ contract LiquidityMining {
         uint256 startBlock; // farming setup start block (valid only if free is false).
         uint256 endBlock; // farming setup end block (valid only if free is false).
         uint256 rewardPerBlock; // farming setup reward per single block.
+        uint256 maximumLiquidity; // maximum total liquidity
         uint256 startingReward; // farming setup starting total reward.
         address mainTokenAddress; // eg. buidl address.
         address[] secondaryTokenAddresses; // eg. [address(0), dai address].
@@ -195,6 +196,11 @@ contract LiquidityMining {
         require(remainingBlocks > 0, "Setup ended!");
         uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
         require(totalStillAvailable > 0, "No rewards!");
+        uint256 relativeLiquidity = mainTokenAmount.div(setup.startingReward);
+        uint256 relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
+        reward = relativeRewardPerBlock * remainingBlocks;
+        require(reward <= totalStillAvailable, "No availability.");
+        setup.rewardPerBlock -= relativeRewardPerBlock;
     }
 
     /** @dev returns true if the input token is in the tokens array, hence is an accepted one; false otherwise.
