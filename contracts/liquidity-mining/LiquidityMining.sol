@@ -7,6 +7,7 @@ import "../amm-aggregator/common/IAMM.sol";
 import "./util/IERC20.sol";
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
+import "./util/Math.sol";
 import "./util/SafeMath.sol";
 
 contract LiquidityMining {
@@ -22,6 +23,8 @@ contract LiquidityMining {
         uint256 rewardPerBlock; // farming setup reward per single block.
         uint256 maximumLiquidity; // maximum total liquidity (used only if free is false).
         uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
+        uint256 rewardPerToken; // current reward per token.
+        uint256 lastBlockUpdate; // number of the block where an update was triggered.
         address mainTokenAddress; // eg. buidl address.
         address[] secondaryTokenAddresses; // eg. [address(0), dai address].
         bool free; // if the setup is a free farming setup or a locked one.
@@ -199,13 +202,17 @@ contract LiquidityMining {
                     creationBlock: block.number
                 }
             );
+            if (chosenSetup.free) {
+                _rebalanceRewardPerToken(setupIndex, poolTokenAmount);
+            } else {
+                // TODO add load balancer call
+            }
         } else {
             // updating existing position
             position.reward += reward;
             position.liquidityProviderDataArray.push(liquidityProviderData);
             position.liquidityPoolTokenAmount += poolTokenAmount;
         }
-        // TODO add load balancer call
     }
 
     /** @dev this function allows a owner to unlock its position using its position token or not.
@@ -223,7 +230,7 @@ contract LiquidityMining {
         require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
         require(position.setup.free && _farmingSetups[setupIndex].free, "Setup has changed!");
         require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock <= block.number, "Not withdrawable yet!");
-        hasPositionItem ? _burnPosition(msg.sender, position) : _withdraw(position);
+        hasPositionItem ? _burnPosition(msg.sender, position, setupIndex) : _withdraw(position, setupIndex);
     }
     
     /** Private methods. */
@@ -243,7 +250,9 @@ contract LiquidityMining {
       * @param poolTokenAmount amount of liquidity pool token.
       * @return reward total reward for the position owner.
      */
-    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private returns(uint256 reward) {}
+    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private returns(uint256 reward) {
+        reward = _farmingSetups[setupIndex].rewardPerToken.div(1e18).mul(poolTokenAmount);
+    }
 
     /** @dev function used to calculate the reward in a locked farming setup.
       * @param setupIndex index of the farming setup.
@@ -289,23 +298,42 @@ contract LiquidityMining {
     /** @dev burns a PositionToken from the collection.
       * @param uniqueOwner staking position owner address.
       * @param position staking position.
+      * @param setupIndex index of the farming setup.
       */
-    function _burnPosition(address uniqueOwner, Position memory position) private {
+    function _burnPosition(address uniqueOwner, Position memory position, uint256 setupIndex) private {
         require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // burn the position token
         INativeV1(_positionTokenCollection).burn(position.objectId, 1);
-        _withdraw(position);
+        _withdraw(position, setupIndex);
     }
 
     /** @dev allows the wallet to withdraw its position.
       * @param position staking position.
+      * @param setupIndex index of the farming setup.
       */
-    function _withdraw(Position memory position) private {
+    function _withdraw(Position memory position, uint256 setupIndex) private {
         // transfer the reward
-        if (position.reward > 0) {
+        uint256 reward = position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
+        if (reward > 0) {
             _byMint ? IERC20(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
         }
         // remove liquidity using AMM
         IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);
+    }
+
+    /** @dev function used to rebalance the reward per token in a free setup.
+      * @param setupIndex index of the setup to rebalance.
+      * @param liquidityPoolTokenAmount amount of liquidity pool token being added.
+     */
+    function _rebalanceRewardPerToken(uint256 setupIndex, uint256 liquidityPoolTokenAmount) private {
+        FarmingSetup storage setup = _farmingSetups[setupIndex];
+        // update total supply in the setuo
+        setup.totalSupply += liquidityPoolTokenAmount;
+        // update the reward token
+        setup.rewardPerToken = setup.rewardPerToken.add(
+            block.number.sub(setup.lastBlockUpdate).mul(setup.rewardPerBlock).mul(1e18).div(setup.totalSupply)
+        );
+        // update the last block update variable
+        setup.lastBlockUpdate = block.number;
     }
 }
