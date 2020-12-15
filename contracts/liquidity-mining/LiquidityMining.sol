@@ -184,7 +184,11 @@ contract LiquidityMining {
             positionKey = keccak256(abi.encode(uniqueOwner, setupIndex));
         }
         // calculate the reward
-        uint256 reward = chosenSetup.free ? 0 : _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+        uint256 reward;
+        uint256 lockedRewardPerBlock;
+        if (!chosenSetup.free) {
+            (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+        }
         // retrieve position for the key
         Position storage position = _positions[positionKey];
         if (mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
@@ -205,7 +209,7 @@ contract LiquidityMining {
             if (chosenSetup.free) {
                 _rebalanceRewardPerToken(setupIndex, poolTokenAmount);
             } else {
-                // TODO add load balancer call
+                _rebalanceRewardPerBlock(lockedRewardPerBlock);
             }
         } else {
             // updating existing position
@@ -235,16 +239,6 @@ contract LiquidityMining {
     
     /** Private methods. */
 
-    /** @dev function used to calculate the reward based on the input parameters.
-      * @param setupIndex index of the farming setup.
-      * @param mainTokenAmount amount of main token used to calculate reward in a locked farming setup.
-      * @param poolTokenAmount amount of liquidity pool token used to calculate reward in a free farming setup.
-      * @return reward total reward for the position owner.
-     */
-    function _calculateReward(uint256 setupIndex, uint256 mainTokenAmount, uint256 poolTokenAmount) private returns(uint256 reward) {
-        reward = _farmingSetups[setupIndex].free ? _calculateFreeFarmingSetupReward(setupIndex, poolTokenAmount) : _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
-    }
-
     /** @dev function used to calculate the reward in a free farming setup.
       * @param setupIndex index of the farming setup.
       * @param poolTokenAmount amount of liquidity pool token.
@@ -259,14 +253,14 @@ contract LiquidityMining {
       * @param mainTokenAmount amount of main token.
       * @return reward total reward for the position owner.
      */
-    function _calculateLockedFarmingSetupReward(uint256 setupIndex, uint256 mainTokenAmount) private returns(uint256 reward) {
+    function _calculateLockedFarmingSetupReward(uint256 setupIndex, uint256 mainTokenAmount) private returns(uint256 reward, uint256 relativeRewardPerBlock) {
         FarmingSetup storage setup = _farmingSetups[setupIndex];
         uint256 remainingBlocks = setup.endBlock.sub(block.number);
         require(remainingBlocks > 0, "Setup ended!");
         uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
         require(totalStillAvailable > 0, "No rewards!");
         uint256 relativeLiquidity = mainTokenAmount.div(setup.maximumLiquidity);
-        uint256 relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
+        relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
         reward = relativeRewardPerBlock * remainingBlocks;
         require(reward <= totalStillAvailable, "No availability.");
         setup.rewardPerBlock -= relativeRewardPerBlock;
@@ -321,13 +315,27 @@ contract LiquidityMining {
         IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);
     }
 
-    /** @dev function used to rebalance the reward per token in a free setup.
+    /** @dev function used to rebalance the reward per block in the pinned free farming setup.
+      * @param lockedRewardPerBlock new position locked reward per block that must be subtracted from the pinned free farming setup reward per block.
+      */
+    function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock) private {
+        for (uint256 i = 0; i < _farmingSetups.length; i++) {
+            if (_farmingSetups[i].pinned) {
+                FarmingSetup storage setup = _farmingSetups[i];
+                setup.rewardPerBlock -= lockedRewardPerBlock;
+                _rebalanceRewardPerToken(i, 0);
+                break;
+            }
+        }
+    }
+
+    /** @dev function used to rebalance the reward per token in a free farming setup.
       * @param setupIndex index of the setup to rebalance.
       * @param liquidityPoolTokenAmount amount of liquidity pool token being added.
      */
     function _rebalanceRewardPerToken(uint256 setupIndex, uint256 liquidityPoolTokenAmount) private {
         FarmingSetup storage setup = _farmingSetups[setupIndex];
-        // update total supply in the setuo
+        // update total supply in the setup
         setup.totalSupply += liquidityPoolTokenAmount;
         // update the reward token
         setup.rewardPerToken = setup.rewardPerToken.add(
