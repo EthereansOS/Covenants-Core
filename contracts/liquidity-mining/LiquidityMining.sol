@@ -4,6 +4,9 @@ pragma experimental ABIEncoderV2;
 
 import "../amm-aggregator/common/AMMData.sol";
 import "../amm-aggregator/common/IAMM.sol";
+import "./util/IERC20.sol";
+import "./util/IEthItemOrchestrator.sol";
+import "./util/INativeV1.sol";
 import "./util/SafeMath.sol";
 
 contract LiquidityMining {
@@ -30,7 +33,9 @@ contract LiquidityMining {
         uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
-        uint256 reward;
+        LiquidityProviderData[] liquidityProviderDataArray; // array of amm liquidity provider data.
+        uint256 reward; // position reward.
+        uint256 creationBlock; // block when this position was created.
     }
 
     // factory address that will create clones of this contract
@@ -39,6 +44,8 @@ contract LiquidityMining {
     address private _owner;
     // address of the reward token
     address private _rewardTokenAddress;
+    // position token collection
+    address public _positionTokenCollection;
     // whether the token is by mint or by reserve
     bool private _byMint;
     // array containing all the currently available farming setups
@@ -55,27 +62,35 @@ contract LiquidityMining {
         FACTORY = _factory;
     }
 
+    /** Modifiers. */
+
     /** @dev onlyFactory modifier used to check for unauthorized initializations. */
-    modifier onlyFactory {
+    modifier onlyFactory() {
         require(msg.sender == FACTORY, "Unauthorized.");
         _;
     }
 
     /** @dev onlyOwner modifier used to check for unauthorized changes. */
-    modifier onlyOwner {
+    modifier onlyOwner() {
         require(msg.sender == _owner, "Unauthorized.");
         _;
     }
 
+    /** Public owner methods. */
+
     /** @dev function called by the factory contract to initialize a new clone.
       * @param owner liquidity mining contract owner (a wallet or an extension).
       * @param ownerInitData encoded call function of the owner (used from an extension).
+      * @param orchestrator ethItemOrchestrator address.
+      * @param name ethItem position token name.
+      * @param symbol ethitem position token symbol.
+      * @param collectionUri ethItem position token uri.
       * @param rewardTokenAddress the address of the reward token.
       * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
       * @param farmingSetups array containing all initial farming setups.
       * @return success if the initialize function has ended properly.
      */
-    function initialize(address owner, bytes memory ownerInitData, address rewardTokenAddress, bool byMint, FarmingSetup[] memory farmingSetups) public onlyFactory returns(bool) {
+    function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint, FarmingSetup[] memory farmingSetups) public onlyFactory returns(bool) {
         require(
             _owner == address(0) && 
             _rewardTokenAddress == address(0),
@@ -83,6 +98,7 @@ contract LiquidityMining {
         );
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
+        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         _byMint = byMint;
         _farmingSetups = farmingSetups;
         if (keccak256(ownerInitData) != keccak256("")) {
@@ -91,6 +107,31 @@ contract LiquidityMining {
         }
         return true;
     }
+
+    /** @dev function called by the owner to add or update an existing setup.
+      * @param setupIndex index of the setup to replace or any number > than the setups length to add a new one.
+      * @param setup new or updated setup.
+     */
+    function addOrUpdateFarmingSetup(uint256 setupIndex, FarmingSetup memory setup) public onlyOwner {
+        if (setupIndex > _farmingSetups.length) {
+            // we are creating a new setup
+            require(!setup.free ? setup.startBlock > block.number && setup.endBlock > setup.startBlock : true, "Invalid setup.");
+            _farmingSetups[_farmingSetups.length - 1] = setup;
+        } else {
+            // we are updating an existing setup
+            FarmingSetup memory existingSetup = _farmingSetups[setupIndex];
+            if (!existingSetup.free) {
+                // updating a locked FarmingSetup
+                require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
+                existingSetup = setup;
+            } else {
+                // updating a free FarmingSetup
+                existingSetup.rewardPerBlock = setup.rewardPerBlock;
+            }
+        }
+    }
+
+    /** Public methods. */
 
     /** @dev function called by external users to open a new position. 
       * @param setupIndex index of the chosen setup.
@@ -129,44 +170,57 @@ contract LiquidityMining {
         );
         // retrieve the poolTokenAmount from the amm
         uint256 poolTokenAmount = amm.addLiquidity(liquidityProviderData);
-        // calculate the reward
-        uint256 reward = _calculateReward(setupIndex, mainTokenAmount, poolTokenAmount);
         // create the default position key variable
         bytes32 positionKey;
         uint256 objectId;
         if (mintPositionToken) {
             // user wants position token
-            objectId = 0; // update 0 with positionToken objectId
-            positionKey = keccak256(abi.encode(objectId));
+            objectId = _mintPosition(uniqueOwner); // update 0 with positionToken objectId
+            positionKey = keccak256(abi.encode(uniqueOwner, objectId));
         } else {
             // user does not want position token
             positionKey = keccak256(abi.encode(uniqueOwner, setupIndex));
         }
-        _positions[positionKey] = Position({ objectId: objectId, uniqueOwner: objectId != 0 ? uniqueOwner : address(0), setup: chosenSetup, reward: reward });
-    }
-
-    /** @dev function called by the owner to add or update an existing setup.
-      * @param setupIndex index of the setup to replace or any number > than the setups length to add a new one.
-      * @param setup new or updated setup.
-     */
-    function addOrUpdateFarmingSetup(uint256 setupIndex, FarmingSetup memory setup) public onlyOwner {
-        if (setupIndex > _farmingSetups.length) {
-            // we are creating a new setup
-            require(!setup.free ? setup.startBlock > block.number && setup.endBlock > setup.startBlock : true, "Invalid setup.");
-            _farmingSetups[_farmingSetups.length - 1] = setup;
+        Position storage position = _positions[positionKey];
+        // calculate the reward
+        uint256 reward = chosenSetup.free ? 0 : _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+        if (mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
+            // creating a new position
+            LiquidityProviderData[] memory liquidityProviderDataArray;
+            liquidityProviderDataArray[0] = liquidityProviderData;
+            _positions[positionKey] = Position(
+                { 
+                    objectId: objectId, 
+                    uniqueOwner: objectId != 0 ? uniqueOwner : address(0), 
+                    setup: chosenSetup, 
+                    liquidityProviderDataArray: liquidityProviderDataArray,
+                    reward: reward, 
+                    creationBlock: block.number
+                }
+            );
         } else {
-            // we are updating an existing setup
-            FarmingSetup memory existingSetup = _farmingSetups[setupIndex];
-            if (!existingSetup.free) {
-                // updating a locked FarmingSetup
-                require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
-                existingSetup = setup;
-            } else {
-                // updating a free FarmingSetup
-                existingSetup.rewardPerBlock = setup.rewardPerBlock;
-            }
+            // updating existing position
+            position.reward += reward;
+            position.liquidityProviderDataArray.push(liquidityProviderData);
         }
     }
+
+
+    function unlock(uint256 objectId, uint256 setupIndex) public {
+        // check if wallet is withdrawing using a position token 
+        bool hasPositionItem = objectId != 0;
+        // create position key
+        bytes32 positionKey = hasPositionItem ? keccak256(abi.encode(msg.sender, objectId)) : keccak256(abi.encode(msg.sender, setupIndex));
+        // retrieve position
+        Position memory position = _positions[positionKey];
+        // check if position is valid
+        require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
+        require(position.setup.free && _farmingSetups[setupIndex].free, "Setup has changed!");
+        require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock >= block.number, "Not withrawable yet!");
+        hasPositionItem ? _burnPosition(position) : _withdraw(position);
+    }
+    
+    /** Private methods. */
 
     /** @dev function used to calculate the reward based on the input parameters.
       * @param setupIndex index of the farming setup.
@@ -217,4 +271,35 @@ contract LiquidityMining {
         return false;
     }
 
+    /** @dev mints a new PositionToken inside the collection for the given wallet.
+      * @param uniqueOwner position token owner.
+      * @return objectId new position token object id.
+     */
+    function _mintPosition(address uniqueOwner) private returns(uint256 objectId) {
+        (objectId,) = INativeV1(_positionTokenCollection).mint(1, "UNIFI PositionToken", "UPT", "", false);
+        INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, objectId, INativeV1(_positionTokenCollection).balanceOf(address(this), objectId), "");
+    }
+
+    /** @dev burns a PositionToken from the collection.
+      * @param objectId position token object id.
+      * @param position
+      */
+    function _burnPosition(Position memory position) private {
+        require(position.objectId != 0, "Invalid position!");
+        // burn the position token
+        INativeV1(_positionTokenCollection).burn(position.objectId, 1);
+        _withdraw(position);
+    }
+
+    /** @dev allows the wallet to withdraw its position.
+      * @param position staking position.
+      */
+    function _withdraw(Position memory position) private {
+        // transfer the reward
+        if (!position.setup.free && position.reward > 0) {
+            IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
+        }
+        // remove liquidity using AMM
+        IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);
+    }
 }
