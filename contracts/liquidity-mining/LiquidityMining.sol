@@ -4,8 +4,11 @@ pragma experimental ABIEncoderV2;
 
 import "../amm-aggregator/common/AMMData.sol";
 import "../amm-aggregator/common/IAMM.sol";
+import "./util/SafeMath.sol";
 
 contract LiquidityMining {
+    // SafeMath library
+    using SafeMath for uint256;
 
     // farming setup struct
     struct FarmingSetup {
@@ -14,6 +17,7 @@ contract LiquidityMining {
         uint256 startBlock; // farming setup start block (valid only if free is false).
         uint256 endBlock; // farming setup end block (valid only if free is false).
         uint256 rewardPerBlock; // farming setup reward per single block.
+        uint256 startingReward; // farming setup starting total reward.
         address mainTokenAddress; // eg. buidl address.
         address[] secondaryTokenAddresses; // eg. [address(0), dai address].
         bool free; // if the setup is a free farming setup or a locked one.
@@ -124,10 +128,11 @@ contract LiquidityMining {
         );
         // retrieve the poolTokenAmount from the amm
         uint256 poolTokenAmount = amm.addLiquidity(liquidityProviderData);
+        // calculate the reward
+        uint256 reward = _calculateReward(setupIndex, mainTokenAmount, poolTokenAmount);
         // create the default position key variable
         bytes32 positionKey;
         uint256 objectId;
-        uint256 reward = 0;
         if (mintPositionToken) {
             // user wants position token
             objectId = 0; // update 0 with positionToken objectId
@@ -160,6 +165,36 @@ contract LiquidityMining {
                 existingSetup.rewardPerBlock = setup.rewardPerBlock;
             }
         }
+    }
+
+    /** @dev function used to calculate the reward based on the input parameters.
+      * @param setupIndex index of the farming setup.
+      * @param mainTokenAmount amount of main token used to calculate reward in a locked farming setup.
+      * @param poolTokenAmount amount of liquidity pool token used to calculate reward in a free farming setup.
+      * @return reward total reward for the position owner.
+     */
+    function _calculateReward(uint256 setupIndex, uint256 mainTokenAmount, uint256 poolTokenAmount) private returns(uint256 reward) {
+        reward = _farmingSetups[setupIndex].free ? _calculateFreeFarmingSetupReward(setupIndex, poolTokenAmount) : _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+    }
+
+    /** @dev function used to calculate the reward in a free farming setup.
+      * @param setupIndex index of the farming setup.
+      * @param poolTokenAmount amount of liquidity pool token.
+      * @return reward total reward for the position owner.
+     */
+    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private returns(uint256 reward) {}
+
+    /** @dev function used to calculate the reward in a locked farming setup.
+      * @param setupIndex index of the farming setup.
+      * @param mainTokenAmount amount of main token.
+      * @return reward total reward for the position owner.
+     */
+    function _calculateLockedFarmingSetupReward(uint256 setupIndex, uint256 mainTokenAmount) private returns(uint256 reward) {
+        FarmingSetup storage setup = _farmingSetups[setupIndex];
+        uint256 remainingBlocks = setup.endBlock.sub(block.number);
+        require(remainingBlocks > 0, "Setup ended!");
+        uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
+        require(totalStillAvailable > 0, "No rewards!");
     }
 
     /** @dev returns true if the input token is in the tokens array, hence is an accepted one; false otherwise.
