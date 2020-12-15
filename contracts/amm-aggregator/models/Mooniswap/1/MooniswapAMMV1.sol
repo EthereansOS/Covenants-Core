@@ -21,18 +21,19 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
         return ("MooniswapAMM", 1);
     }
 
-    function addLiquidity(LiquidityProviderData memory data) public payable virtual override {
+    function addLiquidity(LiquidityProviderData memory data) public payable virtual override returns(uint256 amount) {
         Mooniswap mooniswap = _getOrCreateMooniswap(data.tokens[0], data.tokens[1], data.amounts[0], data.amounts[1]);
-        _addLiquidityWork(data, mooniswap);
-        _flushBack(msg.sender, data.tokens[0], data.tokens[1]);
+        amount = _addLiquidityWork(data, mooniswap);
+        _flushBack(_sender(data), data.tokens[0], data.tokens[1]);
     }
 
-    function addLiquidityBatch(LiquidityProviderData[] memory data) public payable virtual override {
+    function addLiquidityBatch(LiquidityProviderData[] memory data) public payable virtual override returns(uint256[] memory amounts) {
         (address[] memory tokens, uint256 tokensLength, Mooniswap[] memory mooniswap) = _transferToMeAndCheckAllowance(data, true);
+        amounts = new uint256[](data.length);
         for(uint256 i = 0; i < data.length; i++) {
-            _addLiquidityWork(data[i], mooniswap[i]);
+            amounts[i] = _addLiquidityWork(data[i], mooniswap[i]);
         }
-        _flushBack(msg.sender, tokens, tokensLength);
+        _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
     function _getOrCreateMooniswap(address token0, address token1, uint256 token0Amount, uint256 token1Amount) private returns (Mooniswap mooniswap) {
@@ -72,7 +73,7 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
         _transferToMeCheckAllowanceAndClear(tokens, length, address(0));
     }
 
-    function _addLiquidityWork(LiquidityProviderData memory data, Mooniswap mooniswap) internal virtual {
+    function _addLiquidityWork(LiquidityProviderData memory data, Mooniswap mooniswap) internal virtual returns(uint256 amount) {
         require(data.receiver != address(0), "Receiver cannot be void address");
         (IERC20 t1, IERC20 t2) = _sortTokens(IERC20(data.tokens[0]), IERC20(data.tokens[1]));
         IERC20[] memory tokens = new IERC20[](2);
@@ -88,37 +89,39 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
         } else {
             mooniswap.deposit{value : data.tokens[0] == address(0) ? amounts[0] : amounts[1]}(amounts, minAmounts);
         }
-        _flushBack(payable(data.receiver), address(mooniswap));
+        amount = _flushBack(_receiver(data), address(mooniswap));
     }
 
-    function removeLiquidity(LiquidityProviderData memory data) public virtual override {
+    function removeLiquidity(LiquidityProviderData memory data) public virtual override returns(uint256[] memory amounts) {
         _transferToMeAndCheckAllowance(data, address(0), false);
-        _removeLiquidityWork(data);
-        _flushBack(msg.sender, data.liquidityProviderAddress);
+        amounts = _removeLiquidityWork(data);
+        _flushBack(_sender(data), data.liquidityProviderAddress);
     }
 
-    function removeLiquidityBatch(LiquidityProviderData[] memory data) public virtual override {
+    function removeLiquidityBatch(LiquidityProviderData[] memory data) public virtual override returns(uint256[][] memory amounts) {
         (address[] memory tokens, uint256 tokensLength) = _transferToMeAndCheckAllowance(data, address(0), false);
+        amounts = new uint256[][](data.length);
         for(uint256 i = 0; i < data.length; i++) {
-            _removeLiquidityWork(data[i]);
+            amounts[i] = _removeLiquidityWork(data[i]);
         }
-        _flushBack(msg.sender, tokens, tokensLength);
+        _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
-    function _removeLiquidityWork(LiquidityProviderData memory data) internal virtual {
+    function _removeLiquidityWork(LiquidityProviderData memory data) internal virtual returns (uint256[] memory amounts) {
         require(data.receiver != address(0), "Receiver cannot be void address");
         Mooniswap mooniswap = Mooniswap(data.liquidityProviderAddress);
         mooniswap.withdraw(data.liquidityProviderAmount, new uint256[](2));
         IERC20[] memory tokens = mooniswap.getTokens();
+        amounts = new uint256[](tokens.length);
         for(uint256 i = 0 ; i < tokens.length; i++) {
-            _flushBack(payable(data.receiver), address(tokens[i]));
+            amounts[i] = _flushBack(_receiver(data), address(tokens[i]));
         }
     }
 
     function swapLiquidity(LiquidityToSwap memory data) public payable virtual override {
         _transferToMeAndCheckAllowance(data.tokens[0], data.amount, address(0));
         _swapLiquidityWork(data);
-        _flushBack(msg.sender, data.tokens, data.tokens.length);
+        _flushBack(_sender(data), data.tokens, data.tokens.length);
     }
 
     function swapLiquidityBatch(LiquidityToSwap[] memory data) public payable virtual override {
@@ -126,7 +129,7 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             _swapLiquidityWork(data[i]);
         }
-        _flushBack(msg.sender, tokens, tokensLength);
+        _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
     function _swapLiquidityWork(LiquidityToSwap memory data) internal virtual {

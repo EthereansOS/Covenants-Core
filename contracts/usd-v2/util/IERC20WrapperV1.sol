@@ -10,5 +10,7 @@ interface IERC20WrapperV1 is IEthItem {
 
     function object(address erc20TokenAddress) external view returns (uint256 objectId);
 
-    function mint(address erc20TokenAddress, uint256 amount, string calldata tokenUri) external returns (uint256 objectId, address wrappedTokenAddress);
+    function mint(address erc20TokenAddress, uint256 amount) external returns (uint256 objectId, address wrapperAddress);
+
+    function mintETH() external payable returns (uint256 objectId, address wrapperAddress);
 }
