@@ -105,13 +105,15 @@ contract LiquidityMining {
         address uniqueOwner = (positionOwner != address(0)) ? positionOwner : msg.sender;
         // retrieve the IAMM
         IAMM amm = IAMM(chosenSetup.ammPlugin);
-        // create the liquidity provider data
+        // create tokens array
         address[] memory tokens;
         tokens[0] = chosenSetup.mainTokenAddress;
         tokens[1] = secondaryTokenAddress;
+        // create amounts array
         uint256[] memory amounts;
         amounts[0] = mainTokenAmount;
         amounts[1] = secondaryTokenAmount;
+        // create the liquidity provider data
         LiquidityProviderData memory liquidityProviderData = LiquidityProviderData(
             chosenSetup.liquidityPoolTokenAddress, 
             liquidityPoolTokenAmount, 
@@ -120,6 +122,7 @@ contract LiquidityMining {
             uniqueOwner, 
             address(this)
         );
+        // retrieve the poolTokenAmount from the amm
         uint256 poolTokenAmount = amm.addLiquidity(liquidityProviderData);
         // create the default position key variable
         bytes32 positionKey;
@@ -147,7 +150,7 @@ contract LiquidityMining {
             _farmingSetups[_farmingSetups.length - 1] = setup;
         } else {
             // we are updating an existing setup
-            FarmingSetup storage existingSetup = _farmingSetups[setupIndex];
+            FarmingSetup memory existingSetup = _farmingSetups[setupIndex];
             if (!existingSetup.free) {
                 // updating a locked FarmingSetup
                 require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
