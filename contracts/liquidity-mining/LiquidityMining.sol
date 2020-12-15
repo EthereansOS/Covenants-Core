@@ -17,11 +17,11 @@ contract LiquidityMining {
     struct FarmingSetup {
         address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
         address liquidityPoolTokenAddress; // address of the liquidity pool token
-        uint256 startBlock; // farming setup start block (valid only if free is false).
-        uint256 endBlock; // farming setup end block (valid only if free is false).
+        uint256 startBlock; // farming setup start block (used only if free is false).
+        uint256 endBlock; // farming setup end block (used only if free is false).
         uint256 rewardPerBlock; // farming setup reward per single block.
-        uint256 maximumLiquidity; // maximum total liquidity
-        uint256 startingReward; // farming setup starting total reward.
+        uint256 maximumLiquidity; // maximum total liquidity (used only if free is false).
+        uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
         address mainTokenAddress; // eg. buidl address.
         address[] secondaryTokenAddresses; // eg. [address(0), dai address].
         bool free; // if the setup is a free farming setup or a locked one.
@@ -34,6 +34,7 @@ contract LiquidityMining {
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
         LiquidityProviderData[] liquidityProviderDataArray; // array of amm liquidity provider data.
+        uint256 liquidityPoolTokenAmount; // amount of liquidity pool token provided.
         uint256 reward; // position reward.
         uint256 creationBlock; // block when this position was created.
     }
@@ -119,11 +120,11 @@ contract LiquidityMining {
             _farmingSetups[_farmingSetups.length - 1] = setup;
         } else {
             // we are updating an existing setup
-            FarmingSetup memory existingSetup = _farmingSetups[setupIndex];
+            FarmingSetup storage existingSetup = _farmingSetups[setupIndex];
             if (!existingSetup.free) {
                 // updating a locked FarmingSetup
                 require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
-                existingSetup = setup;
+                _farmingSetups[setupIndex] = setup;
             } else {
                 // updating a free FarmingSetup
                 existingSetup.rewardPerBlock = setup.rewardPerBlock;
@@ -149,8 +150,6 @@ contract LiquidityMining {
         require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, secondaryTokenAddress), "Invalid secondary token.");
         // retrieve the unique owner
         address uniqueOwner = (positionOwner != address(0)) ? positionOwner : msg.sender;
-        // retrieve the IAMM
-        IAMM amm = IAMM(chosenSetup.ammPlugin);
         // create tokens array
         address[] memory tokens;
         tokens[0] = chosenSetup.mainTokenAddress;
@@ -169,7 +168,7 @@ contract LiquidityMining {
             address(this)
         );
         // retrieve the poolTokenAmount from the amm
-        uint256 poolTokenAmount = amm.addLiquidity(liquidityProviderData);
+        uint256 poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityProviderData);
         // create the default position key variable
         bytes32 positionKey;
         uint256 objectId;
@@ -181,9 +180,10 @@ contract LiquidityMining {
             // user does not want position token
             positionKey = keccak256(abi.encode(uniqueOwner, setupIndex));
         }
-        Position storage position = _positions[positionKey];
         // calculate the reward
         uint256 reward = chosenSetup.free ? 0 : _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+        // retrieve position for the key
+        Position storage position = _positions[positionKey];
         if (mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
             // creating a new position
             LiquidityProviderData[] memory liquidityProviderDataArray;
@@ -194,6 +194,7 @@ contract LiquidityMining {
                     uniqueOwner: objectId != 0 ? uniqueOwner : address(0), 
                     setup: chosenSetup, 
                     liquidityProviderDataArray: liquidityProviderDataArray,
+                    liquidityPoolTokenAmount: poolTokenAmount,
                     reward: reward, 
                     creationBlock: block.number
                 }
@@ -202,10 +203,15 @@ contract LiquidityMining {
             // updating existing position
             position.reward += reward;
             position.liquidityProviderDataArray.push(liquidityProviderData);
+            position.liquidityPoolTokenAmount += poolTokenAmount;
         }
+        // TODO add load balancer call
     }
 
-
+    /** @dev this function allows a owner to unlock its position using its position token or not.
+      * @param objectId owner position token object id.
+      * @param setupIndex index of the farming setup.
+      */
     function unlock(uint256 objectId, uint256 setupIndex) public {
         // check if wallet is withdrawing using a position token 
         bool hasPositionItem = objectId != 0;
@@ -216,8 +222,8 @@ contract LiquidityMining {
         // check if position is valid
         require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
         require(position.setup.free && _farmingSetups[setupIndex].free, "Setup has changed!");
-        require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock >= block.number, "Not withrawable yet!");
-        hasPositionItem ? _burnPosition(position) : _withdraw(position);
+        require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock <= block.number, "Not withdrawable yet!");
+        hasPositionItem ? _burnPosition(msg.sender, position) : _withdraw(position);
     }
     
     /** Private methods. */
@@ -250,7 +256,7 @@ contract LiquidityMining {
         require(remainingBlocks > 0, "Setup ended!");
         uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
         require(totalStillAvailable > 0, "No rewards!");
-        uint256 relativeLiquidity = mainTokenAmount.div(setup.startingReward);
+        uint256 relativeLiquidity = mainTokenAmount.div(setup.maximumLiquidity);
         uint256 relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
         reward = relativeRewardPerBlock * remainingBlocks;
         require(reward <= totalStillAvailable, "No availability.");
@@ -281,11 +287,11 @@ contract LiquidityMining {
     }
 
     /** @dev burns a PositionToken from the collection.
-      * @param objectId position token object id.
-      * @param position
+      * @param uniqueOwner staking position owner address.
+      * @param position staking position.
       */
-    function _burnPosition(Position memory position) private {
-        require(position.objectId != 0, "Invalid position!");
+    function _burnPosition(address uniqueOwner, Position memory position) private {
+        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // burn the position token
         INativeV1(_positionTokenCollection).burn(position.objectId, 1);
         _withdraw(position);
@@ -296,8 +302,8 @@ contract LiquidityMining {
       */
     function _withdraw(Position memory position) private {
         // transfer the reward
-        if (!position.setup.free && position.reward > 0) {
-            IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
+        if (position.reward > 0) {
+            _byMint ? IERC20(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
         }
         // remove liquidity using AMM
         IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);

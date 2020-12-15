@@ -52,11 +52,11 @@ contract LiquidityMiningFactory {
             mstore(add(clone, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
             contractAddress := create(0, clone, 0x37)
         }
-        emit LiquidityMiningDeployed(msg.sender, contractAddress);
         if (data.length > 0) {
             (bool initSuccess,) = contractAddress.call(data);
             require(initSuccess);
         }
+        emit LiquidityMiningDeployed(msg.sender, contractAddress);
     }
 
 }
