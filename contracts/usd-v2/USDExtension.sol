@@ -8,6 +8,8 @@ import "./util/IERC20.sol";
 
 contract USDExtension {
 
+    uint256 private constant DECIMALS = 18;
+
     address private _controller;
 
     address private _collection;
@@ -44,6 +46,12 @@ contract USDExtension {
         INativeV1(_collection).safeTransferFrom(address(this), receiver, objectId, INativeV1(_collection).balanceOf(address(this), objectId), "");
     }
 
+    function mintEmpty(string calldata tokenName, string calldata tokenSymbol, string calldata objectUri, bool editable) public controllerOnly returns(uint256 objectId, address interoperableInterfaceAddress) {
+        INativeV1 theCollection = INativeV1(_collection);
+        (objectId, interoperableInterfaceAddress) = theCollection.mint(10**18, tokenName, tokenSymbol, objectUri, editable);
+        theCollection.burn(objectId, theCollection.balanceOf(address(this), objectId));
+    }
+
     function setCollectionUri(string memory uri) public controllerOnly {
         INativeV1(_collection).setUri(uri);
     }
@@ -54,5 +62,23 @@ contract USDExtension {
 
     function makeReadOnly(uint256 objectId) public controllerOnly {
         INativeV1(_collection).makeReadOnly(objectId);
+    }
+
+    function send(address[] memory tokenAddresses, uint256[] memory amounts, address[] memory receivers) public controllerOnly {
+        require(tokenAddresses.length > 0 && tokenAddresses.length == amounts.length, "tokenAddresses and amounts must have same length");
+        require(receivers.length == 1 || receivers.length == amounts.length, "Specify just a receiver or a length equals to tokensAddresses");
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            address receiver = receivers.length == 1 ? receivers[0] : receivers[i];
+            if(tokenAddresses[i] == address(0)) {
+                payable(receiver).transfer(amounts[i]);
+            } else {
+                _safeTransfer(tokenAddresses[i], receiver, amounts[i]);
+            }
+        }
+    }
+
+    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
     }
 }
