@@ -7,15 +7,25 @@ import "../amm-aggregator/common/IAMM.sol";
 
 contract LiquidityMining {
 
-    // tier struct
-    struct Tier {
-        address ammPlugin;
-        address[] liquidityProviders;
-        uint256 startBlock;
-        uint256 endBlock;
-        bool free;
-        uint256 rewardPerSingleBlock;
-        uint256 liquidityPercentage;
+    // farming setup struct
+    struct FarmingSetup {
+        address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
+        address liquidityPoolTokenAddress; // address of the liquidity pool token
+        uint256 startBlock; // farming setup start block (valid only if free is false).
+        uint256 endBlock; // farming setup end block (valid only if free is false).
+        uint256 rewardPerBlock; // farming setup reward per single block.
+        address mainTokenAddress; // eg. buidl address.
+        address[] secondaryTokenAddresses; // eg. [address(0), dai address].
+        bool free; // if the setup is a free farming setup or a locked one.
+        bool pinned; // if the setups is free and pinned then it's involved in the load balancing process.
+    }
+
+    // position struct
+    struct Position {
+        uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
+        address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
+        FarmingSetup setup; // chosen setup when the position was created.
+        uint256 reward;
     }
 
     // factory address that will create clones of this contract
@@ -24,15 +34,14 @@ contract LiquidityMining {
     address private _owner;
     // address of the reward token
     address private _rewardTokenAddress;
-    // addresses of accepted tokens for mining
-    address[] private _acceptedTokens;
-    // contract whitelisted tiers array
-    Tier[] private _whitelistedTiers;
     // whether the token is by mint or by reserve
     bool private _byMint;
-    // max liquidity percentage per tier type
-    uint256 private _freeTierLiquidityPercentage;
-    uint256 private _lockedTierLiquidityPercentage;
+    // array containing all the currently available farming setups
+    FarmingSetup[] private _farmingSetups;
+    // mapping containing all the positions
+    mapping(bytes32 => Position) private _positions;
+    // owner exit fee
+    uint256 private _exitFee;
 
     /** @dev creates the first instance of this contract that will be cloned from the _factory contract.
       * @param _factory address of the factory contract.
@@ -57,29 +66,20 @@ contract LiquidityMining {
       * @param owner liquidity mining contract owner (a wallet or an extension).
       * @param ownerInitData encoded call function of the owner (used from an extension).
       * @param rewardTokenAddress the address of the reward token.
-      * @param acceptedTokens array containing all the accepted tokens.
       * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
-      * @param whitelistedTiers array containing all the whitelisted tiers.
+      * @param farmingSetups array containing all initial farming setups.
       * @return success if the initialize function has ended properly.
      */
-    function initialize(address owner, bytes memory ownerInitData, address rewardTokenAddress, address[] memory acceptedTokens, bool byMint, Tier[] memory whitelistedTiers, uint256 freeTierLiquidityPercentage, uint256 lockedTierLiquidityPercentage) public onlyFactory returns(bool) {
+    function initialize(address owner, bytes memory ownerInitData, address rewardTokenAddress, bool byMint, FarmingSetup[] memory farmingSetups) public onlyFactory returns(bool) {
         require(
             _owner == address(0) && 
-            _rewardTokenAddress == address(0) && 
-            acceptedTokens.length > 0 && 
-            _acceptedTokens.length == 0 && 
-            whitelistedTiers.length > 0 && 
-            _whitelistedTiers.length == 0 &&
-            freeTierLiquidityPercentage + lockedTierLiquidityPercentage == 100,
+            _rewardTokenAddress == address(0),
             "Already initialized."
         );
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
-        _acceptedTokens = acceptedTokens;
         _byMint = byMint;
-        _whitelistedTiers = whitelistedTiers;
-        _freeTierLiquidityPercentage = freeTierLiquidityPercentage;
-        _lockedTierLiquidityPercentage = lockedTierLiquidityPercentage;
+        _farmingSetups = farmingSetups;
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
             require(result, "Error while initializing owner.");
@@ -87,31 +87,90 @@ contract LiquidityMining {
         return true;
     }
 
-    /** @dev allows the contract owner to update the whitelistedTiers.
-      * @param whitelistedTiers new whitelisted tiers.
-      * @param freeTierLiquidityPercentage new free tier liquidity percentage (or 0 to leave it as it is).
-      * @param lockedTierLiquidityPercentage new locked tier liquidity percentage (or 0 to leave it as it is).
-      */
-    function updateTiersAndLiquidity(Tier[] memory whitelistedTiers, uint256 freeTierLiquidityPercentage, uint256 lockedTierLiquidityPercentage) public onlyOwner {
-        require((freeTierLiquidityPercentage + lockedTierLiquidityPercentage == 0 || freeTierLiquidityPercentage + lockedTierLiquidityPercentage == 100) && whitelistedTiers.length > 0, "Invalid liquidity or tiers.");
-        if (freeTierLiquidityPercentage != 0 || lockedTierLiquidityPercentage != 0) {
-            _freeTierLiquidityPercentage = freeTierLiquidityPercentage;
-            _lockedTierLiquidityPercentage = lockedTierLiquidityPercentage;
+    /** @dev function called by external users to open a new position. 
+      * @param setupIndex index of the chosen setup.
+      * @param secondaryTokenAddress address of the chosen secondary token (must be inside the setup list).
+      * @param liquidityPoolTokenAmount amount of liquidity pool token.
+      * @param mainTokenAmount amount of the main token to stake.
+      * @param secondaryTokenAmount amount of the secondary token to stake.
+      * @param positionOwner position owner address or address(0) (in this case msg.sender is used).
+      * @param mintPositionToken true if the sender wants the position tokens or not.
+    */
+    function stake(uint256 setupIndex, address secondaryTokenAddress, uint256 liquidityPoolTokenAmount, uint256 mainTokenAmount, uint256 secondaryTokenAmount, address positionOwner, bool mintPositionToken) public {
+        require(setupIndex < _farmingSetups.length, "Invalid setup index.");
+        // retrieve the setup
+        FarmingSetup storage chosenSetup = _farmingSetups[setupIndex];
+        require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, secondaryTokenAddress), "Invalid secondary token.");
+        // retrieve the unique owner
+        address uniqueOwner = (positionOwner != address(0)) ? positionOwner : msg.sender;
+        // retrieve the IAMM
+        IAMM amm = IAMM(chosenSetup.ammPlugin);
+        // create the liquidity provider data
+        address[] memory tokens;
+        tokens[0] = chosenSetup.mainTokenAddress;
+        tokens[1] = secondaryTokenAddress;
+        uint256[] memory amounts;
+        amounts[0] = mainTokenAmount;
+        amounts[1] = secondaryTokenAmount;
+        LiquidityProviderData memory liquidityProviderData = LiquidityProviderData(
+            chosenSetup.liquidityPoolTokenAddress, 
+            liquidityPoolTokenAmount, 
+            tokens, 
+            amounts, 
+            uniqueOwner, 
+            address(this)
+        );
+        uint256 poolTokenAmount = amm.addLiquidity(liquidityProviderData);
+        // create the default position key variable
+        bytes32 positionKey;
+        uint256 objectId;
+        uint256 reward = 0;
+        if (mintPositionToken) {
+            // user wants position token
+            objectId = 0; // update 0 with positionToken objectId
+            positionKey = keccak256(abi.encode(objectId));
+        } else {
+            // user does not want position token
+            positionKey = keccak256(abi.encode(uniqueOwner, setupIndex));
         }
-        uint256 liquidity;
-        for (uint256 i = 0; i < whitelistedTiers.length; i++) {
-            liquidity += whitelistedTiers[i].liquidityPercentage;
-            assert(liquidity == 100);
-        }
-        _whitelistedTiers = whitelistedTiers;
+        _positions[positionKey] = Position({ objectId: objectId, uniqueOwner: objectId != 0 ? uniqueOwner : address(0), setup: chosenSetup, reward: reward });
     }
 
-    function stake(uint256 tierIndex, uint256 liquidityProviderIndex) public {
-        Tier storage tier = _whitelistedTiers[tierIndex];
-        require(tier.ammPlugin != address(0), "Invalid tier.");
-        require(block.number >= tier.startBlock, "Staking not available.");
-        require(block.number <= tier.endBlock, "Staking ended.");
-        require(liquidityProviderIndex < tier.liquidityProviders.length, "Invalid liquidity provider.");
-        IAMM amm = IAMM(tier.ammPlugin);
+    /** @dev function called by the owner to add or update an existing setup.
+      * @param setupIndex index of the setup to replace or any number > than the setups length to add a new one.
+      * @param setup new or updated setup.
+     */
+    function addOrUpdateFarmingSetup(uint256 setupIndex, FarmingSetup memory setup) public onlyOwner {
+        if (setupIndex > _farmingSetups.length) {
+            // we are creating a new setup
+            require(!setup.free ? setup.startBlock > block.number && setup.endBlock > setup.startBlock : true, "Invalid setup.");
+            _farmingSetups[_farmingSetups.length - 1] = setup;
+        } else {
+            // we are updating an existing setup
+            FarmingSetup storage existingSetup = _farmingSetups[setupIndex];
+            if (!existingSetup.free) {
+                // updating a locked FarmingSetup
+                require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
+                existingSetup = setup;
+            } else {
+                // updating a free FarmingSetup
+                existingSetup.rewardPerBlock = setup.rewardPerBlock;
+            }
+        }
     }
+
+    /** @dev returns true if the input token is in the tokens array, hence is an accepted one; false otherwise.
+      * @param tokens array of tokens addresses.
+      * @param token token address to check.
+      * @return true if token in tokens, false otherwise.
+      */
+    function _isAcceptedToken(address[] memory tokens, address token) private pure returns(bool) {
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == token) {
+                return true;
+            }
+        }
+        return false;
+    }
+
 }
