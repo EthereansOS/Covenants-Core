@@ -17,6 +17,4 @@ interface IERC20 {
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
 
     function decimals() external view returns (uint8);
-
-    function mint(address wallet, uint256 amount) external view returns (bool);
 }

@@ -5,6 +5,7 @@ pragma experimental ABIEncoderV2;
 import "../amm-aggregator/common/AMMData.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "./util/IERC20.sol";
+import "./util/IERC20Mintable.sol";
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/Math.sol";
@@ -36,10 +37,21 @@ contract LiquidityMining {
         uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
-        LiquidityProviderData[] liquidityProviderDataArray; // array of amm liquidity provider data.
+        LiquidityProviderData liquidityProviderData; // amm liquidity provider data.
         uint256 liquidityPoolTokenAmount; // amount of liquidity pool token provided.
         uint256 reward; // position reward.
         uint256 creationBlock; // block when this position was created.
+    }
+    
+    // stake data struct
+    struct StakeData {
+        uint256 setupIndex; // index of the chosen setup.
+        address secondaryTokenAddress; // address of the secondary token.
+        uint256 liquidityPoolTokenAmount; // amount of liquidity pool token.
+        uint256 mainTokenAmount; // amount of main token.
+        uint256 secondaryTokenAmount; // amount of secondary token.
+        address positionOwner; // position owner or address(0) [msg.sender].
+        bool mintPositionToken; // if the position will be represented by a minted item or not.
     }
 
     // factory address that will create clones of this contract
@@ -106,7 +118,9 @@ contract LiquidityMining {
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         _byMint = byMint;
-        _farmingSetups = farmingSetups;
+        for (uint256 i = 0; i < farmingSetups.length; i++) {
+            _farmingSetups[i] = farmingSetups[i];
+        }
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
             require(result, "Error while initializing owner.");
@@ -147,33 +161,27 @@ contract LiquidityMining {
     /** Public methods. */
 
     /** @dev function called by external users to open a new position. 
-      * @param setupIndex index of the chosen setup.
-      * @param secondaryTokenAddress address of the chosen secondary token (must be inside the setup list).
-      * @param liquidityPoolTokenAmount amount of liquidity pool token.
-      * @param mainTokenAmount amount of the main token to stake.
-      * @param secondaryTokenAmount amount of the secondary token to stake.
-      * @param positionOwner position owner address or address(0) (in this case msg.sender is used).
-      * @param mintPositionToken true if the sender wants the position tokens or not.
+      * @param stakeData staking input data.
     */
-    function stake(uint256 setupIndex, address secondaryTokenAddress, uint256 liquidityPoolTokenAmount, uint256 mainTokenAmount, uint256 secondaryTokenAmount, address positionOwner, bool mintPositionToken) public {
-        require(setupIndex < _farmingSetups.length, "Invalid setup index.");
+    function stake(StakeData memory stakeData) public {
+        require(stakeData.setupIndex < _farmingSetups.length, "Invalid setup index.");
         // retrieve the setup
-        FarmingSetup storage chosenSetup = _farmingSetups[setupIndex];
-        require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, secondaryTokenAddress), "Invalid secondary token.");
+        FarmingSetup storage chosenSetup = _farmingSetups[stakeData.setupIndex];
+        require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, stakeData.secondaryTokenAddress), "Invalid secondary token.");
         // retrieve the unique owner
-        address uniqueOwner = (positionOwner != address(0)) ? positionOwner : msg.sender;
+        address uniqueOwner = (stakeData.positionOwner != address(0)) ? stakeData.positionOwner : msg.sender;
         // create tokens array
         address[] memory tokens;
         tokens[0] = chosenSetup.mainTokenAddress;
-        tokens[1] = secondaryTokenAddress;
+        tokens[1] = stakeData.secondaryTokenAddress;
         // create amounts array
         uint256[] memory amounts;
-        amounts[0] = mainTokenAmount;
-        amounts[1] = secondaryTokenAmount;
+        amounts[0] = stakeData.mainTokenAmount;
+        amounts[1] = stakeData.secondaryTokenAmount;
         // create the liquidity provider data
         LiquidityProviderData memory liquidityProviderData = LiquidityProviderData(
             chosenSetup.liquidityPoolTokenAddress, 
-            liquidityPoolTokenAmount, 
+            stakeData.liquidityPoolTokenAmount, 
             tokens, 
             amounts, 
             uniqueOwner, 
@@ -182,48 +190,43 @@ contract LiquidityMining {
         // retrieve the poolTokenAmount from the amm
         uint256 poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityProviderData);
         // create the default position key variable
-        bytes32 positionKey;
         uint256 objectId;
-        if (mintPositionToken) {
+        if (stakeData.mintPositionToken) {
             // user wants position token
             objectId = _mintPosition(uniqueOwner); // update 0 with positionToken objectId
-            positionKey = keccak256(abi.encode(uniqueOwner, objectId));
-        } else {
-            // user does not want position token
-            positionKey = keccak256(abi.encode(uniqueOwner, setupIndex));
         }
         // calculate the reward
         uint256 reward;
         uint256 lockedRewardPerBlock;
         if (!chosenSetup.free) {
-            (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(setupIndex, mainTokenAmount);
+            (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(chosenSetup, stakeData.mainTokenAmount);
         }
         // retrieve position for the key
-        Position storage position = _positions[positionKey];
-        if (mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
+        Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex))];
+        if (stakeData.mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
             // creating a new position
-            LiquidityProviderData[] memory liquidityProviderDataArray;
-            liquidityProviderDataArray[0] = liquidityProviderData;
-            _positions[positionKey] = Position(
+            _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex))] = Position(
                 { 
                     objectId: objectId, 
                     uniqueOwner: objectId != 0 ? uniqueOwner : address(0), 
                     setup: chosenSetup, 
-                    liquidityProviderDataArray: liquidityProviderDataArray,
+                    liquidityProviderData: liquidityProviderData,
                     liquidityPoolTokenAmount: poolTokenAmount,
                     reward: reward, 
                     creationBlock: block.number
                 }
             );
             if (chosenSetup.free) {
-                _rebalanceRewardPerToken(setupIndex, poolTokenAmount);
+                _rebalanceRewardPerToken(stakeData.setupIndex, poolTokenAmount);
             } else {
                 _rebalanceRewardPerBlock(lockedRewardPerBlock);
             }
         } else {
             // updating existing position
             position.reward += reward;
-            position.liquidityProviderDataArray.push(liquidityProviderData);
+            position.liquidityPoolTokenAmount = liquidityProviderData.liquidityProviderAmount;
+            position.liquidityProviderData.amounts[0] += liquidityProviderData.amounts[0];
+            position.liquidityProviderData.amounts[1] += liquidityProviderData.amounts[1];
             position.liquidityPoolTokenAmount += poolTokenAmount;
         }
     }
@@ -255,33 +258,29 @@ contract LiquidityMining {
       * @param poolTokenAmount amount of liquidity pool token.
       * @return reward total reward for the position owner.
      */
-    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private returns(uint256 reward) {
+    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private view returns(uint256 reward) {
         reward = _farmingSetups[setupIndex].rewardPerToken.div(1e18).mul(poolTokenAmount);
     }
 
     /** @dev function used to calculate the reward in a locked farming setup.
-      * @param setupIndex index of the farming setup.
+      * @param setup farming setup.
       * @param mainTokenAmount amount of main token.
       * @return reward total reward for the position owner.
       * @return relativeRewardPerBlock returned for the pinned free setup balancing.
      */
-    function _calculateLockedFarmingSetupReward(uint256 setupIndex, uint256 mainTokenAmount) private returns(uint256 reward, uint256 relativeRewardPerBlock) {
-        // retrieve the setup in te storage
-        FarmingSetup storage setup = _farmingSetups[setupIndex];
+    function _calculateLockedFarmingSetupReward(FarmingSetup storage setup, uint256 mainTokenAmount) private returns(uint256 reward, uint256 relativeRewardPerBlock) {
         // get amount of remaining blocks
-        uint256 remainingBlocks = setup.endBlock.sub(block.number);
-        require(remainingBlocks > 0, "Setup ended!");
+        require(setup.endBlock.sub(block.number) > 0, "Setup ended!");
         // get total reward still available (= 0 if rewardPerBlock = 0)
-        uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
-        require(totalStillAvailable > 0, "No rewards!");
+        require(setup.rewardPerBlock.mul(setup.endBlock.sub(block.number)) > 0, "No rewards!");
         // get wallet relative liquidity (mainTokenAmount/maximumLiquidity)
         uint256 relativeLiquidity = mainTokenAmount.div(setup.maximumLiquidity);
         // calculate relativeRewardPerBlock
         relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
         // calculate reward by multiplying relative reward per block and the remaining blocks
-        reward = relativeRewardPerBlock.mul(remainingBlocks);
+        reward = relativeRewardPerBlock.mul(setup.endBlock.sub(block.number));
         // check if the reward is still available
-        require(reward <= totalStillAvailable, "No availability.");
+        require(reward <= setup.rewardPerBlock.mul(setup.endBlock.sub(block.number)), "No availability.");
         // decrease the reward per block
         setup.rewardPerBlock -= relativeRewardPerBlock;
     }
@@ -330,14 +329,14 @@ contract LiquidityMining {
         // transfer the reward
         uint256 reward = position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
         if (reward > 0) {
-            _byMint ? IERC20(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
+            _byMint ? IERC20Mintable(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
         }
         // pay the fees!
         if (_exitFee > 0) {
             IERC20(position.setup.liquidityPoolTokenAddress).transferFrom(position.uniqueOwner, _owner, position.liquidityPoolTokenAmount.mul(_exitFee));
         }
         // remove liquidity using AMM
-        IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);
+        IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityProviderData);
     }
 
     /** @dev function used to rebalance the reward per block in the pinned free farming setup.
