@@ -230,7 +230,7 @@ contract LiquidityMining {
         if (chosenSetup.free) {
             _rebalanceRewardPerToken(stakeData.setupIndex, poolTokenAmount, false);
         } else {
-            _rebalanceRewardPerBlock(lockedRewardPerBlock);
+            _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
     }
 
@@ -344,18 +344,19 @@ contract LiquidityMining {
         if (_farmingSetups[setupIndex].free) {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
         } else {
-            _rebalanceRewardPerBlock(position.lockedRewardPerBlock);
+            _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
         }
     }
 
     /** @dev function used to rebalance the reward per block in the pinned free farming setup.
       * @param lockedRewardPerBlock new position locked reward per block that must be subtracted from the pinned free farming setup reward per block.
+      * @param fromExit if the rebalance is caused by an exit from the locked position or not.
       */
-    function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock) private {
+    function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
         for (uint256 i = 0; i < _farmingSetups.length; i++) {
             if (_farmingSetups[i].pinned) {
                 FarmingSetup storage setup = _farmingSetups[i];
-                setup.rewardPerBlock -= lockedRewardPerBlock;
+                fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
                 _rebalanceRewardPerToken(i, 0, false);
                 break;
             }
