@@ -56,6 +56,8 @@ contract LiquidityMining {
     FarmingSetup[] private _farmingSetups;
     // mapping containing all the positions
     mapping(bytes32 => Position) private _positions;
+    // mapping containing whether a position has been redeemed or not
+    mapping(bytes32 => bool) private _positionRedeemed;
     // owner exit fee
     uint256 private _exitFee;
 
@@ -133,6 +135,13 @@ contract LiquidityMining {
                 existingSetup.rewardPerBlock = setup.rewardPerBlock;
             }
         }
+    }
+
+    /** @dev allows the owner to update the exit fee.
+      * @param newExitFee new exit fee value.
+      */
+    function setExitFee(uint256 newExitFee) public onlyOwner {
+        _exitFee = newExitFee;
     }
 
     /** Public methods. */
@@ -234,7 +243,9 @@ contract LiquidityMining {
         require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
         require(position.setup.free && _farmingSetups[setupIndex].free, "Setup has changed!");
         require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock <= block.number, "Not withdrawable yet!");
+        require(!_positionRedeemed[positionKey], "Position already redeemed!");
         hasPositionItem ? _burnPosition(msg.sender, position, setupIndex) : _withdraw(position, setupIndex);
+        _positionRedeemed[positionKey] = true;
     }
     
     /** Private methods. */
@@ -252,17 +263,26 @@ contract LiquidityMining {
       * @param setupIndex index of the farming setup.
       * @param mainTokenAmount amount of main token.
       * @return reward total reward for the position owner.
+      * @return relativeRewardPerBlock returned for the pinned free setup balancing.
      */
     function _calculateLockedFarmingSetupReward(uint256 setupIndex, uint256 mainTokenAmount) private returns(uint256 reward, uint256 relativeRewardPerBlock) {
+        // retrieve the setup in te storage
         FarmingSetup storage setup = _farmingSetups[setupIndex];
+        // get amount of remaining blocks
         uint256 remainingBlocks = setup.endBlock.sub(block.number);
         require(remainingBlocks > 0, "Setup ended!");
+        // get total reward still available (= 0 if rewardPerBlock = 0)
         uint256 totalStillAvailable = setup.rewardPerBlock.mul(remainingBlocks);
         require(totalStillAvailable > 0, "No rewards!");
+        // get wallet relative liquidity (mainTokenAmount/maximumLiquidity)
         uint256 relativeLiquidity = mainTokenAmount.div(setup.maximumLiquidity);
+        // calculate relativeRewardPerBlock
         relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
-        reward = relativeRewardPerBlock * remainingBlocks;
+        // calculate reward by multiplying relative reward per block and the remaining blocks
+        reward = relativeRewardPerBlock.mul(remainingBlocks);
+        // check if the reward is still available
         require(reward <= totalStillAvailable, "No availability.");
+        // decrease the reward per block
         setup.rewardPerBlock -= relativeRewardPerBlock;
     }
 
@@ -298,6 +318,7 @@ contract LiquidityMining {
         require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // burn the position token
         INativeV1(_positionTokenCollection).burn(position.objectId, 1);
+        // withdraw the position
         _withdraw(position, setupIndex);
     }
 
@@ -310,6 +331,10 @@ contract LiquidityMining {
         uint256 reward = position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
         if (reward > 0) {
             _byMint ? IERC20(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
+        }
+        // pay the fees!
+        if (_exitFee > 0) {
+            IERC20(position.setup.liquidityPoolTokenAddress).transferFrom(position.uniqueOwner, _owner, position.liquidityPoolTokenAmount.mul(_exitFee));
         }
         // remove liquidity using AMM
         IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityProviderDataArray);
