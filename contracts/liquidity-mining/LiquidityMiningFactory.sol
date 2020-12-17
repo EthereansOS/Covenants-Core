@@ -43,7 +43,7 @@ contract LiquidityMiningFactory {
       * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
       * @return contractAddress new liquidity mining contract address.
      */
-    function deploy(bytes memory data) public returns (address contractAddress) {
+    function deploy(bytes memory data) public onlyOwner returns (address contractAddress) {
         bytes20 logic = bytes20(liquidityMiningImplementationAddress);
         assembly {
             let clone := mload(0x40)
