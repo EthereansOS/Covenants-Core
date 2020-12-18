@@ -1,5 +1,6 @@
 const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
+const AMM = artifacts.require("AMM");
 
 const zero = "0x0000000000000000000000000000000000000000";
 const initializeInputs = [
@@ -116,25 +117,23 @@ const initializeInputs = [
       "type": "tuple[]"
     }
 ];
+// TODO change orchestrator address
 const orchestratorAddress = zero;
+// TODO change reward token address
 const rewardTokenAddress = zero;
-
-/**
- * Add the following contracts in the deploy:
- * 1) AMM (Uniswap)
- * 2) Reward token
- * 
- * Use Ganache fork to retrieve the following addresses:
- * 1) _uniswapV2RouterAddress
- * 2) ethItemOrchestratorAddress 
- * 3) liquidityPoolTokenAddress
- * 
- */
+// TODO change uniswap address
+const uniswapAddress = zero;
+// TODO change liquidity pool token address
+const liquidityPoolTokenAddress = zero;
 
 contract("LiquidityMining", async accounts => {
     let factoryInstance;
     let logicInstance;
     let cloneInstanceAddress;
+    let ammInstance;
+    it("should deploy an AMM instance", async () => {
+      ammInstance = await AMM.deployed(uniswapAddress);
+    })
     it("should deploy a LiquidityMiningFactory instance", async () => {
         factoryInstance = await LiquidityMiningFactory.deployed(zero, zero);
         assert.equal(factoryInstance.liquidityMiningImplementationAddress, zero);
