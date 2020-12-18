@@ -253,17 +253,17 @@ contract LiquidityMining {
         hasPositionItem ? _burnPosition(msg.sender, position, setupIndex) : _withdraw(position, setupIndex);
         _positionRedeemed[positionKey] = true;
     }
-    
-    /** Private methods. */
 
     /** @dev function used to calculate the reward in a free farming setup.
       * @param setupIndex index of the farming setup.
       * @param poolTokenAmount amount of liquidity pool token.
       * @return reward total reward for the position owner.
      */
-    function _calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) private view returns(uint256 reward) {
+    function calculateFreeFarmingSetupReward(uint256 setupIndex, uint256 poolTokenAmount) public view returns(uint256 reward) {
         reward = _farmingSetups[setupIndex].rewardPerToken.div(1e18).mul(poolTokenAmount);
     }
+    
+    /** Private methods. */
 
     /** @dev function used to calculate the reward in a locked farming setup.
       * @param setup farming setup.
@@ -335,7 +335,7 @@ contract LiquidityMining {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
         }
         // transfer the reward
-        uint256 reward = position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
+        uint256 reward = position.setup.free ? calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
         if (reward > 0) {
             _byMint ? IERC20Mintable(_rewardTokenAddress).mint(position.uniqueOwner, position.reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, position.reward);
         }
