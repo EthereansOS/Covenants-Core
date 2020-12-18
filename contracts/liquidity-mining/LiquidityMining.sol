@@ -357,12 +357,12 @@ contract LiquidityMining {
       */
     function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
         for (uint256 i = 0; i < _farmingSetups.length; i++) {
-            if (!_farmingSetups[i].pinned) {
-                continue;
+            if (_farmingSetups[i].pinned) {
+                FarmingSetup storage setup = _farmingSetups[i];
+                fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
+                _rebalanceRewardPerToken(i, 0, false);
+                break;
             }
-            _rebalanceRewardPerToken(i, 0, false);
-            FarmingSetup storage setup = _farmingSetups[i];
-            fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
         }
     }
 
