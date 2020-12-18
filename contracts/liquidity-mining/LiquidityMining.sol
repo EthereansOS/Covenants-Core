@@ -329,6 +329,11 @@ contract LiquidityMining {
       * @param setupIndex index of the farming setup.
       */
     function _withdraw(Position memory position, uint256 setupIndex) private {
+
+        //Rebalance setup, if free
+        if (_farmingSetups[setupIndex].free) {
+            _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
+        }
         // transfer the reward
         uint256 reward = position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, position.liquidityPoolTokenAmount) : position.reward;
         if (reward > 0) {
@@ -340,10 +345,8 @@ contract LiquidityMining {
         }
         // remove liquidity using AMM
         IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityProviderData);
-        // rebalance the setup
-        if (_farmingSetups[setupIndex].free) {
-            _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
-        } else {
+        // rebalance the setup if not free
+        if (!_farmingSetups[setupIndex].free) {
             _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
         }
     }
@@ -354,12 +357,12 @@ contract LiquidityMining {
       */
     function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
         for (uint256 i = 0; i < _farmingSetups.length; i++) {
-            if (_farmingSetups[i].pinned) {
-                FarmingSetup storage setup = _farmingSetups[i];
-                fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
-                _rebalanceRewardPerToken(i, 0, false);
-                break;
+            if (!_farmingSetups[i].pinned) {
+                continue;
             }
+            _rebalanceRewardPerToken(i, 0, false);
+            FarmingSetup storage setup = _farmingSetups[i];
+            fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
         }
     }
 
@@ -370,13 +373,15 @@ contract LiquidityMining {
      */
     function _rebalanceRewardPerToken(uint256 setupIndex, uint256 liquidityPoolTokenAmount, bool fromExit) private {
         FarmingSetup storage setup = _farmingSetups[setupIndex];
-        // update total supply in the setup
-        fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
-        // update the reward token
-        setup.rewardPerToken = setup.rewardPerToken.add(
-            block.number.sub(setup.lastBlockUpdate).mul(setup.rewardPerBlock).mul(1e18).div(setup.totalSupply)
-        );
+        if(setup.lastBlockUpdate > 0 && setup.totalSupply > 0) {
+            // update the reward token
+            setup.rewardPerToken = setup.rewardPerToken.add(
+                block.number.sub(setup.lastBlockUpdate).mul(setup.rewardPerBlock).mul(1e18).div(setup.totalSupply)
+            );
+        }
         // update the last block update variable
         setup.lastBlockUpdate = block.number;
+        // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value 
+        fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
     }
 }
