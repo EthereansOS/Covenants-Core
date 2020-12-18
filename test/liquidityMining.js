@@ -119,6 +119,18 @@ const initializeInputs = [
 const orchestratorAddress = zero;
 const rewardTokenAddress = zero;
 
+/**
+ * Add the following contracts in the deploy:
+ * 1) AMM (Uniswap)
+ * 2) Reward token
+ * 
+ * Use Ganache fork to retrieve the following addresses:
+ * 1) _uniswapV2RouterAddress
+ * 2) ethItemOrchestratorAddress 
+ * 3) liquidityPoolTokenAddress
+ * 
+ */
+
 contract("LiquidityMining", async accounts => {
     let factoryInstance;
     let logicInstance;
