@@ -4,7 +4,6 @@ const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
 
 // zero address
 const zero = "0x0000000000000000000000000000000000000000";
-// TODO change uniswap address
 const uniswapAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 
 module.exports = function(deployer) {
