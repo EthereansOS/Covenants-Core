@@ -16,9 +16,5 @@ module.exports = function(deployer) {
         const factoryInstance = await LiquidityMiningFactory.deployed();
         // Deploy LiquidityMining contract
         await deployer.deploy(LiquidityMining, factoryInstance.address);
-        // Get the logic instance
-        const logicInstance = await LiquidityMining.deployed();
-        // Update the logic address in the factory
-        await factoryInstance.updateLogicAddress(logicInstance.address);
     })
 }
