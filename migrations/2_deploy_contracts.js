@@ -1,14 +1,16 @@
 const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
-const AMM = artifacts.require("AMM");
+const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
 
 // zero address
 const zero = "0x0000000000000000000000000000000000000000";
 // TODO change uniswap address
-const uniswapAddress = zero;
+const uniswapAddress = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d";
 
 module.exports = function(deployer) {
     deployer.then(async () => {
+        // Deploy the UniswapV2AMMV1 contract
+        await deployer.deploy(UniswapV2AMMV1, uniswapAddress);
         // Deploy LiquidityMiningFactory contract
         await deployer.deploy(LiquidityMiningFactory, zero, zero);
         // Get the factory instance
@@ -19,7 +21,5 @@ module.exports = function(deployer) {
         const logicInstance = await LiquidityMining.deployed();
         // Update the logic address in the factory
         await factoryInstance.updateLogicAddress(logicInstance.address);
-        // Deploy the AMM contract
-        await deployer.deploy(AMM, uniswapAddress);
     })
 }
