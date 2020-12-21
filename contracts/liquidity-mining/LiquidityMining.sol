@@ -133,28 +133,7 @@ contract LiquidityMining {
         return true;
     }
 
-    /** @dev function called by the owner to add or update an existing setup.
-      * @param setupIndex index of the setup to replace or any number > than the setups length to add a new one.
-      * @param setup new or updated setup.
-     */
-    function addOrUpdateFarmingSetup(uint256 setupIndex, FarmingSetup memory setup) public onlyOwner {
-        if (setupIndex > _farmingSetups.length) {
-            // we are creating a new setup
-            require(!setup.free ? setup.startBlock > block.number && setup.endBlock > setup.startBlock : true, "Invalid setup.");
-            _farmingSetups[_farmingSetups.length - 1] = setup;
-        } else {
-            // we are updating an existing setup
-            FarmingSetup storage existingSetup = _farmingSetups[setupIndex];
-            if (!existingSetup.free) {
-                // updating a locked FarmingSetup
-                require(existingSetup.endBlock < block.number && setup.endBlock > setup.startBlock && setup.startBlock > block.number, "Setup still active.");
-                _farmingSetups[setupIndex] = setup;
-            } else {
-                // updating a free FarmingSetup
-                existingSetup.rewardPerBlock = setup.rewardPerBlock;
-            }
-        }
-    }
+    // TODO add update farming setup function
 
     /** @dev allows the owner to update the exit fee.
       * @param newExitFee new exit fee value.
