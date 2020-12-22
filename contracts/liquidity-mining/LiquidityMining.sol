@@ -110,10 +110,9 @@ contract LiquidityMining {
       * @param collectionUri ethItem position token uri.
       * @param rewardTokenAddress the address of the reward token.
       * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
-      * @param farmingSetups array containing all initial farming setups.
       * @return success if the initialize function has ended properly.
      */
-    function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint, FarmingSetup[] memory farmingSetups) public onlyFactory returns(bool) {
+    function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public returns(bool) {
         require(
             _owner == address(0) && 
             _rewardTokenAddress == address(0),
@@ -121,11 +120,9 @@ contract LiquidityMining {
         );
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
-        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
+        _positionTokenCollection = address(0);
+        // (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         _byMint = byMint;
-        for (uint256 i = 0; i < farmingSetups.length; i++) {
-            _farmingSetups[i] = farmingSetups[i];
-        }
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
             require(result, "Error while initializing owner.");
