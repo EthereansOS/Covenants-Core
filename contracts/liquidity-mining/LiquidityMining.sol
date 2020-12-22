@@ -120,8 +120,7 @@ contract LiquidityMining {
         );
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
-        _positionTokenCollection = address(0);
-        // (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
+        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         _byMint = byMint;
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
