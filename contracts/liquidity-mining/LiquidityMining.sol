@@ -129,7 +129,14 @@ contract LiquidityMining {
         return true;
     }
 
-    // TODO add update farming setup function
+    /** @dev allows the owner to set the farming setups.
+      * @param farmingSetups farming setups to set.
+      */
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups) public onlyOwner {
+        for (uint256 i = 0; i < farmingSetups.length; i++) {
+            _farmingSetups[i] = farmingSetups[i];
+        }
+    }
 
     /** @dev allows the owner to update the exit fee.
       * @param newExitFee new exit fee value.

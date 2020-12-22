@@ -26,4 +26,9 @@ contract("LiquidityMining", (accounts) => {
         const positionTokenCollection = await liquidityMiningContract._positionTokenCollection.call();
         assert.notEqual(positionTokenCollection, zero);
     });
+    it("should set the farming setups", async () => {
+        const setups = [{ammPlugin: zero, liquidityPoolTokenAddress: zero, startBlock: 0, endBlock: 1, rewardPerBlock: 0, maximumLiquidity: 0, totalSupply: 0, lastBlockUpdate: 0, mainTokenAddress: zero, secondaryTokenAddresses: [zero], free: false}];
+        const result = await liquidityMiningContract.setFarmingSetups(setups);
+        assert.notEqual(result, null);
+    })
 })
