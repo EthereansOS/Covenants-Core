@@ -4,13 +4,25 @@
   "description": "ETH Affairs",
   "main": "build-contracts.js",
   "scripts": {
-    "build": "node build-contracts.js"
+    "build": "node util/build-contracts.js",
+    "test": "mocha"
+  },
+  "config": {
+    "solidityVersion": "0.7.6"
+  },
+  "mocha": {
+    "exit": true,
+    "timeout": false
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@openzeppelin/contracts": "^3.3.0",
-    "@openzeppelin/upgrades": "^2.8.0",
-    "truffle-flattener-wrapper": "git+https://github.com/b-u-i-d-l/truffle-flattener-wrapper.git"
+    "dotenv": "^8.2.0",
+    "ethers": "^5.0.24",
+    "ganache-cli": "^6.12.1",
+    "mocha": "^8.2.1",
+    "solc-vm": "git+https://github.com/vasapower/solc-vm.git",
+    "truffle-flattener-wrapper": "git+https://github.com/b-u-i-d-l/truffle-flattener-wrapper.git",
+    "web3": "^1.3.1"
   }
 }

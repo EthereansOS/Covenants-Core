@@ -1,564 +1,176 @@
-const { encodeCall } = require('@openzeppelin/upgrades');
+var assert = require("assert");
+var utilities = require("../util/utilities");
+var context = require("../util/context.json");
+var compile = require("../util/compile");
+var blockchainConnection = require("../util/blockchainConnection");
 
-const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
-const LiquidityMining = artifacts.require("LiquidityMining");
-const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
-const MainToken = artifacts.require("MainToken");
-const RewardToken = artifacts.require("RewardToken");
-const SecondaryToken = artifacts.require("SecondaryToken");
+var LiquidityMining;
+var LiquidityMiningFactory;
+var UniswapV2AMMV1;
 
-const zero = "0x0000000000000000000000000000000000000000";
-const orchestratorAddress = "0x12329b2F9e52C5D3422D6E6C026AA9D5b00CC075";
-const uniswapFactoryAddress = "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f";
-const uniswapFactoryAbi = {
-    "abi": [
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "internalType": "address",
-            "name": "token0",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "internalType": "address",
-            "name": "token1",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "name": "PairCreated",
-        "type": "event"
-      },
-      {
-        "constant": true,
-        "inputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "name": "allPairs",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "allPairsLength",
-        "outputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "tokenA",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "tokenB",
-            "type": "address"
-          }
-        ],
-        "name": "createPair",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "feeTo",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "feeToSetter",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "tokenA",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "tokenB",
-            "type": "address"
-          }
-        ],
-        "name": "getPair",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "name": "setFeeTo",
-        "outputs": [],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "name": "setFeeToSetter",
-        "outputs": [],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      }
-    ],
-    "evm": {
-      "bytecode": {
-        "linkReferences": {},
-        "object": "",
-        "opcodes": "",
-        "sourceMap": ""
-      },
-      "deployedBytecode": {
-        "linkReferences": {},
-        "object": "",
-        "opcodes": "",
-        "sourceMap": ""
-      }
-    },
-    "interface": [
-      {
-        "anonymous": false,
-        "inputs": [
-          {
-            "indexed": true,
-            "internalType": "address",
-            "name": "token0",
-            "type": "address"
-          },
-          {
-            "indexed": true,
-            "internalType": "address",
-            "name": "token1",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          },
-          {
-            "indexed": false,
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "name": "PairCreated",
-        "type": "event"
-      },
-      {
-        "constant": true,
-        "inputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "name": "allPairs",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "allPairsLength",
-        "outputs": [
-          {
-            "internalType": "uint256",
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "tokenA",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "tokenB",
-            "type": "address"
-          }
-        ],
-        "name": "createPair",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "feeTo",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "feeToSetter",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "tokenA",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "tokenB",
-            "type": "address"
-          }
-        ],
-        "name": "getPair",
-        "outputs": [
-          {
-            "internalType": "address",
-            "name": "pair",
-            "type": "address"
-          }
-        ],
-        "payable": false,
-        "stateMutability": "view",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "name": "setFeeTo",
-        "outputs": [],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      },
-      {
-        "constant": false,
-        "inputs": [
-          {
-            "internalType": "address",
-            "name": "",
-            "type": "address"
-          }
-        ],
-        "name": "setFeeToSetter",
-        "outputs": [],
-        "payable": false,
-        "stateMutability": "nonpayable",
-        "type": "function"
-      }
-    ],
-    "bytecode": ""
-  };
+var zero = "0x0000000000000000000000000000000000000000";
+var ethItemOrchestrator;
+var uniswapV2Router; 
+var uniswapV2Factory;
+var wethToken;
+var mainToken;
+var secondaryToken;
+var liquidityMiningFactory;
+var liquidityMiningContract;
+var liquidityPool;
+var uniswapAMM;
 
-contract("LiquidityMiningFactory", (accounts) => {
-  let factoryInstance;
-  let rewardTokenInstance;
-  let liquidityMiningInstance;
-  it("should set the logic address inside the factory", async () => {
-    factoryInstance = await LiquidityMiningFactory.deployed();
-    liquidityMiningInstance = await LiquidityMining.deployed();
-    const result = await factoryInstance.updateLogicAddress(liquidityMiningInstance.address, { from: accounts[0] });
-    assert.notEqual(result, null);
-  });
-  it("should deploy a new liquidity mining contract using the factory", async () => {
-    rewardTokenInstance = await RewardToken.deployed();
-    const encodedFunctionCall = encodeCall(
-      'initialize',
-      ['address','bytes','address','string','string','string','address','bool'],
-      [accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "google.com", rewardTokenInstance.address, false]
-    );
-    const result = await factoryInstance.deploy(encodedFunctionCall, { from: accounts[0]});
-    assert.notEqual(result, null);
-    const { contractAddress } = result.logs[0].args;
-    const deployedLiquidityMiningContract = await LiquidityMining.at(contractAddress);
-    const positionTokenCollection = await deployedLiquidityMiningContract._positionTokenCollection.call();
-    assert.notEqual(positionTokenCollection, zero);
-  })
+before(async () => {
+    await blockchainConnection.init;
+
+    LiquidityMining = await compile('liquidity-mining/LiquidityMining');
+    LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
+    UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
+
+    ethItemOrchestrator = new web3.eth.Contract(context.ethItemOrchestratorABI, context.ethItemOrchestratorAddress);
+    uniswapV2Router = new web3.eth.Contract(context.uniswapV2RouterABI, context.uniswapV2RouterAddress);
+    uniswapV2Factory = new web3.eth.Contract(context.uniswapV2FactoryABI, context.uniswapV2FactoryAddress);
+
+    wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
+    mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
+    secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
+
+    liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken.options.address, secondaryToken.options.address).call());
+
+    await buyForETH(mainToken, 10);
+    await buyForETH(secondaryToken, 10);
+
+    var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
+    liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [accounts[0], liquidityMiningModel.options.address]}).send(blockchainConnection.getSendingOptions());
+
+    uniswapAMM = await new web3.eth.Contract(UniswapV2AMMV1.abi).deploy({data : UniswapV2AMMV1.bin, arguments: [uniswapV2Router.options.address]}).send(blockchainConnection.getSendingOptions());
 });
 
-contract("LiquidityMining", (accounts) => {
-    let liquidityMiningInstance;
-    let ammInstance;
-    let factoryInstance;
-    let mainTokenInstance;
-    let secondaryTokenInstance;
-    let rewardTokenInstance;
-    let uniswapFactoryContract;
-    let liquidityPoolTokenAddress = zero;
-    it("owner should deploy a new liquidity mining contract", async () => {
-        liquidityMiningInstance = await LiquidityMining.deployed();
-        rewardTokenInstance = await RewardToken.deployed();
-        await liquidityMiningInstance.initialize(accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "google.com", rewardTokenInstance.address, false, { from: accounts[0] });
-        assert.notEqual(liquidityMiningInstance, zero);
-    });
-    it("should retrieve the correct factory address", async () => {
-        factoryInstance = await LiquidityMiningFactory.deployed();
-        const factoryAddress = await liquidityMiningInstance.FACTORY.call();
-        assert.equal(factoryAddress, factoryInstance.address);
-    });
-    it("should retrieve the position token collection", async () => {
-        const positionTokenCollection = await liquidityMiningInstance._positionTokenCollection.call();
-        assert.notEqual(positionTokenCollection, zero);
-    });
-    it("should get the 0 exit fee", async () => {
-        const exitFee = await liquidityMiningInstance._exitFee.call();
-        assert.equal(exitFee, 0);
-    });
-    it("should update the exit fee", async () => {
-        await liquidityMiningInstance.setExitFee(1, { from: accounts[0] });
-        const exitFee = await liquidityMiningInstance._exitFee.call();
-        assert.equal(exitFee, 1);
-    });
-    it("should not update the exit fee", async () => {
-        try {
-            await liquidityMiningInstance.setExitFee(0, { from: accounts[1] });
-            assert.equal(true, false);
-        } catch (error) {
-            assert(error, "Only the owner can update the exit fee.");
-        }
-    });
-    it("should set the farming setups", async () => {
-        ammInstance = await UniswapV2AMMV1.deployed();
-        mainTokenInstance = await MainToken.deployed();
-        secondaryTokenInstance = await SecondaryToken.deployed();
-        const mainTokenBalance = await mainTokenInstance.balanceOf(accounts[1]);
-        const secondaryTokenBalance = await secondaryTokenInstance.balanceOf(accounts[1]);
-        mainTokenInstance.approve(liquidityMiningInstance.address, mainTokenBalance, { from: accounts[1] });
-        secondaryTokenInstance.approve(liquidityMiningInstance.address, secondaryTokenBalance, { from: accounts[1] });
-        uniswapFactoryContract = new web3.eth.Contract(uniswapFactoryAbi.abi, uniswapFactoryAddress);
-        try {
-            await uniswapFactoryContract.methods.createPair(mainTokenInstance.address, secondaryTokenInstance.address).send({ from: accounts[0], gas: 67219750 });
-            liquidityPoolTokenAddress = await uniswapFactoryContract.methods.getPair(mainTokenInstance.address, secondaryTokenInstance.address).call(); 
-        } catch (error) {
-            liquidityPoolTokenAddress = await uniswapFactoryContract.methods.getPair(mainTokenInstance.address, secondaryTokenInstance.address).call(); 
-        }
-        const currentBlockNumber = await web3.eth.getBlockNumber();
-        const startBlock = currentBlockNumber + 1;
-        const endBlock = startBlock + 9999;
-        const rewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
-        const setups = [
-            {
-                ammPlugin: ammInstance.address, 
-                liquidityPoolTokenAddress, 
-                startBlock: startBlock, 
-                endBlock: endBlock, 
-                rewardPerBlock: rewardPerBlock, 
-                maximumLiquidity: web3.utils.toWei('10', 'ether'), 
-                totalSupply: 0, 
-                lastBlockUpdate: 0, 
-                mainTokenAddress: mainTokenInstance.address, 
-                secondaryTokenAddresses: [secondaryTokenInstance.address], 
-                free: false
-            }
+var buyForETH = async function buyForETH(token, amount) {
+    var path = [
+        wethToken.options.address,
+        token.options.address
+    ];
+    var value = web3.utils.toWei(amount.toString(), 'ether');
+    await uniswapV2Router.methods.swapExactETHForTokens("1", path, accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({value}));
+};
+
+describe("LiquidityMining", () => {
+    it("New LiquidityMining Contract by Factory", async () => {
+        var params = [
+            "address",
+            "bytes",
+            "address",
+            "string",
+            "string",
+            "string",
+            "address",
+            "bool"
         ];
-        const result = await liquidityMiningInstance.setFarmingSetups(setups, { from: accounts[0] });
-        assert.notEqual(result, null);
+        var values = [
+            accounts[0],
+            "0x",
+            ethItemOrchestrator.options.address,
+            "LiquidityMiningToken",
+            "LMT",
+            "google.com",
+            mainToken.options.address,
+            false
+        ];
+        var payload = web3.utils.sha3(`initialize(${params.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(params, values).substring(2));
+        var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
+        deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
+        var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address)"))[0].topics[2]);
+        liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
+        assert.notStrictEqual(liquidityMiningContract.options.address, zero);
     });
-    it("should not set the farming setups", async () => {
+    it("Previously created LiquidityMining Contract cannot be initialized more than a time", async() => {
         try {
-            const setups = [
-              {
-                  ammPlugin: zero, 
-                  liquidityPoolTokenAddress: zero, 
-                  startBlock: 0, 
-                  endBlock: 1, 
-                  rewardPerBlock: 0, 
-                  maximumLiquidity: 0, 
-                  totalSupply: 0, 
-                  lastBlockUpdate: 0, 
-                  mainTokenAddress: zero, 
-                  secondaryTokenAddresses: [zero], 
-                  free: false
-              }
-            ];            
-            await liquidityMiningInstance.setFarmingSetups(setups, { from: accounts[1] });
-            assert.equal(true, false);
+            await liquidityMiningContract.methods.initialize(accounts[0], "0x", ethItemOrchestrator.options.address, "TestCollection1", "TSTC", "test", ethItemOrchestrator.options.address, false).send(blockchainConnection.getSendingOptions());
+        } catch (e) {
+            assert.notStrictEqual((e.message || e).toLowerCase().indexOf("already initialized"), -1);
+        }
+    });
+    it("should retrieve the correct factory address", async() => {
+        var factoryAddress = await liquidityMiningContract.methods.FACTORY().call();
+        assert.strictEqual(factoryAddress, liquidityMiningFactory.options.address);
+    });
+    it("should retrieve the position token collection", async() => {
+        var positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
+        assert.notStrictEqual(positionTokenCollection, zero);
+    });
+    it("Exit fee is 0", async() => {
+        var exitFee = await liquidityMiningContract.methods._exitFee().call();
+        assert.strictEqual(parseInt(exitFee), 0);
+    });
+    it("Account 0 can update the exit fee to 1", async() => {
+        await liquidityMiningContract.methods.setExitFee(1).send(blockchainConnection.getSendingOptions());
+        var exitFee = await liquidityMiningContract.methods._exitFee().call();
+        assert.strictEqual(parseInt(exitFee), 1);
+    });
+    it("Another account cannot update the exit fee", async() => {
+        try {
+            await liquidityMiningContract.methods.setExitFee(0).send({...blockchainConnection.getSendingOptions(), from: accounts[1]});
+        } catch (e) {
+            assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("unauthorized"), -1);
+        }
+    });
+    it("should set the farming setups", async() => {
+        var startBlock = await web3.eth.getBlockNumber() + 1;
+        var endBlock = startBlock + 9999;
+        var rewardPerBlock = 1500;
+        var setups = [{
+            ammPlugin: uniswapAMM.options.address,
+            liquidityPoolTokenAddress : liquidityPool.options.address,
+            startBlock,
+            endBlock,
+            rewardPerBlock,
+            maximumLiquidity: rewardPerBlock * (endBlock - startBlock),
+            totalSupply: 0,
+            lastBlockUpdate: 0,
+            mainTokenAddress: mainToken.options.address,
+            secondaryTokenAddresses: [secondaryToken.options.address],
+            free: false
+        }];
+        var result = await liquidityMiningContract.methods.setFarmingSetups(setups).send(blockchainConnection.getSendingOptions());
+        assert.notStrictEqual(result, null);
+    });
+    it("should not set the farming setups", async() => {
+        try {
+            var setups = [{
+                ammPlugin: zero,
+                liquidityPoolTokenAddress: zero,
+                startBlock: 0,
+                endBlock: 1,
+                rewardPerBlock: 0,
+                maximumLiquidity: 0,
+                totalSupply: 0,
+                lastBlockUpdate: 0,
+                mainTokenAddress: zero,
+                secondaryTokenAddresses: [zero],
+                free: false
+            }];
+            await liquidityMiningContract.methods.setFarmingSetups(setups).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
+            throw "Farming Setup done";
         } catch (error) {
             assert(error, "Only the owner can set the farming setups.");
         }
     });
-    it("should set a new staking position", async () => {
-        const mainTokenAmount = web3.utils.toWei('5', 'ether');
-        const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
-        const stake = {
+    it("should set a new staking position", async() => {
+        await mainToken.methods.approve(liquidityMiningContract.options.address, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+        await secondaryToken.methods.approve(liquidityMiningContract.options.address, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+        var mainTokenAmount = web3.utils.toWei('100', 'ether');
+        var secondaryTokenAmount = web3.utils.toWei('10', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
+        var stake = {
             setupIndex: 0,
-            secondaryTokenAddress: secondaryTokenInstance.address,
+            secondaryTokenAddress: secondaryToken.options.address,
             liquidityPoolTokenAmount: 0,
             mainTokenAmount,
             secondaryTokenAmount,
             positionOwner: zero,
             mintPositionToken: false,
         };
-        const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
-        const { positionKey } = result.logs[0].args;
-        const position = await liquidityMiningInstance.getPosition.call(positionKey);
-        // console.log(position);
-        const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
-        const { creationBlock, reward } = position;
-        const { startBlock, maximumLiquidity } = position.setup;
-        assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
+        var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions());
+        assert.notStrictEqual(result, null);
     });
-    /*
-    it("should set a new staking position with minting token", async () => {
-        const mainTokenAmount = web3.utils.toWei('2', 'ether');
-        const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
-        const stake = {
-            setupIndex: 0,
-            secondaryTokenAddress: secondaryTokenInstance.address,
-            liquidityPoolTokenAmount: 0,
-            mainTokenAmount,
-            secondaryTokenAmount,
-            positionOwner: zero,
-            mintPositionToken: true,
-        };
-        const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
-        const { positionKey } = result.logs[0].args;
-        const position = await liquidityMiningInstance.getPosition.call(positionKey);
-        // console.log(position);
-        const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
-        const { creationBlock, reward } = position;
-        const { startBlock, maximumLiquidity } = position.setup;
-        assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
-    });
-    */
 })
