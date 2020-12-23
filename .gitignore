@@ -4,4 +4,8 @@
 /**/lib
 /**/.vscode
 /**/artifacts
+/**/bin
 /**/out
+/**/flat
+/**/.env
+/**/*.env
