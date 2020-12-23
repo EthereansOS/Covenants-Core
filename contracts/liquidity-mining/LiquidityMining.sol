@@ -78,13 +78,6 @@ contract LiquidityMining {
     // pinned setup index
     uint256 private _pinnedSetupIndex;
 
-    /** @dev creates the first instance of this contract that will be cloned from the _factory contract.
-      * @param _factory address of the factory contract.
-     */
-    constructor(address _factory) {
-        FACTORY = _factory;
-    }
-
     /** Modifiers. */
 
     /** @dev onlyFactory modifier used to check for unauthorized initializations. */
@@ -114,10 +107,10 @@ contract LiquidityMining {
      */
     function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public returns(bool) {
         require(
-            _owner == address(0) && 
-            _rewardTokenAddress == address(0),
+            FACTORY == address(0),
             "Already initialized."
         );
+        FACTORY = msg.sender;
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
@@ -455,5 +448,4 @@ contract LiquidityMining {
         // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value 
         fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
     }
-
 }

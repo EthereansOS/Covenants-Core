@@ -5,3 +5,7 @@
 /**/.vscode
 /**/artifacts
 /**/out
+/**/.blockchain_connection_string
+/**/flat
+/**/.env
+/**/*.env

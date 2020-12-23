@@ -1,13 +1,13 @@
 FROM node:latest
 
-RUN npm install -g truffle
-RUN npm install -g ganache-cli
-
 RUN mkdir -p /usr/local/ethaffairs
 
 COPY . /usr/local/ethaffairs/
 
 WORKDIR /usr/local/ethaffairs
-RUN chmod +x entrypoint.sh
 
-ENTRYPOINT ["./entrypoint.sh"] 
+RUN npm install
+
+RUN echo blockchain_connection_string=${blockchain_connection_string} > .env
+
+RUN npm run test
