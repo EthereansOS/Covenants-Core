@@ -74,7 +74,7 @@ contract LiquidityMining {
     // mapping containing whether a position has been redeemed or not
     mapping(bytes32 => bool) private _positionRedeemed;
     // owner exit fee
-    uint256 private _exitFee;
+    uint256 public _exitFee;
     // pinned setup index
     uint256 private _pinnedSetupIndex;
 
@@ -134,7 +134,7 @@ contract LiquidityMining {
       */
     function setFarmingSetups(FarmingSetup[] memory farmingSetups) public onlyOwner {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
-            _farmingSetups[i] = farmingSetups[i];
+            _farmingSetups.push(farmingSetups[i]);
         }
     }
 
