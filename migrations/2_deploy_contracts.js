@@ -1,6 +1,9 @@
 const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
 const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
+const MainToken = artifacts.require("MainToken");
+const SecondaryToken = artifacts.require("SecondaryToken");
+const RewardToken = artifacts.require("RewardToken");
 
 // zero address
 const zero = "0x0000000000000000000000000000000000000000";
@@ -16,5 +19,11 @@ module.exports = function(deployer) {
         const factoryInstance = await LiquidityMiningFactory.deployed();
         // Deploy LiquidityMining contract
         await deployer.deploy(LiquidityMining, factoryInstance.address);
+        // Deploy the MainToken contract
+        await deployer.deploy(MainToken);
+        // Deploy the SecondaryToken contract
+        await deployer.deploy(SecondaryToken);
+        // Deploy the RewardToken contract
+        await deployer.deploy(RewardToken)
     })
 }

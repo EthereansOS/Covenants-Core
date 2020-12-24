@@ -64,7 +64,7 @@ contract LiquidityMining {
     // whether the token is by mint or by reserve
     bool private _byMint;
     // array containing all the currently available farming setups
-    FarmingSetup[] private _farmingSetups;
+    FarmingSetup[] public _farmingSetups;
     // mapping containing all the positions
     mapping(bytes32 => Position) private _positions;
     // mapping containing the reward per token per setup per block
