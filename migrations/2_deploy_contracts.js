@@ -20,9 +20,9 @@ module.exports = function(deployer) {
         // Deploy LiquidityMining contract
         await deployer.deploy(LiquidityMining, factoryInstance.address);
         // Deploy the MainToken contract
-        await deployer.deploy(MainToken);
+        await deployer.deploy(MainToken, web3.eth.accounts[1], web3.eth.accounts[2]);
         // Deploy the SecondaryToken contract
-        await deployer.deploy(SecondaryToken);
+        await deployer.deploy(SecondaryToken, web3.eth.accounts[1], web3.eth.accounts[2]);
         // Deploy the RewardToken contract
         await deployer.deploy(RewardToken)
     })
