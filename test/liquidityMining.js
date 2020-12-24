@@ -1,6 +1,3 @@
-const { encodeCall } = require('@openzeppelin/upgrades');
-
-const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
 const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
 const MainToken = artifacts.require("MainToken");
