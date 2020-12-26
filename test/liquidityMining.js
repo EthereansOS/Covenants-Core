@@ -404,9 +404,9 @@ contract("LiquidityMining", (accounts) => {
         assert.notEqual(liquidityMiningInstance, zero);
     });
     it("should retrieve the correct factory address", async () => {
-        factoryIstance = await LiquidityMiningFactory.deployed();
+      factoryInstance = await LiquidityMiningFactory.deployed();
         const factoryAddress = await liquidityMiningInstance.FACTORY.call();
-        assert.equal(factoryAddress, factoryIstance.address);
+        assert.equal(factoryAddress, factoryInstance.address);
     });
     it("should retrieve the position token collection", async () => {
         const positionTokenCollection = await liquidityMiningInstance._positionTokenCollection.call();
