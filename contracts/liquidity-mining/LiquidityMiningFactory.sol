@@ -44,25 +44,19 @@ contract LiquidityMiningFactory {
       * @return contractAddress new liquidity mining contract address.
      */
     function deploy(bytes memory data) public returns (address contractAddress) {
-        (bool initSuccess,) = (contractAddress = _clone(liquidityMiningImplementationAddress)).call(data);
-        require(initSuccess, "Error while creating new liquidity mining contract");
-        emit LiquidityMiningDeployed(msg.sender, contractAddress);
-    }
-
-    function _clone(address original) private returns (address copy) {
-        assembly {
-            mstore(
-                0,
-                or(
-                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
-                    mul(original, 0x1000000000000000000)
-                )
-            )
-            copy := create(0, 0, 32)
-            switch extcodesize(copy)
-                case 0 {
-                    invalid()
-                }
+        if (data.length > 0) {
+            bytes20 logic = bytes20(liquidityMiningImplementationAddress);
+            assembly {
+                let clone := mload(0x40)
+                mstore(clone, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+                mstore(add(clone, 0x14), logic)
+                mstore(add(clone, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+                contractAddress := create(0, clone, 0x37)
+            }
+            (bool initSuccess,) = contractAddress.call(data);
+            require(initSuccess);
+            emit LiquidityMiningDeployed(msg.sender, contractAddress);
         }
     }
+
 }
