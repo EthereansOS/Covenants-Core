@@ -9,5 +9,6 @@ COPY . /usr/local/ethaffairs/
 
 WORKDIR /usr/local/ethaffairs
 RUN chmod +x entrypoint.sh
+RUN npm install
 
 ENTRYPOINT ["./entrypoint.sh"] 

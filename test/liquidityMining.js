@@ -1,3 +1,4 @@
+const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
 const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
 const MainToken = artifacts.require("MainToken");
@@ -388,39 +389,41 @@ const uniswapFactoryAbi = {
   };
 
 contract("LiquidityMining", (accounts) => {
-    let liquidityMiningContract;
+    let liquidityMiningInstance;
     let ammInstance;
+    let factoryInstance;
     let mainTokenInstance;
     let secondaryTokenInstance;
     let rewardTokenInstance;
     let uniswapFactoryContract;
     let liquidityPoolTokenAddress = zero;
     it("owner should deploy a new liquidity mining contract", async () => {
-        liquidityMiningContract = await LiquidityMining.new(zero);
+        liquidityMiningInstance = await LiquidityMining.deployed();
         rewardTokenInstance = await RewardToken.deployed();
-        await liquidityMiningContract.initialize(accounts[0], web3.utils.hexToBytes(web3.utils.toHex("")), orchestratorAddress, "TestCollection1", "TSTC", "test", rewardTokenInstance.address, false, { from: accounts[0] });
-        assert.notEqual(liquidityMiningContract, zero);
+        await liquidityMiningInstance.initialize(accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "test", rewardTokenInstance.address, false, { from: accounts[0] });
+        assert.notEqual(liquidityMiningInstance, zero);
     });
     it("should retrieve the correct factory address", async () => {
-        const factoryAddress = await liquidityMiningContract.FACTORY.call();
-        assert.equal(factoryAddress, zero);
+        factoryIstance = await LiquidityMiningFactory.deployed();
+        const factoryAddress = await liquidityMiningInstance.FACTORY.call();
+        assert.equal(factoryAddress, factoryIstance.address);
     });
     it("should retrieve the position token collection", async () => {
-        const positionTokenCollection = await liquidityMiningContract._positionTokenCollection.call();
+        const positionTokenCollection = await liquidityMiningInstance._positionTokenCollection.call();
         assert.notEqual(positionTokenCollection, zero);
     });
     it("should get the 0 exit fee", async () => {
-        const exitFee = await liquidityMiningContract._exitFee.call();
+        const exitFee = await liquidityMiningInstance._exitFee.call();
         assert.equal(exitFee, 0);
     });
     it("should update the exit fee", async () => {
-        await liquidityMiningContract.setExitFee(1, { from: accounts[0] });
-        const exitFee = await liquidityMiningContract._exitFee.call();
+        await liquidityMiningInstance.setExitFee(1, { from: accounts[0] });
+        const exitFee = await liquidityMiningInstance._exitFee.call();
         assert.equal(exitFee, 1);
     });
     it("should not update the exit fee", async () => {
         try {
-            await liquidityMiningContract.setExitFee(0, { from: accounts[1] });
+            await liquidityMiningInstance.setExitFee(0, { from: accounts[1] });
             assert.equal(true, false);
         } catch (error) {
             assert(error, "Only the owner can update the exit fee.");
@@ -430,8 +433,10 @@ contract("LiquidityMining", (accounts) => {
         ammInstance = await UniswapV2AMMV1.deployed();
         mainTokenInstance = await MainToken.deployed();
         secondaryTokenInstance = await SecondaryToken.deployed();
-        mainTokenInstance.approve(liquidityMiningContract.address, await mainTokenInstance.balanceOf(accounts[1]), { from: accounts[1] });
-        secondaryTokenInstance.approve(liquidityMiningContract.address, await secondaryTokenInstance.balanceOf(accounts[1]), { from: accounts[1] });
+        const mainTokenBalance = await mainTokenInstance.balanceOf(accounts[1]);
+        const secondaryTokenBalance = await secondaryTokenInstance.balanceOf(accounts[1]);
+        mainTokenInstance.approve(liquidityMiningInstance.address, mainTokenBalance, { from: accounts[1] });
+        secondaryTokenInstance.approve(liquidityMiningInstance.address, secondaryTokenBalance, { from: accounts[1] });
         uniswapFactoryContract = new web3.eth.Contract(uniswapFactoryAbi.abi, uniswapFactoryAddress);
         try {
             await uniswapFactoryContract.methods.createPair(mainTokenInstance.address, secondaryTokenInstance.address).send({ from: accounts[0], gas: 67219750 });
@@ -441,7 +446,7 @@ contract("LiquidityMining", (accounts) => {
         }
         const startBlock = await web3.eth.getBlockNumber() + 1;
         const endBlock = startBlock + 9999;
-        const rewardPerBlock = 1500;
+        const rewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
         const setups = [
             {
                 ammPlugin: ammInstance.address, 
@@ -449,7 +454,7 @@ contract("LiquidityMining", (accounts) => {
                 startBlock: startBlock, 
                 endBlock: endBlock, 
                 rewardPerBlock: rewardPerBlock, 
-                maximumLiquidity: rewardPerBlock * (endBlock - startBlock), 
+                maximumLiquidity: (rewardPerBlock * (endBlock - startBlock)).toString(), 
                 totalSupply: 0, 
                 lastBlockUpdate: 0, 
                 mainTokenAddress: mainTokenInstance.address, 
@@ -457,7 +462,7 @@ contract("LiquidityMining", (accounts) => {
                 free: false
             }
         ];
-        const result = await liquidityMiningContract.setFarmingSetups(setups, { from: accounts[0] });
+        const result = await liquidityMiningInstance.setFarmingSetups(setups, { from: accounts[0] });
         assert.notEqual(result, null);
     });
     it("should not set the farming setups", async () => {
@@ -477,15 +482,15 @@ contract("LiquidityMining", (accounts) => {
                     free: false
                 }
             ];            
-            await liquidityMiningContract.setFarmingSetups(setups, { from: accounts[1] });
+            await liquidityMiningInstance.setFarmingSetups(setups, { from: accounts[1] });
             assert.equal(true, false);
         } catch (error) {
             assert(error, "Only the owner can set the farming setups.");
         }
     });
     it("should set a new staking position", async () => {
-        const mainTokenAmount = web3.utils.toWei('100', 'ether');
-        const secondaryTokenAmount = web3.utils.toWei('0.1', 'ether');
+        const mainTokenAmount = web3.utils.toWei('0.001', 'ether');
+        const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
         const stake = {
             setupIndex: 0,
             secondaryTokenAddress: secondaryTokenInstance.address,
@@ -495,7 +500,7 @@ contract("LiquidityMining", (accounts) => {
             positionOwner: zero,
             mintPositionToken: false,
         };
-        const result = await liquidityMiningContract.stake(stake, { from: accounts[1] });
+        const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
         assert.notEqual(result, null);
     });
 })

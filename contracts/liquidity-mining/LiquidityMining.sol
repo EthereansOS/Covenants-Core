@@ -122,10 +122,12 @@ contract LiquidityMining {
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
         _byMint = byMint;
+        /*
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
             require(result, "Error while initializing owner.");
         }
+        */
         return true;
     }
 
@@ -172,15 +174,18 @@ contract LiquidityMining {
         uint256 poolTokenAmount = stakeData.liquidityPoolTokenAmount;
         LiquidityProviderData memory liquidityProviderData;
         // create tokens array
-        address[] memory tokens;
+        address[] memory tokens = new address[](2);
         tokens[0] = chosenSetup.mainTokenAddress;
         tokens[1] = stakeData.secondaryTokenAddress;
         if (stakeData.mainTokenAmount > 0 && stakeData.secondaryTokenAmount > 0) {
             // open position using token pair
             IERC20(chosenSetup.mainTokenAddress).transferFrom(msg.sender, address(this), stakeData.mainTokenAmount);
             IERC20(stakeData.secondaryTokenAddress).transferFrom(msg.sender, address(this), stakeData.secondaryTokenAmount);
+            // approve the transfer for the AMM
+            IERC20(chosenSetup.mainTokenAddress).approve(chosenSetup.ammPlugin, stakeData.mainTokenAmount);
+            IERC20(stakeData.secondaryTokenAddress).approve(chosenSetup.ammPlugin, stakeData.secondaryTokenAmount);
             // create amounts array
-            uint256[] memory amounts;
+            uint256[] memory amounts = new uint256[](2);
             amounts[0] = stakeData.mainTokenAmount;
             amounts[1] = stakeData.secondaryTokenAmount;
             // create the liquidity provider data
@@ -197,6 +202,8 @@ contract LiquidityMining {
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             IERC20(chosenSetup.liquidityPoolTokenAddress).transferFrom(msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
+            // approve the transfer for the AMM
+            IERC20(chosenSetup.liquidityPoolTokenAddress).approve(chosenSetup.ammPlugin, stakeData.liquidityPoolTokenAmount);
             // create the liquidity provider data for latter removal if requested
             liquidityProviderData = LiquidityProviderData(
                 chosenSetup.liquidityPoolTokenAddress, 
