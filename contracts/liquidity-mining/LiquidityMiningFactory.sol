@@ -49,6 +49,10 @@ contract LiquidityMiningFactory {
         emit LiquidityMiningDeployed(msg.sender, contractAddress);
     }
 
+    /** @dev clones the input contract address and returns the copied contract address.
+      * @param original address of the original contract.
+      * @return copy copied contract address.
+     */
     function _clone(address original) private returns (address copy) {
         assembly {
             mstore(
