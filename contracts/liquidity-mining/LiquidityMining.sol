@@ -113,9 +113,9 @@ contract LiquidityMining {
       * @param collectionUri ethItem position token uri.
       * @param rewardTokenAddress the address of the reward token.
       * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
-      * @return success if the initialize function has ended properly.
+      * @return initSuccess success if the initialize function has ended properly.
      */
-    function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public returns(bool) {
+    function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public returns(bool initSuccess) {
         require(
             _owner == address(0) && 
             _rewardTokenAddress == address(0),
@@ -131,7 +131,7 @@ contract LiquidityMining {
             require(result, "Error while initializing owner.");
         }
         */
-        return true;
+        initSuccess = true;
     }
 
     /** @dev allows the owner to set the farming setups.

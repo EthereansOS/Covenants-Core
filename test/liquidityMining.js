@@ -1,3 +1,5 @@
+const { encodeCall } = require('@openzeppelin/upgrades');
+
 const LiquidityMiningFactory = artifacts.require("LiquidityMiningFactory");
 const LiquidityMining = artifacts.require("LiquidityMining");
 const UniswapV2AMMV1 = artifacts.require("UniswapV2AMMV1");
@@ -388,6 +390,32 @@ const uniswapFactoryAbi = {
     "bytecode": ""
   };
 
+contract("LiquidityMiningFactory", (accounts) => {
+  let factoryInstance;
+  let rewardTokenInstance;
+  let liquidityMiningInstance;
+  it("should set the logic address inside the factory", async () => {
+    factoryInstance = await LiquidityMiningFactory.deployed();
+    liquidityMiningInstance = await LiquidityMining.deployed();
+    const result = await factoryInstance.updateLogicAddress(liquidityMiningInstance.address, { from: accounts[0] });
+    assert.notEqual(result, null);
+  });
+  it("should deploy a new liquidity mining contract using the factory", async () => {
+    rewardTokenInstance = await RewardToken.deployed();
+    const encodedFunctionCall = encodeCall(
+      'initialize',
+      ['address','bytes','address','string','string','string','address','bool'],
+      [accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "google.com", rewardTokenInstance.address, false]
+    );
+    const result = await factoryInstance.deploy(encodedFunctionCall, { from: accounts[0]});
+    assert.notEqual(result, null);
+    const { contractAddress } = result.logs[0].args;
+    const deployedLiquidityMiningContract = await LiquidityMining.at(contractAddress);
+    const positionTokenCollection = await deployedLiquidityMiningContract._positionTokenCollection.call();
+    assert.notEqual(positionTokenCollection, zero);
+  })
+});
+
 contract("LiquidityMining", (accounts) => {
     let liquidityMiningInstance;
     let ammInstance;
@@ -404,7 +432,7 @@ contract("LiquidityMining", (accounts) => {
         assert.notEqual(liquidityMiningInstance, zero);
     });
     it("should retrieve the correct factory address", async () => {
-      factoryInstance = await LiquidityMiningFactory.deployed();
+        factoryInstance = await LiquidityMiningFactory.deployed();
         const factoryAddress = await liquidityMiningInstance.FACTORY.call();
         assert.equal(factoryAddress, factoryInstance.address);
     });
@@ -504,12 +532,13 @@ contract("LiquidityMining", (accounts) => {
         const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
         const { positionKey } = result.logs[0].args;
         const position = await liquidityMiningInstance.getPosition.call(positionKey);
-        console.log(position);
+        // console.log(position);
         const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
         const { creationBlock, reward } = position;
         const { startBlock, maximumLiquidity } = position.setup;
         assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
     });
+    /*
     it("should set a new staking position with minting token", async () => {
         const mainTokenAmount = web3.utils.toWei('2', 'ether');
         const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
@@ -525,10 +554,11 @@ contract("LiquidityMining", (accounts) => {
         const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
         const { positionKey } = result.logs[0].args;
         const position = await liquidityMiningInstance.getPosition.call(positionKey);
-        console.log(position);
+        // console.log(position);
         const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
         const { creationBlock, reward } = position;
         const { startBlock, maximumLiquidity } = position.setup;
         assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
     });
+    */
 })
