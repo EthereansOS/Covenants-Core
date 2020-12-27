@@ -3,7 +3,6 @@ var fs = require("fs");
 var solidityManager = require('solc-vm/solc-manager');
 var solidityDownloader = require('solc-vm/solc-downloader');
 var { exec } = require('child_process');
-const { fstat } = require("fs");
 
 function cleanOutput(text) {
     var lines = text.split('\n').join('').split('\r').join('').split('======= ');
