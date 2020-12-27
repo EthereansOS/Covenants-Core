@@ -173,8 +173,8 @@ contract LiquidityMining {
         tokens[1] = stakeData.secondaryTokenAddress;
         if (stakeData.mainTokenAmount > 0 && stakeData.secondaryTokenAmount > 0) {
             // open position using token pair
-            IERC20(chosenSetup.mainTokenAddress).transferFrom(msg.sender, address(this), stakeData.mainTokenAmount);
-            IERC20(stakeData.secondaryTokenAddress).transferFrom(msg.sender, address(this), stakeData.secondaryTokenAmount);
+            _safeTransferFrom(chosenSetup.mainTokenAddress, msg.sender, address(this), stakeData.mainTokenAmount);
+            _safeTransferFrom(stakeData.secondaryTokenAddress, msg.sender, address(this), stakeData.secondaryTokenAmount);
             // approve the transfer for the AMM
             IERC20(chosenSetup.mainTokenAddress).approve(chosenSetup.ammPlugin, stakeData.mainTokenAmount);
             IERC20(stakeData.secondaryTokenAddress).approve(chosenSetup.ammPlugin, stakeData.secondaryTokenAmount);
@@ -195,7 +195,7 @@ contract LiquidityMining {
             poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityProviderData);
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
-            IERC20(chosenSetup.liquidityPoolTokenAddress).transferFrom(msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
+            _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
             // approve the transfer for the AMM
             IERC20(chosenSetup.liquidityPoolTokenAddress).approve(chosenSetup.ammPlugin, stakeData.liquidityPoolTokenAmount);
             // create the liquidity provider data for latter removal if requested
@@ -406,23 +406,27 @@ contract LiquidityMining {
         }
         // transfer the reward
         if (reward > 0) {
-            _byMint ? IERC20Mintable(_rewardTokenAddress).mint(position.uniqueOwner, reward) : IERC20(_rewardTokenAddress).transfer(position.uniqueOwner, reward);
+            if (_byMint) {
+                IERC20Mintable(_rewardTokenAddress).mint(position.uniqueOwner, reward);
+            } else {
+                _safeTransferFrom(_rewardTokenAddress, address(this), position.uniqueOwner, reward);
+            }
         }
         // pay the fees!
         uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee);
         if (_exitFee > 0) {
-            IERC20(position.setup.liquidityPoolTokenAddress).transferFrom(position.uniqueOwner, _owner, fee);
+            _safeTransferFrom(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, _owner, fee);
         }
         // check if the user wants to unwrap its pair or not
         if (unwrapPair) {
             // remove liquidity using AMM
             uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityProviderData);
             // send the unwrapped pair tokens
-            IERC20(position.liquidityProviderData.tokens[0]).transfer(position.uniqueOwner, amounts[0]);
-            IERC20(position.liquidityProviderData.tokens[1]).transfer(position.uniqueOwner, amounts[1]);
+            _safeTransferFrom(position.liquidityProviderData.tokens[0], address(this), position.uniqueOwner, amounts[0]);
+            _safeTransferFrom(position.liquidityProviderData.tokens[1], address(this), position.uniqueOwner, amounts[1]);
         } else {
             // send back the liquidity pool token amount without the fee
-            IERC20(position.setup.liquidityPoolTokenAddress).transfer(position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
+            _safeTransferFrom(position.setup.liquidityPoolTokenAddress, address(this), position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
         }
         // rebalance the setup if not free
         if (!_farmingSetups[setupIndex].free) {
@@ -457,6 +461,17 @@ contract LiquidityMining {
         setup.lastBlockUpdate = block.number;
         // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value 
         fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
+    }
+
+    /** @dev this function safely transfers the given ERC20 value from an address to another.
+      * @param erc20TokenAddress erc20 token address.
+      * @param from address from.
+      * @param to address to.
+      * @param value amount to transfer.
+     */
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
     }
 
     function getPosition(bytes32 key) public view returns(Position memory) {
