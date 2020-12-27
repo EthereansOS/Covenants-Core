@@ -8,6 +8,4 @@ WORKDIR /usr/local/ethaffairs
 
 RUN npm install
 
-RUN echo blockchain_connection_string=${blockchain_connection_string} > .env
-
 RUN npm run test

@@ -33,7 +33,7 @@ before(async () => {
 
     wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
     mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
-    secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdcTokenAddress);
+    secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
     liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken.options.address, secondaryToken.options.address).call());
 

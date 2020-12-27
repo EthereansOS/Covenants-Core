@@ -40,7 +40,6 @@ contract USDExtensionController is ERC1155Receiver {
     constructor(address doubleProxyAddress,
         uint256[] memory rebalanceByCreditMultipliersInput, address[] memory creditReceiversInput, bytes memory allowedAMMsBytes) {
         _doubleProxy = doubleProxyAddress;
-        
         _creditReceivers = creditReceiversInput;
         _rebalanceByCreditMultipliers = rebalanceByCreditMultipliersInput;
         _setAllowedAMMs(allowedAMMsBytes);
@@ -56,7 +55,7 @@ contract USDExtensionController is ERC1155Receiver {
         _extension = address(usdExtension);
         _collection = usdExtension.collection();
     }
-    
+
     function initUsdCollection(string calldata usdName, string calldata usdSymbol, string calldata usdUri) public {
         require(_usdInteroperableInterfaceAddress == address(0), "Init already called");
         USDExtension usdExtension = USDExtension(_extension);
