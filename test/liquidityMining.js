@@ -400,7 +400,7 @@ contract("LiquidityMining", (accounts) => {
     it("owner should deploy a new liquidity mining contract", async () => {
         liquidityMiningInstance = await LiquidityMining.deployed();
         rewardTokenInstance = await RewardToken.deployed();
-        await liquidityMiningInstance.initialize(accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "test", rewardTokenInstance.address, false, { from: accounts[0] });
+        await liquidityMiningInstance.initialize(accounts[0], web3.utils.hexToBytes(web3.utils.randomHex(32)), orchestratorAddress, "TestCollection1", "TSTC", "google.com", rewardTokenInstance.address, false, { from: accounts[0] });
         assert.notEqual(liquidityMiningInstance, zero);
     });
     it("should retrieve the correct factory address", async () => {
@@ -444,7 +444,8 @@ contract("LiquidityMining", (accounts) => {
         } catch (error) {
             liquidityPoolTokenAddress = await uniswapFactoryContract.methods.getPair(mainTokenInstance.address, secondaryTokenInstance.address).call(); 
         }
-        const startBlock = await web3.eth.getBlockNumber() + 1;
+        const currentBlockNumber = await web3.eth.getBlockNumber();
+        const startBlock = currentBlockNumber + 1;
         const endBlock = startBlock + 9999;
         const rewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
         const setups = [
@@ -454,7 +455,7 @@ contract("LiquidityMining", (accounts) => {
                 startBlock: startBlock, 
                 endBlock: endBlock, 
                 rewardPerBlock: rewardPerBlock, 
-                maximumLiquidity: (rewardPerBlock * (endBlock - startBlock)).toString(), 
+                maximumLiquidity: web3.utils.toWei('10', 'ether'), 
                 totalSupply: 0, 
                 lastBlockUpdate: 0, 
                 mainTokenAddress: mainTokenInstance.address, 
@@ -468,19 +469,19 @@ contract("LiquidityMining", (accounts) => {
     it("should not set the farming setups", async () => {
         try {
             const setups = [
-                {
-                    ammPlugin: zero, 
-                    liquidityPoolTokenAddress: zero, 
-                    startBlock: 0, 
-                    endBlock: 1, 
-                    rewardPerBlock: 0, 
-                    maximumLiquidity: 0, 
-                    totalSupply: 0, 
-                    lastBlockUpdate: 0, 
-                    mainTokenAddress: zero, 
-                    secondaryTokenAddresses: [zero], 
-                    free: false
-                }
+              {
+                  ammPlugin: zero, 
+                  liquidityPoolTokenAddress: zero, 
+                  startBlock: 0, 
+                  endBlock: 1, 
+                  rewardPerBlock: 0, 
+                  maximumLiquidity: 0, 
+                  totalSupply: 0, 
+                  lastBlockUpdate: 0, 
+                  mainTokenAddress: zero, 
+                  secondaryTokenAddresses: [zero], 
+                  free: false
+              }
             ];            
             await liquidityMiningInstance.setFarmingSetups(setups, { from: accounts[1] });
             assert.equal(true, false);
@@ -489,7 +490,7 @@ contract("LiquidityMining", (accounts) => {
         }
     });
     it("should set a new staking position", async () => {
-        const mainTokenAmount = web3.utils.toWei('0.001', 'ether');
+        const mainTokenAmount = web3.utils.toWei('5', 'ether');
         const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
         const stake = {
             setupIndex: 0,
@@ -501,6 +502,33 @@ contract("LiquidityMining", (accounts) => {
             mintPositionToken: false,
         };
         const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
-        assert.notEqual(result, null);
+        const { positionKey } = result.logs[0].args;
+        const position = await liquidityMiningInstance.getPosition.call(positionKey);
+        console.log(position);
+        const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
+        const { creationBlock, reward } = position;
+        const { startBlock, maximumLiquidity } = position.setup;
+        assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
+    });
+    it("should set a new staking position with minting token", async () => {
+        const mainTokenAmount = web3.utils.toWei('2', 'ether');
+        const secondaryTokenAmount = web3.utils.toWei('0.001', 'ether');
+        const stake = {
+            setupIndex: 0,
+            secondaryTokenAddress: secondaryTokenInstance.address,
+            liquidityPoolTokenAmount: 0,
+            mainTokenAmount,
+            secondaryTokenAmount,
+            positionOwner: zero,
+            mintPositionToken: true,
+        };
+        const result = await liquidityMiningInstance.stake(stake, { from: accounts[1] });
+        const { positionKey } = result.logs[0].args;
+        const position = await liquidityMiningInstance.getPosition.call(positionKey);
+        console.log(position);
+        const startingRewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
+        const { creationBlock, reward } = position;
+        const { startBlock, maximumLiquidity } = position.setup;
+        assert.equal(reward, (parseInt(mainTokenAmount) / maximumLiquidity) * (maximumLiquidity - ((creationBlock - startBlock + 1) * startingRewardPerBlock)));
     });
 })

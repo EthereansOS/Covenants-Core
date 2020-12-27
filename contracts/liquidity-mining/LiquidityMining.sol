@@ -15,6 +15,9 @@ contract LiquidityMining {
     // SafeMath library
     using SafeMath for uint256;
 
+    // new position event
+    event NewPosition(bytes32 positionKey);
+
     // farming setup struct
     struct FarmingSetup {
         address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
@@ -164,7 +167,7 @@ contract LiquidityMining {
     /** @dev function called by external users to open a new position. 
       * @param stakeData staking input data.
     */
-    function stake(StakeData memory stakeData) public {
+    function stake(StakeData memory stakeData) public  {
         require(stakeData.setupIndex < _farmingSetups.length, "Invalid setup index.");
         // retrieve the setup
         FarmingSetup storage chosenSetup = _farmingSetups[stakeData.setupIndex];
@@ -235,7 +238,7 @@ contract LiquidityMining {
             _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))] = Position(
                 { 
                     objectId: objectId, 
-                    uniqueOwner: objectId != 0 ? uniqueOwner : address(0), 
+                    uniqueOwner: objectId == 0 ? uniqueOwner : address(0), 
                     setup: chosenSetup, 
                     liquidityProviderData: liquidityProviderData,
                     liquidityPoolTokenAmount: poolTokenAmount,
@@ -250,6 +253,7 @@ contract LiquidityMining {
         } else {
             _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
+        emit NewPosition(objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)));
     }
 
     /** @dev this function allows a user to withdraw a partial reward.
@@ -257,7 +261,6 @@ contract LiquidityMining {
       * @param setupIndex index of the farming setup.
       * @param creationBlockNumber number of the block when the position was created.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
-     */
     function partialReward(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber, bool unwrapPair) public {
         // check if wallet is withdrawing using a position token 
         bool hasPositionItem = objectId != 0;
@@ -288,6 +291,7 @@ contract LiquidityMining {
             position.creationBlock = block.number;
         }
     }
+     */
 
     /** @dev this function allows a owner to unlock its position using its position token or not.
       * @param objectId owner position token object id.
@@ -323,10 +327,10 @@ contract LiquidityMining {
         require(setup.endBlock.sub(block.number) > 0, "Setup ended!");
         // get total reward still available (= 0 if rewardPerBlock = 0)
         require(setup.rewardPerBlock.mul(setup.endBlock.sub(block.number)) > 0, "No rewards!");
-        // get wallet relative liquidity (mainTokenAmount/maximumLiquidity)
-        uint256 relativeLiquidity = mainTokenAmount.div(setup.maximumLiquidity);
         // calculate relativeRewardPerBlock
-        relativeRewardPerBlock = relativeLiquidity.mul(setup.rewardPerBlock);
+        relativeRewardPerBlock = setup.rewardPerBlock.mul((mainTokenAmount.mul(1e18).div(setup.maximumLiquidity))).div(1e18);
+        // check if rewardPerBlock is greater than 0
+        require(relativeRewardPerBlock > 0, "relativeRewardPerBlock must be greater than 0.");
         // calculate reward by multiplying relative reward per block and the remaining blocks
         reward = relativeRewardPerBlock.mul(setup.endBlock.sub(block.number));
         // check if the reward is still available
@@ -368,7 +372,7 @@ contract LiquidityMining {
       * @return objectId new position token object id.
      */
     function _mintPosition(address uniqueOwner) private returns(uint256 objectId) {
-        (objectId,) = INativeV1(_positionTokenCollection).mint(1, "UNIFI PositionToken", "UPT", "", false);
+        (objectId,) = INativeV1(_positionTokenCollection).mint(1, "UNIFI PositionToken", "UPT", "google.com", false);
         INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, objectId, INativeV1(_positionTokenCollection).balanceOf(address(this), objectId), "");
     }
 
@@ -463,4 +467,7 @@ contract LiquidityMining {
         fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
     }
 
+    function getPosition(bytes32 key) public view returns(Position memory) {
+        return _positions[key];
+    }
 }
