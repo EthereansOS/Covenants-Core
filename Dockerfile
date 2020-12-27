@@ -8,4 +8,4 @@ WORKDIR /usr/local/ethaffairs
 
 RUN npm install
 
-RUN npm run test
+ENTRYPOINT npm run test

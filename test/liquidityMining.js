@@ -118,14 +118,14 @@ describe("LiquidityMining", () => {
     it("should set the farming setups", async() => {
         var startBlock = await web3.eth.getBlockNumber() + 1;
         var endBlock = startBlock + 9999;
-        var rewardPerBlock = 1500;
+        const rewardPerBlock = parseInt(web3.utils.toWei('0.001', 'ether'));
         var setups = [{
             ammPlugin: uniswapAMM.options.address,
             liquidityPoolTokenAddress : liquidityPool.options.address,
             startBlock,
             endBlock,
             rewardPerBlock,
-            maximumLiquidity: rewardPerBlock * (endBlock - startBlock),
+            maximumLiquidity: web3.utils.toWei('200', 'ether'), 
             totalSupply: 0,
             lastBlockUpdate: 0,
             mainTokenAddress: mainToken.options.address,
