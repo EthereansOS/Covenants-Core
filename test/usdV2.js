@@ -3,6 +3,7 @@ var utilities = require("../util/utilities");
 var context = require("../util/context.json");
 var compile = require("../util/compile");
 var blockchainConnection = require("../util/blockchainConnection");
+var dfo = require("../util/dfo");
 var ethers = require('ethers');
 var abi = new ethers.utils.AbiCoder();
 
@@ -69,6 +70,7 @@ describe("USDV2", () => {
     };
 
     it("Controller Creation", async() => {
+        //console.log(await dfo.createDFO("MyName", "MySymbol", 1000, 100, 10));
         var arguments = [
             utilities.voidEthereumAddress, ["15", "1000"],
             [accounts[0]],
