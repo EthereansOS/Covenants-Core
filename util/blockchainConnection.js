@@ -1,19 +1,22 @@
+var Web3 = require('web3');
+const memdown = require('memdown');
 module.exports = {
     init : global.blockchainConnection = global.blockchainConnection || new Promise(async function(ok, ko) {
         (require('dotenv')).config();
         var options = {
-            gasLimit : 7900000
+            gasLimit : 7900000,
+            db : memdown()
         };
         if(process.env.blockchain_connection_string) {
             options.fork = process.env.blockchain_connection_string;
-            options.gasLimit = parseInt((await new (require("web3"))(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 0.83);
+            options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 0.83);
         }
         global.gasLimit = options.gasLimit;
-        (Object.keys(options).length === 0 ? require("ganache-cli").server() : require("ganache-cli").server(options)).listen(process.env.ganache_port || 8545, async function(err, blockchain) {
+        require("ganache-cli").server(options).listen(process.env.ganache_port || 8545, async function(err, blockchain) {
             if(err) {
                 return ko(err);
             }
-            global.accounts = await (global.web3 = new (require("web3"))((global.blockchainProvider = blockchain)._provider, null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
+            global.accounts = await (global.web3 = new Web3((global.blockchainProvider = blockchain)._provider, null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
             return ok(global.web3);
         });
     }),

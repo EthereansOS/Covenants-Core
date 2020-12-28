@@ -22,6 +22,7 @@
     "dotenv": "^8.2.0",
     "ethers": "^5.0.24",
     "ganache-cli": "^6.12.1",
+    "memdown": "^5.1.0",
     "mocha": "^8.2.1",
     "solc-vm": "git+https://github.com/vasapower/solc-vm.git",
     "truffle-flattener-wrapper": "git+https://github.com/b-u-i-d-l/truffle-flattener-wrapper.git",
