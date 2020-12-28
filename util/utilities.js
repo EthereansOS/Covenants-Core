@@ -37,5 +37,6 @@ module.exports = {
                 return symbol[0];
             }
         }
-    }
+    },
+    voidEthereumAddress : "0x0000000000000000000000000000000000000000"
 }
