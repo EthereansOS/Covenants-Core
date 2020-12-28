@@ -160,7 +160,7 @@ contract USDExtensionController is ERC1155Receiver {
         uint256 totalSupply = INativeV1(_collection).totalSupply(_usdObjectId);
         uint256 effectiveAmount = 0;
         for(uint256 i = 0; i < _allowedAMMs.length; i++) {
-            for(uint256 j = 0; j < _allowedAMMs[i].liquidityProviders.length; j++) {
+            for(uint256 j = 0; j < _allowedAMMs[i].liquidityPools.length; j++) {
                 effectiveAmount += _normalizeAndSumAmounts(i, j, 0);
             }
         }
@@ -228,14 +228,14 @@ contract USDExtensionController is ERC1155Receiver {
     }
 
     function _burn(address from, uint256 value, bytes memory payload) private {
-        (uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount) = abi.decode(payload, (uint256, uint256, uint256));
-        uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityProviderPosition, liquidityProviderAmount);
+        (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount) = abi.decode(payload, (uint256, uint256, uint256));
+        uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, liquidityPoolAmount);
         require(value >= toBurn, "Insufficient Amount");
         if(value > toBurn) {
             INativeV1(_collection).safeTransferFrom(address(this), from, _usdObjectId, value - toBurn, "");
         }
         INativeV1(_collection).burn(_usdObjectId, toBurn);
-        _removeLiquidity(from, ammPosition, liquidityProviderPosition, liquidityProviderAmount);
+        _removeLiquidity(from, ammPosition, liquidityPoolPosition, liquidityPoolAmount);
     }
 
     function _rebalanceByDebt(address from, uint256 value) private {
@@ -289,13 +289,13 @@ contract USDExtensionController is ERC1155Receiver {
         }
     }
 
-    modifier _forAllowedAMMAndLiquidityProvider(uint256 ammIndex, uint256 liquidityProviderIndex) {
+    modifier _forAllowedAMMAndLiquidityPool(uint256 ammIndex, uint256 liquidityPoolIndex) {
         require(
             ammIndex >= 0 && ammIndex < _allowedAMMs.length,
             "Unknown AMM!"
         );
         require(
-            liquidityProviderIndex >= 0 && liquidityProviderIndex < _allowedAMMs[ammIndex].liquidityProviders.length,
+            liquidityPoolIndex >= 0 && liquidityPoolIndex < _allowedAMMs[ammIndex].liquidityPools.length,
             "Unknown Liquidity Provider!"
         );
         _;
@@ -313,9 +313,9 @@ contract USDExtensionController is ERC1155Receiver {
                 IERC20 token = IERC20(tokens[i] = wrapper.source(ids[i]));
                 newValues[i] = token.balanceOf(address(this));
             }
-            (uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount) = abi.decode(data, (uint256, uint256, uint256));
-            uint256 toMint = _addLiquidity(tokens, newValues, from, ammPosition, liquidityProviderPosition, liquidityProviderAmount, msg.sender);
-            USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityProviderPosition, toMint), from);
+            (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount) = abi.decode(data, (uint256, uint256, uint256));
+            uint256 toMint = _addLiquidity(tokens, newValues, from, ammPosition, liquidityPoolPosition, liquidityPoolAmount, msg.sender);
+            USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), from);
     }
 
     function _addLiquidity(
@@ -323,17 +323,17 @@ contract USDExtensionController is ERC1155Receiver {
         uint256[] memory amounts,
         address owner,
         uint256 ammPosition,
-        uint256 liquidityProviderPosition,
-        uint256 liquidityProviderAmount,
+        uint256 liquidityPoolPosition,
+        uint256 liquidityPoolAmount,
         address erc20WrapperForItemReconversion
     )
         private
-        _forAllowedAMMAndLiquidityProvider(ammPosition, liquidityProviderPosition)
+        _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
         returns(uint256 addedAmount)
     {
-        LiquidityProviderData memory data = LiquidityProviderData(
-            _allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition],
-            liquidityProviderAmount,
+        LiquidityPoolData memory data = LiquidityPoolData(
+            _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
+            liquidityPoolAmount,
             tokens,
             amounts,
             erc20WrapperForItemReconversion == address(0) ? owner : address(this),
@@ -385,38 +385,38 @@ contract USDExtensionController is ERC1155Receiver {
     function _removeLiquidity(
         address owner,
         uint256 ammPosition,
-        uint256 liquidityProviderPosition,
-        uint256 liquidityProviderAmount
+        uint256 liquidityPoolPosition,
+        uint256 liquidityPoolAmount
     )
         private
-        _forAllowedAMMAndLiquidityProvider(ammPosition, liquidityProviderPosition)
+        _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
     {
         address[] memory tokenAddresses = new address[](1);
-        tokenAddresses[0] = _allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition];
+        tokenAddresses[0] = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
         uint256[] memory amounts = new uint256[](1);
-        amounts[0] = liquidityProviderAmount;
+        amounts[0] = liquidityPoolAmount;
         address[] memory receivers = new address[](1);
         receivers[0] = address(this);
         USDExtension(_extension).send(tokenAddresses, amounts, receivers);
         IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-        LiquidityProviderData memory data = LiquidityProviderData(
-            _allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition],
-            liquidityProviderAmount,
-            amm.tokens(_allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition]),
+        LiquidityPoolData memory data = LiquidityPoolData(
+            _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
+            liquidityPoolAmount,
+            amm.tokens(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]),
             new uint256[](0),
             owner,
             address(this)
         );
-        _checkAllowance(_allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition], liquidityProviderAmount, _allowedAMMs[ammPosition].ammAddress);
+        _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
         amm.removeLiquidity(data);
     }
 
-    function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityProviderPosition, uint256 liquidityProviderAmount)
+    function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount)
         private
         view
         returns(uint256 amount) {
-            IERC20 liquidityProvider = IERC20(_allowedAMMs[ammPosition].liquidityProviders[liquidityProviderPosition]);
-            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byAmount(address(liquidityProvider), liquidityProviderAmount != 0 ? liquidityProviderAmount : liquidityProvider.balanceOf(_extension), DECIMALS);
+            IERC20 liquidityPool = IERC20(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]);
+            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension), DECIMALS);
             for(uint256 i = 0; i < amounts.length; i++) {
                 amount += amounts[i];
             }

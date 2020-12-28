@@ -1,9 +1,9 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
-struct LiquidityProviderData {
-    address liquidityProviderAddress;
-    uint256 liquidityProviderAmount;
+struct LiquidityPoolData {
+    address liquidityPoolAddress;
+    uint256 liquidityPoolAmount;
     address[] tokens;
     uint256[] amounts;
     address sender;
@@ -11,8 +11,8 @@ struct LiquidityProviderData {
 }
 
 struct LiquidityToSwap {
-    address liquidityProviderAddress;
-    uint256 liquidityProviderAmount;
+    address liquidityPoolAddress;
+    uint256 liquidityPoolAmount;
     bool enterInETH;
     bool exitInETH;
     address[] tokens;

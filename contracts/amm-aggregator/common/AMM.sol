@@ -12,45 +12,45 @@ abstract contract AMM is IAMM {
     receive() external virtual payable {
     }
 
-    function inPercentage(address liquidityProviderAddress, uint256 numerator, uint256 denominator) public override view returns (uint256, uint256[] memory) {
-        return this.inPercentage(liquidityProviderAddress, numerator, denominator, 0);
+    function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) public override view returns (uint256, uint256[] memory) {
+        return this.inPercentage(liquidityPoolAddress, numerator, denominator, 0);
     }
 
-    function byAmount(address liquidityProviderAddress, uint256 liquidityProviderAmount) public override view returns(uint256[] memory) {
-        return this.byAmount(liquidityProviderAddress, liquidityProviderAmount, 0);
+    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) public override view returns(uint256[] memory) {
+        return this.byAmount(liquidityPoolAddress, liquidityPoolAmount, 0);
     }
 
-    function inPercentage(address liquidityProviderAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public virtual override view returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
-        providerAmount = (IERC20(liquidityProviderAddress).totalSupply() * numerator) / denominator;
+    function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public virtual override view returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
+        providerAmount = (IERC20(liquidityPoolAddress).totalSupply() * numerator) / denominator;
 
-        address[] memory liquidityProviderTokens = this.tokens(liquidityProviderAddress);
+        address[] memory liquidityPoolTokens = this.tokens(liquidityPoolAddress);
 
-        tokenAmounts = new uint256[](liquidityProviderTokens.length);
+        tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeDecimals(liquidityProviderTokens[i], (IERC20(liquidityProviderTokens[i]).balanceOf(liquidityProviderAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = _normalizeDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
         }
     }
 
-    function byAmount(address liquidityProviderAddress, uint256 liquidityProviderAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
-        IERC20 pair = IERC20(liquidityProviderAddress);
+    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
+        IERC20 pair = IERC20(liquidityPoolAddress);
 
-        uint256 numerator = liquidityProviderAmount != 0 ? liquidityProviderAmount : pair.balanceOf(msg.sender);
+        uint256 numerator = liquidityPoolAmount != 0 ? liquidityPoolAmount : pair.balanceOf(msg.sender);
         uint256 denominator = pair.totalSupply();
 
-        address[] memory liquidityProviderTokens = this.tokens(liquidityProviderAddress);
+        address[] memory liquidityPoolTokens = this.tokens(liquidityPoolAddress);
 
-        tokenAmounts = new uint256[](liquidityProviderTokens.length);
+        tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeDecimals(liquidityProviderTokens[i], (IERC20(liquidityProviderTokens[i]).balanceOf(liquidityProviderAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = _normalizeDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
         }
     }
 
-    function _sender(LiquidityProviderData memory liquidityProviderData) internal virtual returns(address payable) {
-        return payable(liquidityProviderData.sender != address(0) ? liquidityProviderData.sender : msg.sender);
+    function _sender(LiquidityPoolData memory liquidityPoolData) internal virtual returns(address payable) {
+        return payable(liquidityPoolData.sender != address(0) ? liquidityPoolData.sender : msg.sender);
     }
 
-    function _receiver(LiquidityProviderData memory liquidityProviderData) internal virtual returns(address payable) {
-        return payable(liquidityProviderData.receiver != address(0) ? liquidityProviderData.receiver : msg.sender);
+    function _receiver(LiquidityPoolData memory liquidityPoolData) internal virtual returns(address payable) {
+        return payable(liquidityPoolData.receiver != address(0) ? liquidityPoolData.receiver : msg.sender);
     }
 
     function _sender(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
@@ -95,21 +95,21 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function _transferToMeAndCheckAllowance(LiquidityProviderData memory data, address operator, bool add) internal virtual {
+    function _transferToMeAndCheckAllowance(LiquidityPoolData memory data, address operator, bool add) internal virtual {
         if(!add) {
-            return _transferToMeAndCheckAllowance(data.liquidityProviderAddress, data.liquidityProviderAmount, operator);
+            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, operator);
         }
         _transferToMeAndCheckAllowance(data.tokens, data.amounts, operator);
     }
 
-    function _transferToMeAndCheckAllowance(LiquidityProviderData[] memory data, address operator, bool add) internal virtual returns (address[] memory tokens, uint256 length) {
+    function _transferToMeAndCheckAllowance(LiquidityPoolData[] memory data, address operator, bool add) internal virtual returns (address[] memory tokens, uint256 length) {
         tokens = new address[](200);
         for(uint256 i = 0; i < data.length; i++) {
             if(!add) {
-                if(_tokenValuesToTransfer[data[i].liquidityProviderAddress] == 0) {
-                    tokens[length++] = data[i].liquidityProviderAddress;
+                if(_tokenValuesToTransfer[data[i].liquidityPoolAddress] == 0) {
+                    tokens[length++] = data[i].liquidityPoolAddress;
                 }
-                _tokenValuesToTransfer[data[i].liquidityProviderAddress] += data[i].liquidityProviderAmount;
+                _tokenValuesToTransfer[data[i].liquidityPoolAddress] += data[i].liquidityPoolAmount;
                 continue;
             }
             address[] memory tokensInput = data[i].tokens;

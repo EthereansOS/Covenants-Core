@@ -30,13 +30,13 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         return ("UniswapV2AMM", 1);
     }
 
-    function addLiquidity(LiquidityProviderData memory data) public payable virtual override returns(uint256 amount) {
+    function addLiquidity(LiquidityPoolData memory data) public payable virtual override returns(uint256 amount) {
         _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, true);
         amount = _addLiquidityWork(data);
         _flushBack(_sender(data), data.tokens, data.tokens.length);
     }
 
-    function addLiquidityBatch(LiquidityProviderData[] memory data) public payable virtual override returns(uint256[] memory amounts) {
+    function addLiquidityBatch(LiquidityPoolData[] memory data) public payable virtual override returns(uint256[] memory amounts) {
         (address[] memory tokens, uint256 tokensLength) = _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, true);
         amounts = new uint256[](data.length);
         for(uint256 i = 0; i < data.length; i++) {
@@ -45,7 +45,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
-    function _addLiquidityWork(LiquidityProviderData memory data) internal virtual returns(uint256 amount) {
+    function _addLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256 amount) {
         require(data.receiver != address(0), "Receiver cannot be void address");
         if(data.tokens[0] != address(0) && data.tokens[1] != address(0)) {
             (,,amount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidity(
@@ -73,13 +73,13 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         }
     }
 
-    function removeLiquidity(LiquidityProviderData memory data) public virtual override returns(uint256[] memory amounts) {
+    function removeLiquidity(LiquidityPoolData memory data) public virtual override returns(uint256[] memory amounts) {
         _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, false);
         amounts = _removeLiquidityWork(data);
-        _flushBack(_sender(data), data.liquidityProviderAddress);
+        _flushBack(_sender(data), data.liquidityPoolAddress);
     }
 
-    function removeLiquidityBatch(LiquidityProviderData[] memory data) public virtual override returns(uint256[][] memory amounts) {
+    function removeLiquidityBatch(LiquidityPoolData[] memory data) public virtual override returns(uint256[][] memory amounts) {
         (address[] memory tokens, uint256 tokensLength) = _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, false);
         amounts = new uint256[][](data.length);
         for(uint256 i = 0; i < data.length; i++) {
@@ -88,17 +88,17 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
-    function _removeLiquidityWork(LiquidityProviderData memory data) internal virtual returns(uint256[] memory amounts) {
+    function _removeLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256[] memory amounts) {
         require(data.receiver != address(0), "Receiver cannot be void address");
-        address token0 = IUniswapV2Pair(data.liquidityProviderAddress).token0();
-        address token1 = IUniswapV2Pair(data.liquidityProviderAddress).token1();
+        address token0 = IUniswapV2Pair(data.liquidityPoolAddress).token0();
+        address token1 = IUniswapV2Pair(data.liquidityPoolAddress).token1();
         amounts = new uint256[](2);
         if(data.tokens[0] != address(0) && data.tokens[1] != address(0)) {
-            (uint256 amount0, uint256 amount1) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidity(token0, token1, data.liquidityProviderAmount, 1, 1, data.receiver, block.timestamp + 1000);
+            (uint256 amount0, uint256 amount1) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidity(token0, token1, data.liquidityPoolAmount, 1, 1, data.receiver, block.timestamp + 1000);
             amounts[0] = data.tokens[0] == token0 ? amount0 : amount1;
             amounts[1] = data.tokens[1] == token1 ? amount1 : amount0;
         } else {
-            (uint256 amount0, uint256 amountETH) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidityETH(token0 != _wethAddress ? token0 : token1, data.liquidityProviderAmount, 1, 1, data.receiver, block.timestamp + 1000);
+            (uint256 amount0, uint256 amountETH) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidityETH(token0 != _wethAddress ? token0 : token1, data.liquidityPoolAmount, 1, 1, data.receiver, block.timestamp + 1000);
             amounts[0] = data.tokens[0] == address(0) ? amountETH : amount0;
             amounts[1] = data.tokens[1] == address(0) ? amountETH : amount0;
         }
@@ -134,15 +134,15 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         }
     }
 
-    function tokens(address liquidityProviderAddress) public override view returns(address[] memory tkns) {
+    function tokens(address liquidityPoolAddress) public override view returns(address[] memory tkns) {
         tkns = new address[](2);
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityProviderAddress);
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
         tkns[0] = pair.token0();
         tkns[1] = pair.token1();
     }
 
-    function inPercentage(address liquidityProviderAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityProviderAddress);
+    function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
         providerAmount = (pair.totalSupply() * numerator) / denominator;
         (uint256 amount0, uint256 amount1, ) = pair.getReserves();
@@ -152,14 +152,14 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tokenAmounts[1] = (amount1 * numerator) / denominator;
 
         if(normalizeToDecimals != 0) {
-            tokenAmounts = _normalizeDecimals(tokens(liquidityProviderAddress), tokenAmounts, normalizeToDecimals);
+            tokenAmounts = _normalizeDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
         }
     }
 
-    function byAmount(address liquidityProviderAddress, uint256 liquidityProviderAmount, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns(uint256[] memory tokenAmounts) {
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityProviderAddress);
+    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns(uint256[] memory tokenAmounts) {
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
-        uint256 numerator = liquidityProviderAmount != 0 ? liquidityProviderAmount : pair.balanceOf(msg.sender);
+        uint256 numerator = liquidityPoolAmount != 0 ? liquidityPoolAmount : pair.balanceOf(msg.sender);
         uint256 denominator = pair.totalSupply();
 
         (uint256 amount0, uint256 amount1, ) = pair.getReserves();
@@ -169,7 +169,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tokenAmounts[1] = (amount1 * numerator) / denominator;
 
         if(normalizeToDecimals != 0) {
-            tokenAmounts = _normalizeDecimals(tokens(liquidityProviderAddress), tokenAmounts, normalizeToDecimals);
+            tokenAmounts = _normalizeDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
         }
     }
 }
