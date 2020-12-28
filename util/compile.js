@@ -1,4 +1,5 @@
 var path = require("path");
+var os = require('os'); 
 var fs = require("fs");
 var solidityManager = require('solc-vm/solc-manager');
 var solidityDownloader = require('solc-vm/solc-downloader');
@@ -21,7 +22,7 @@ function cleanOutput(text) {
         output[file][contract].abi = JSON.parse(data[1]);
     }
     return output;
-};
+}
 
 function findSolidityVersion() {
     var solidityVersion = process.env.npm_package_config_solidityVersion;
@@ -35,6 +36,14 @@ function findSolidityVersion() {
     return solidityVersion;
 }
 
+function findNodeModulesLocation() {
+    var location = path.resolve(__dirname, "node_modules");
+    while(!fs.existsSync(location)) {
+        location = path.resolve(path.dirname(location), "..", "node_modules");
+    }
+    return location.split("\\").join("/");
+}
+
 module.exports = async function compile(file, contractName) {
     var solidityVersion = findSolidityVersion();
     if (!solidityManager.hasBinaryVersion(solidityVersion)) {
@@ -42,10 +51,18 @@ module.exports = async function compile(file, contractName) {
     }
     var baseLocation = path.resolve(__dirname, "..", "contracts").split("\\").join("/");
     var fileLocation = (file + (file.indexOf(".sol") === -1 ? ".sol" : "")).split("\\").join("/");
-    var location = path.resolve(baseLocation, fileLocation).split("\\").join("/");
     contractName = contractName || fileLocation.substring(fileLocation.lastIndexOf("/") + 1).split(".sol").join("");
+
+    var location = path.resolve(baseLocation, fileLocation).split("\\").join("/");
+    var removeAtEnd = !fs.existsSync(location);
+    removeAtEnd && fs.writeFileSync(location = path.join(os.tmpdir(), `${contractName}_${new Date().getTime()}.sol`).split('\\').join('/'), file);
+
     return await new Promise(function(ok, ko) {
-        exec(`${solidityManager.getBinary(solidityVersion)} --optimize --allow-paths ${baseLocation},${path.resolve(__dirname, "..", "node_modules").split("\\").join("/")} --abi --bin ${location}`, (error, stdout, stderr) => {
+        exec(`${solidityManager.getBinary(solidityVersion)} --optimize --allow-paths ${baseLocation},${findNodeModulesLocation()} --abi --bin ${location}`, (error, stdout, stderr) => {
+            try {
+                removeAtEnd && fs.unlinkSync(location);
+            } catch(e) {
+            }
             if (error) {
                 return ko(error);
             }
