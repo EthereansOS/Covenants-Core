@@ -103,6 +103,5 @@ describe("USDV2", () => {
 
     it("Allowed AMMs", async () => {
         var allowed = await usdController.methods.allowedAMMs().call();
-        console.log(allowed);
     });
 });
