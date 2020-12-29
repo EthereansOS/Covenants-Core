@@ -97,9 +97,9 @@ abstract contract AMM is IAMM {
 
     function _transferToMeAndCheckAllowance(LiquidityPoolData memory data, address operator, bool add) internal virtual {
         if(!add) {
-            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, operator);
+            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, _sender(data), operator);
         }
-        _transferToMeAndCheckAllowance(data.tokens, data.amounts, operator);
+        _transferToMeAndCheckAllowance(data.tokens, data.amounts, _sender(data), operator);
     }
 
     function _transferToMeAndCheckAllowance(LiquidityPoolData[] memory data, address operator, bool add) internal virtual returns (address[] memory tokens, uint256 length) {
@@ -121,7 +121,7 @@ abstract contract AMM is IAMM {
                 _tokenValuesToTransfer[tokensInput[j]] += amounts[j];
             }
         }
-        _transferToMeCheckAllowanceAndClear(tokens, length, operator);
+        _transferToMeCheckAllowanceAndClear(tokens, length, _sender(data[0]), operator);
     }
 
     function _transferToMeAndCheckAllowance(LiquidityToSwap[] memory data, address operator) internal virtual returns (address[] memory tokens, uint256 length) {
@@ -132,34 +132,34 @@ abstract contract AMM is IAMM {
             }
             _tokenValuesToTransfer[data[i].tokens[0]] += data[i].amount;
         }
-        _transferToMeCheckAllowanceAndClear(tokens, length, operator);
+        _transferToMeCheckAllowanceAndClear(tokens, length, _sender(data[0]), operator);
     }
 
-    function _transferToMeCheckAllowanceAndClear(address[] memory tokens, uint256 length, address operator) internal virtual {
+    function _transferToMeCheckAllowanceAndClear(address[] memory tokens, uint256 length, address from, address operator) internal virtual {
         for(uint256 i = 0; i < length; i++) {
             if(_tokenValuesToTransfer[tokens[i]] > 0) {
-                _transferToMeAndCheckAllowance(tokens[i], _tokenValuesToTransfer[tokens[i]], operator);
+                _transferToMeAndCheckAllowance(tokens[i], _tokenValuesToTransfer[tokens[i]], from, operator);
             }
             delete _tokenValuesToTransfer[tokens[i]];
         }
     }
 
-    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator) internal virtual {
+    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address from, address operator) internal virtual {
         for(uint256 i = 0; i < tokens.length; i++) {
-            _transferToMeAndCheckAllowance(tokens[i], amounts[i], operator);
+            _transferToMeAndCheckAllowance(tokens[i], amounts[i], from, operator);
         }
     }
 
-    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
-        _transferToMe(tokenAddress, value);
+    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address from, address operator) internal virtual {
+        _transferToMe(tokenAddress, from, value);
         _checkAllowance(tokenAddress, value, operator);
     }
 
-    function _transferToMe(address tokenAddress, uint256 value) internal virtual {
+    function _transferToMe(address tokenAddress, address from, uint256 value) internal virtual {
         if(tokenAddress == address(0)) {
             return;
         }
-        _safeTransferFrom(tokenAddress, msg.sender, address(this), value);
+        _safeTransferFrom(tokenAddress, from, address(this), value);
     }
 
     function _checkAllowance(address tokenAddress, uint256 value, address operator) internal virtual {

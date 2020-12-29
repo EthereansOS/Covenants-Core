@@ -105,7 +105,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     }
 
     function swapLiquidity(LiquidityToSwap memory data) public payable virtual override {
-        _transferToMeAndCheckAllowance(data.tokens[0], data.amount, _uniswapV2RouterAddress);
+        _transferToMeAndCheckAllowance(data.tokens[0], data.amount, _sender(data), _uniswapV2RouterAddress);
         _swapLiquidityWork(data);
         _flushBack(_sender(data), data.tokens, data.tokens.length);
     }

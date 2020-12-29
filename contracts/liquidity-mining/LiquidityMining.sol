@@ -172,23 +172,17 @@ contract LiquidityMining {
         tokens[0] = chosenSetup.mainTokenAddress;
         tokens[1] = stakeData.secondaryTokenAddress;
         if (stakeData.mainTokenAmount > 0 && stakeData.secondaryTokenAmount > 0) {
-            // open position using token pair
-            _safeTransferFrom(chosenSetup.mainTokenAddress, msg.sender, address(this), stakeData.mainTokenAmount);
-            _safeTransferFrom(stakeData.secondaryTokenAddress, msg.sender, address(this), stakeData.secondaryTokenAmount);
-            // approve the transfer for the AMM
-            IERC20(chosenSetup.mainTokenAddress).approve(chosenSetup.ammPlugin, stakeData.mainTokenAmount);
-            IERC20(stakeData.secondaryTokenAddress).approve(chosenSetup.ammPlugin, stakeData.secondaryTokenAmount);
             // create amounts array
             uint256[] memory amounts = new uint256[](2);
             amounts[0] = stakeData.mainTokenAmount;
             amounts[1] = stakeData.secondaryTokenAmount;
             // create the liquidity provider data
             liquidityPoolData = LiquidityPoolData(
-                chosenSetup.liquidityPoolTokenAddress, 
-                stakeData.liquidityPoolTokenAmount, 
-                tokens, 
-                amounts, 
-                address(this), 
+                chosenSetup.liquidityPoolTokenAddress,
+                stakeData.liquidityPoolTokenAmount,
+                tokens,
+                amounts,
+                msg.sender,
                 address(this)
             );
             // retrieve the poolTokenAmount from the amm
@@ -197,8 +191,6 @@ contract LiquidityMining {
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
-            // approve the transfer for the AMM
-            IERC20(chosenSetup.liquidityPoolTokenAddress).approve(chosenSetup.ammPlugin, stakeData.liquidityPoolTokenAmount);
             // create the liquidity provider data for latter removal if requested
             liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress, 
@@ -416,19 +408,19 @@ contract LiquidityMining {
         // pay the fees!
         uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee.mul(1e18).div(100)).div(1e18);
         if (_exitFee > 0) {
-            IERC20(position.setup.liquidityPoolTokenAddress).transfer(_owner, fee);
+            _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
         }
         // check if the user wants to unwrap its pair or not
         if (unwrapPair) {
             // remove liquidity using AMM
+            position.liquidityPoolData.sender = address(this);
+            position.liquidityPoolData.receiver = position.uniqueOwner;
+            _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
             uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
             require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
-            // send the unwrapped pair tokens
-            _safeTransferFrom(position.liquidityPoolData.tokens[0], address(this), position.uniqueOwner, amounts[0]);
-            _safeTransferFrom(position.liquidityPoolData.tokens[1], address(this), position.uniqueOwner, amounts[1]);
         } else {
             // send back the liquidity pool token amount without the fee
-            IERC20(position.setup.liquidityPoolTokenAddress).transfer(position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
+            _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
         }
         // rebalance the setup if not free
         if (!_farmingSetups[setupIndex].free) {
@@ -463,6 +455,16 @@ contract LiquidityMining {
         setup.lastBlockUpdate = block.number;
         // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value 
         fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
+    }
+
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
+    }
+
+    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
     }
 
     /** @dev this function safely transfers the given ERC20 value from an address to another.
