@@ -188,11 +188,12 @@ contract LiquidityMining {
                 stakeData.liquidityPoolTokenAmount, 
                 tokens, 
                 amounts, 
-                msg.sender, 
+                address(this), 
                 address(this)
             );
             // retrieve the poolTokenAmount from the amm
             poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityProviderData);
+            liquidityProviderData.liquidityProviderAmount = poolTokenAmount;
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
@@ -204,7 +205,7 @@ contract LiquidityMining {
                 stakeData.liquidityPoolTokenAmount, 
                 tokens, 
                 new uint256[](0), 
-                msg.sender, 
+                address(this), 
                 address(this)
             );
         } else {
@@ -271,8 +272,9 @@ contract LiquidityMining {
             // check if reward is available
             require(position.reward > 0, "No reward!");
             // calculate the reward from the position creation block to the current block multiplied by the reward per block
-            uint256 reward = 75000000000000;
-            // uint256 reward = (block.number.sub(position.creationBlock)).mul(position.setup.rewardPerBlock);
+            uint256 reward = 750000000000;
+            // (block.number >= position.setup.endBlock) ? reward = position.reward : reward = (block.number.sub(position.creationBlock)).mul(position.setup.rewardPerBlock);
+            require(reward <= position.reward, "Reward is bigger than expected!");
             // remove the partial reward from the position total reward
             position.reward = position.reward.sub(reward);
             // withdraw the values using the helper
@@ -291,7 +293,6 @@ contract LiquidityMining {
       * @param creationBlockNumber number of the block when the position was created.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
-      /*
     function unlock(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber, bool unwrapPair) public {
         // check if wallet is withdrawing using a position token 
         bool hasPositionItem = objectId != 0;
@@ -305,7 +306,7 @@ contract LiquidityMining {
         require(!_positionRedeemed[positionKey], "Position already redeemed!");
         hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair) : _withdraw(positionKey, position, setupIndex, unwrapPair);
         _positionRedeemed[positionKey] = true;
-    }*/
+    }
     
     /** Private methods. */
 
@@ -415,7 +416,7 @@ contract LiquidityMining {
         // pay the fees!
         uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee.mul(1e18).div(100)).div(1e18);
         if (_exitFee > 0) {
-            _safeTransferFrom(position.setup.liquidityPoolTokenAddress, address(this), _owner, fee);
+            IERC20(position.setup.liquidityPoolTokenAddress).transfer(_owner, fee);
         }
         // check if the user wants to unwrap its pair or not
         if (unwrapPair) {
@@ -427,7 +428,7 @@ contract LiquidityMining {
             _safeTransferFrom(position.liquidityProviderData.tokens[1], address(this), position.uniqueOwner, amounts[1]);
         } else {
             // send back the liquidity pool token amount without the fee
-            _safeTransferFrom(position.setup.liquidityPoolTokenAddress, address(this), position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
+            IERC20(position.setup.liquidityPoolTokenAddress).transfer(position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
         }
         // rebalance the setup if not free
         if (!_farmingSetups[setupIndex].free) {
