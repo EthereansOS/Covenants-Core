@@ -16,8 +16,8 @@ abstract contract AMM is IAMM {
         return this.inPercentage(liquidityPoolAddress, numerator, denominator, 0);
     }
 
-    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) public override view returns(uint256[] memory) {
-        return this.byAmount(liquidityPoolAddress, liquidityPoolAmount, 0);
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) public override view returns(uint256[] memory) {
+        return this.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount, 0);
     }
 
     function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public virtual override view returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
@@ -27,11 +27,11 @@ abstract contract AMM is IAMM {
 
         tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = _normalizeTokenAmountToTheseDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
         }
     }
 
-    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
         IERC20 pair = IERC20(liquidityPoolAddress);
 
         uint256 numerator = liquidityPoolAmount != 0 ? liquidityPoolAmount : pair.balanceOf(msg.sender);
@@ -41,7 +41,7 @@ abstract contract AMM is IAMM {
 
         tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = _normalizeTokenAmountToTheseDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
         }
     }
 
@@ -194,18 +194,18 @@ abstract contract AMM is IAMM {
         return (tokenB, tokenA);
     }
 
-    function _normalizeDecimals(address[] memory tokenAddresses, uint256[] memory amounts, uint256 decimals) internal virtual view returns (uint256[] memory) {
+    function _normalizeTokenAmountsToTheseDecimals(address[] memory tokenAddresses, uint256[] memory amounts, uint256 decimals) internal virtual view returns (uint256[] memory) {
         if(decimals == 0) {
             return amounts;
         }
         uint256[] memory newAmounts = new uint256[] (amounts.length);
         for(uint256 i = 0; i < newAmounts.length; i++) {
-            newAmounts[i] = _normalizeDecimals(tokenAddresses[i], amounts[i], decimals);
+            newAmounts[i] = _normalizeTokenAmountToTheseDecimals(tokenAddresses[i], amounts[i], decimals);
         }
         return newAmounts;
     }
 
-    function _normalizeDecimals(address tokenAddress, uint256 amount, uint256 decimals) internal virtual view returns(uint256) {
+    function _normalizeTokenAmountToTheseDecimals(address tokenAddress, uint256 amount, uint256 decimals) internal virtual view returns(uint256) {
         if(decimals == 0) {
             return amount;
         }
@@ -218,5 +218,34 @@ abstract contract AMM is IAMM {
         }
 
         return amount * (remainingDecimals == 0 ? 1 : (10**remainingDecimals));
+    }
+
+    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount, uint256 normalizeTokenAmountsToTheseDecimals) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
+        address[] memory lpTokens = this.tokens(liquidityPoolAddress);
+        (uint256 lpTotalAmount, uint256[] memory lpTokenTotalAmounts) = this.amounts(liquidityPoolAddress);
+        uint256 i = 0;
+        for(i; i < lpTokens.length; i++) {
+            if(lpTokens[i] == tokenAddress) {
+                break;
+            }
+        }
+        uint256 denominator = lpTokenTotalAmounts[i];
+        tokenAmounts = new uint256[](lpTokenTotalAmounts.length);
+        liquidityPoolAmount = (lpTotalAmount * tokenAmount) / denominator;
+        for(uint256 z = 0; z < lpTokenTotalAmounts.length; z++) {
+            if(z == i) {
+                tokenAmounts[z] = tokenAmount;
+                continue;
+            }
+            tokenAmounts[z] = (lpTokenTotalAmounts[z] * tokenAmount) / denominator;
+        }
+
+        if(normalizeTokenAmountsToTheseDecimals != 0) {
+            tokenAmounts = _normalizeTokenAmountsToTheseDecimals(lpTokens, tokenAmounts, normalizeTokenAmountsToTheseDecimals);
+        }
+    }
+
+    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount) public override view returns(uint256, uint256[] memory) {
+        return byTokenAmount(liquidityPoolAddress, tokenAddress, tokenAmount, 0);
     }
 }

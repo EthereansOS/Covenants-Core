@@ -38,7 +38,7 @@ contract LiquidityMining {
         uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
-        LiquidityProviderData liquidityProviderData; // amm liquidity provider data.
+        LiquidityPoolData liquidityPoolData; // amm liquidity provider data.
         uint256 liquidityPoolTokenAmount; // amount of liquidity pool token provided.
         uint256 reward; // position reward.
         uint256 lockedRewardPerBlock; // position locked reward per block.
@@ -166,7 +166,7 @@ contract LiquidityMining {
         // retrieve the unique owner
         address uniqueOwner = (stakeData.positionOwner != address(0)) ? stakeData.positionOwner : msg.sender;
         uint256 poolTokenAmount = stakeData.liquidityPoolTokenAmount;
-        LiquidityProviderData memory liquidityProviderData;
+        LiquidityPoolData memory liquidityPoolData;
         // create tokens array
         address[] memory tokens = new address[](2);
         tokens[0] = chosenSetup.mainTokenAddress;
@@ -183,7 +183,7 @@ contract LiquidityMining {
             amounts[0] = stakeData.mainTokenAmount;
             amounts[1] = stakeData.secondaryTokenAmount;
             // create the liquidity provider data
-            liquidityProviderData = LiquidityProviderData(
+            liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress, 
                 stakeData.liquidityPoolTokenAmount, 
                 tokens, 
@@ -192,15 +192,15 @@ contract LiquidityMining {
                 address(this)
             );
             // retrieve the poolTokenAmount from the amm
-            poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityProviderData);
-            liquidityProviderData.liquidityProviderAmount = poolTokenAmount;
+            poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityPoolData);
+            liquidityPoolData.liquidityPoolAmount = poolTokenAmount;
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
             // approve the transfer for the AMM
             IERC20(chosenSetup.liquidityPoolTokenAddress).approve(chosenSetup.ammPlugin, stakeData.liquidityPoolTokenAmount);
             // create the liquidity provider data for latter removal if requested
-            liquidityProviderData = LiquidityProviderData(
+            liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress, 
                 stakeData.liquidityPoolTokenAmount, 
                 tokens, 
@@ -232,7 +232,7 @@ contract LiquidityMining {
                     objectId: objectId, 
                     uniqueOwner: objectId == 0 ? uniqueOwner : address(0), 
                     setup: chosenSetup, 
-                    liquidityProviderData: liquidityProviderData,
+                    liquidityPoolData: liquidityPoolData,
                     liquidityPoolTokenAmount: poolTokenAmount,
                     reward: reward, 
                     lockedRewardPerBlock: lockedRewardPerBlock,
@@ -421,11 +421,11 @@ contract LiquidityMining {
         // check if the user wants to unwrap its pair or not
         if (unwrapPair) {
             // remove liquidity using AMM
-            uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityProviderData);
+            uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
             require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
             // send the unwrapped pair tokens
-            _safeTransferFrom(position.liquidityProviderData.tokens[0], address(this), position.uniqueOwner, amounts[0]);
-            _safeTransferFrom(position.liquidityProviderData.tokens[1], address(this), position.uniqueOwner, amounts[1]);
+            _safeTransferFrom(position.liquidityPoolData.tokens[0], address(this), position.uniqueOwner, amounts[0]);
+            _safeTransferFrom(position.liquidityPoolData.tokens[1], address(this), position.uniqueOwner, amounts[1]);
         } else {
             // send back the liquidity pool token amount without the fee
             IERC20(position.setup.liquidityPoolTokenAddress).transfer(position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));

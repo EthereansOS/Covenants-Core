@@ -138,9 +138,20 @@ describe("USDV2", () => {
     });
 
     it("Send amount", async() => {
+        var maxAmount = 50;
+        var tokens = (await uniswapAMM.methods.tokens(allowedAMMS[0][1][1]).call()).map(it => new web3.eth.Contract(context.IERC20ABI, it));
+        var amount = web3.utils.toWei(maxAmount.toString(), utilities.fromDecimalsToCurrency(await tokens[0].methods.decimals().call()))
+        var amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[0], amount).call();
+        amounts = amounts[1];
+        var amountsPlain = [
+            parseFloat(web3.utils.fromWei(amounts[0], utilities.fromDecimalsToCurrency(await tokens[0].methods.decimals().call()))),
+            parseFloat(web3.utils.fromWei(amounts[1], utilities.fromDecimalsToCurrency(await tokens[1].methods.decimals().call())))
+        ];
+        console.log(amountsPlain);
+
         var objectIds = [
-            USDCItemObjectId,
-            DAIItemObjectId
+            tokens[0] === USDC.options.address ? USDCItemObjectId : DAIItemObjectId,
+            tokens[1] === USDC.options.address ? USDCItemObjectId : DAIItemObjectId
         ];
         var values = [
             web3.utils.toWei("50", 'ether'),
@@ -149,7 +160,9 @@ describe("USDV2", () => {
         var types = ['uint256', 'uint256', 'uint256'];
         var params = ['0', '1', '0'];
         var data = web3.eth.abi.encodeParameters(types, params);
+        var balanceStart = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         await ethItemERC20Wrapper.methods.safeBatchTransferFrom(accounts[0], usdController.options.address, objectIds, values, data).send(blockchainConnection.getSendingOptions());
+        var balanceEnd = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         assert(parseInt(balanceEnd) > parseInt(balanceStart));
     });
 });

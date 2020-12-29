@@ -416,7 +416,7 @@ contract USDExtensionController is ERC1155Receiver {
         view
         returns(uint256 amount) {
             IERC20 liquidityPool = IERC20(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]);
-            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension), DECIMALS);
+            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byLiquidityPoolAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension), DECIMALS);
             for(uint256 i = 0; i < amounts.length; i++) {
                 amount += amounts[i];
             }

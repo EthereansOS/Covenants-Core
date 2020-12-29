@@ -141,6 +141,14 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tkns[1] = pair.token1();
     }
 
+    function amounts(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
+        tokenAmounts = new uint256[](2);
+        liquidityPoolAmount = IUniswapV2Pair(liquidityPoolAddress).totalSupply();
+        (uint256 amountA, uint256 amountB,) = IUniswapV2Pair(liquidityPoolAddress).getReserves();
+        tokenAmounts[0] = amountA;
+        tokenAmounts[1] = amountB;
+    }
+
     function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
@@ -152,11 +160,11 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tokenAmounts[1] = (amount1 * numerator) / denominator;
 
         if(normalizeToDecimals != 0) {
-            tokenAmounts = _normalizeDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
+            tokenAmounts = _normalizeTokenAmountsToTheseDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
         }
     }
 
-    function byAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns(uint256[] memory tokenAmounts) {
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public view override(IAMM, AMM) returns(uint256[] memory tokenAmounts) {
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
         uint256 numerator = liquidityPoolAmount != 0 ? liquidityPoolAmount : pair.balanceOf(msg.sender);
@@ -169,7 +177,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tokenAmounts[1] = (amount1 * numerator) / denominator;
 
         if(normalizeToDecimals != 0) {
-            tokenAmounts = _normalizeDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
+            tokenAmounts = _normalizeTokenAmountsToTheseDecimals(tokens(liquidityPoolAddress), tokenAmounts, normalizeToDecimals);
         }
     }
 }
