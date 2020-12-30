@@ -69,13 +69,13 @@ contract LiquidityMining {
     // array containing all the currently available farming setups
     FarmingSetup[] public _farmingSetups;
     // mapping containing all the positions
-    mapping(bytes32 => Position) private _positions;
+    mapping(bytes32 => Position) public _positions;
     // mapping containing the reward per token per setup per block
-    mapping(uint256 => mapping(uint256 => uint256)) private _rewardPerTokenPerSetupPerBlock;
+    mapping(uint256 => mapping(uint256 => uint256)) public _rewardPerTokenPerSetupPerBlock;
     // mapping containing all the blocks where an update has been triggered
-    mapping(uint256 => uint256[]) private _setupUpdateBlocks;
+    mapping(uint256 => uint256[]) public _setupUpdateBlocks;
     // mapping containing whether a position has been redeemed or not
-    mapping(bytes32 => bool) private _positionRedeemed;
+    mapping(bytes32 => bool) public _positionRedeemed;
     // owner exit fee
     uint256 public _exitFee;
     // pinned setup index
@@ -244,9 +244,8 @@ contract LiquidityMining {
       * @param objectId owner position token object id.
       * @param setupIndex index of the farming setup.
       * @param creationBlockNumber number of the block when the position was created.
-      * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
      */
-    function partialReward(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber, bool unwrapPair) public {
+    function partialReward(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber) public {
         // check if wallet is withdrawing using a position token 
         bool hasPositionItem = objectId != 0;
         // create position key
@@ -264,16 +263,15 @@ contract LiquidityMining {
             // check if reward is available
             require(position.reward > 0, "No reward!");
             // calculate the reward from the position creation block to the current block multiplied by the reward per block
-            uint256 reward = 750000000000;
-            // (block.number >= position.setup.endBlock) ? reward = position.reward : reward = (block.number.sub(position.creationBlock)).mul(position.setup.rewardPerBlock);
+            uint256 reward = (block.number >= position.setup.endBlock) ? position.reward : (block.number.sub(position.creationBlock)).mul(position.lockedRewardPerBlock);
             require(reward <= position.reward, "Reward is bigger than expected!");
             // remove the partial reward from the position total reward
             position.reward = position.reward.sub(reward);
             // withdraw the values using the helper
-            _withdrawHelper(position, setupIndex, unwrapPair, reward);
+            _withdrawHelper(positionKey, position, setupIndex, false, reward, true);
         } else {
             // withdraw the values
-            _withdrawHelper(position, setupIndex, unwrapPair, _calculateFreeFarmingSetupReward(setupIndex, positionKey));
+            _withdrawHelper(positionKey, position, setupIndex, false, _calculateFreeFarmingSetupReward(setupIndex, positionKey), true);
             // update the position creation block to exclude all the rewarded blocks
             position.creationBlock = block.number;
         }
@@ -294,9 +292,9 @@ contract LiquidityMining {
         Position memory position = _positions[positionKey];
         // check if position is valid
         require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
-        require(!position.setup.free && position.setup.startBlock <= block.number && position.setup.endBlock <= block.number, "Not withdrawable yet!");
+        require(position.setup.free || position.setup.endBlock <= block.number, "Invalid unlock!");
         require(!_positionRedeemed[positionKey], "Position already redeemed!");
-        hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair) : _withdraw(positionKey, position, setupIndex, unwrapPair);
+        hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair, false) : _withdraw(positionKey, position, setupIndex, unwrapPair, false);
         _positionRedeemed[positionKey] = true;
     }
     
@@ -335,6 +333,7 @@ contract LiquidityMining {
                 reward += _rewardPerTokenPerSetupPerBlock[setupIndex][_setupUpdateBlocks[setupIndex][i]].div(1e18).mul(position.liquidityPoolTokenAmount);
             }
         }
+        require(reward > 0, "No reward!");
     }
 
     /** @dev returns true if the input token is in the tokens array, hence is an accepted one; false otherwise.
@@ -367,13 +366,14 @@ contract LiquidityMining {
       * @param position staking position.
       * @param setupIndex index of the farming setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
+      * @param isPartial if it's a partial withdraw or not.
       */
-    function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair) private {
+    function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
         require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // burn the position token
         INativeV1(_positionTokenCollection).burn(position.objectId, 1);
         // withdraw the position
-        _withdraw(positionKey, position, setupIndex, unwrapPair);
+        _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
     }
 
     /** @dev allows the wallet to withdraw its position.
@@ -381,21 +381,25 @@ contract LiquidityMining {
       * @param position staking position.
       * @param setupIndex index of the farming setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
+      * @param isPartial if it's a partial withdraw or not.
       */
-    function _withdraw(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair) private {
-        _withdrawHelper(position, setupIndex, unwrapPair, position.setup.free ? _calculateFreeFarmingSetupReward(setupIndex, positionKey) : position.reward);
+    function _withdraw(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
+        _withdrawHelper(positionKey, position, setupIndex, unwrapPair, position.reward, isPartial);
     }
 
     /** @dev withdraw helper method.
+      * @param positionKey staking position key.
       * @param position staking position.
       * @param setupIndex index of the farming setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       * @param reward amount to withdraw.
+      * @param isPartial if it's a partial withdraw or not.
      */
-    function _withdrawHelper(Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward) private {        
+    function _withdrawHelper(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {        
         // rebalance setup, if free
         if (_farmingSetups[setupIndex].free) {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
+            reward = (reward == 0) ? _calculateFreeFarmingSetupReward(setupIndex, positionKey) : reward;
         }
         // transfer the reward
         if (reward > 0) {
@@ -405,26 +409,28 @@ contract LiquidityMining {
                 _safeTransferFrom(_rewardTokenAddress, _owner, position.uniqueOwner, reward);
             }
         }
-        // pay the fees!
-        uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee.mul(1e18).div(100)).div(1e18);
-        if (_exitFee > 0) {
-            _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
-        }
-        // check if the user wants to unwrap its pair or not
-        if (unwrapPair) {
-            // remove liquidity using AMM
-            position.liquidityPoolData.sender = address(this);
-            position.liquidityPoolData.receiver = position.uniqueOwner;
-            _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
-            uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
-            require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
-        } else {
-            // send back the liquidity pool token amount without the fee
-            _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
-        }
-        // rebalance the setup if not free
-        if (!_farmingSetups[setupIndex].free) {
-            _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+        if (!isPartial) {
+            // pay the fees!
+            uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee.mul(1e18).div(100)).div(1e18);
+            if (_exitFee > 0) {
+                _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
+            }
+            // check if the user wants to unwrap its pair or not
+            if (unwrapPair) {
+                // remove liquidity using AMM
+                position.liquidityPoolData.sender = address(this);
+                position.liquidityPoolData.receiver = position.uniqueOwner;
+                _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
+                uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
+                require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
+            } else {
+                // send back the liquidity pool token amount without the fee
+                _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
+            }
+            // rebalance the setup if not free
+            if (!_farmingSetups[setupIndex].free) {
+                _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+            }
         }
     }
 
@@ -435,7 +441,7 @@ contract LiquidityMining {
     function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
         FarmingSetup storage setup = _farmingSetups[_pinnedSetupIndex];
         fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
-        _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+        _rebalanceRewardPerToken(_pinnedSetupIndex, 0, fromExit);
     }
 
     /** @dev function used to rebalance the reward per token in a free farming setup.
@@ -480,5 +486,9 @@ contract LiquidityMining {
 
     function getPosition(bytes32 key) public view returns(Position memory) {
         return _positions[key];
+    }
+
+    function getRewardPerToken(uint256 setupIndex, uint256 blockNumber) public view returns(uint256) {
+        return _rewardPerTokenPerSetupPerBlock[setupIndex][blockNumber];
     }
 }

@@ -26,6 +26,22 @@ var fromBob;
 var fromCharlie;
 var fromDonald;
 
+var endBlockLongTerm1;
+var endBlockLongTerm2;
+
+var aliceCreationBlock;
+var bobCreationBlock;
+var charlieCreationBlock;
+var donaldCreationBlock;
+
+var aliceEndBlock;
+var bobEndBlock;
+var charlieEndBlock;
+var donaldEndBlock;
+
+var aliceReward;
+var bobReward;
+
 describe("LiquidityMining", () => {
 
     before(async () => {
@@ -54,7 +70,7 @@ describe("LiquidityMining", () => {
 
         await buyForETH(mainToken, 5);
         await buyForETH(secondaryToken, 5);
-        await buyForETH(rewardToken, 50);
+        await buyForETH(rewardToken, 70);
         await buyForETH(mainToken, 5, fromAlice.from);
         await buyForETH(secondaryToken, 5, fromAlice.from);
         await buyForETH(mainToken, 5, fromBob.from);
@@ -107,7 +123,7 @@ describe("LiquidityMining", () => {
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
         assert.notStrictEqual(liquidityMiningContract.options.address, zero);
 
-        rewardToken.methods.approve(liquidityMiningContractAddress, await rewardToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+        await rewardToken.methods.approve(liquidityMiningContractAddress, await rewardToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
     });
     it("Previously created LiquidityMining Contract cannot be initialized more than a time", async() => {
         try {
@@ -144,8 +160,8 @@ describe("LiquidityMining", () => {
         var currentBlock = await web3.eth.getBlockNumber();
         var startBlockLongTerm1 = currentBlock + 1;
         var startBlockLongTerm2 = currentBlock + 6;
-        var endBlockLongTerm1 = startBlockLongTerm1 + 29;
-        var endBlockLongTerm2 = startBlockLongTerm2 + 49;
+        endBlockLongTerm1 = startBlockLongTerm1 + 29;
+        endBlockLongTerm2 = startBlockLongTerm2 + 44;
         const rewardPerBlockLongTerm1 = web3.utils.toWei('0.003', 'ether');
         const rewardPerBlockLongTerm2 = web3.utils.toWei('0.007', 'ether');
         const rewardPerBlockFree = web3.utils.toWei('0.025', 'ether');
@@ -213,10 +229,6 @@ describe("LiquidityMining", () => {
             assert(error, "Only the owner can set the farming setups.");
         }
     });
-    let aliceCreationBlock;
-    let bobCreationBlock;
-    let charlieCreationBlock;
-    let donaldCreationBlock;
     it("alice should set a new staking position", async() => {
         var setupIndex = 1;
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
@@ -237,6 +249,11 @@ describe("LiquidityMining", () => {
         const { positionKey } = result.events.NewPosition.returnValues;
         const position = await liquidityMiningContract.methods.getPosition(positionKey).call();
         aliceCreationBlock = position.creationBlock;
+        console.log(`alice creation block: ${aliceCreationBlock}`);
+        aliceReward = position.reward;
+        console.log(`alice creation reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, aliceCreationBlock).call()}`);
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`alice creation free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
     });
     it("bob should set a new staking position", async() => {
@@ -259,6 +276,11 @@ describe("LiquidityMining", () => {
         const { positionKey } = result.events.NewPosition.returnValues;
         const position = await liquidityMiningContract.methods.getPosition(positionKey).call();
         bobCreationBlock = position.creationBlock;
+        console.log(`bob creation block: ${bobCreationBlock}`);
+        bobReward = position.reward;
+        console.log(`bob creation reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, bobCreationBlock).call()}`);
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`bob creation free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
     });
     it("charlie should set a new staking position", async() => {
@@ -280,7 +302,34 @@ describe("LiquidityMining", () => {
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromCharlie));
         const { positionKey } = result.events.NewPosition.returnValues;
         const position = await liquidityMiningContract.methods.getPosition(positionKey).call();
-        // console.log(position);
+        charlieCreationBlock = position.creationBlock;
+        console.log(`charlie creation block: ${charlieCreationBlock}`);
+        console.log(`charlie liquidity pool token amount: ${position.liquidityPoolData.liquidityPoolAmount}`);
+        console.log(`charlie creation reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, charlieCreationBlock).call()}`);
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`alice creation free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
+        assert.notStrictEqual(result, null);
+    });
+    it("should allow alice to partial reward", async () => {
+        var res = await rewardToken.methods.balanceOf(fromAlice.from).call(blockchainConnection.getSendingOptions(fromAlice));
+        var result = await liquidityMiningContract.methods.partialReward(0, 1, aliceCreationBlock).send(blockchainConnection.getSendingOptions(fromAlice));
+        console.log(`alice partial reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, result.blockNumber).call()}`);
+        res = await rewardToken.methods.balanceOf(fromAlice.from).call(blockchainConnection.getSendingOptions(fromAlice));
+        assert.notStrictEqual(result, null);
+    });
+    it("should allow alice to unlock without unwrapping the pair", async () => {
+        var currentBlock = await web3.eth.getBlockNumber();
+        var diff = endBlockLongTerm1 - currentBlock;
+        await blockchainConnection.fastForward(diff);
+        aliceEndBlock = await web3.eth.getBlockNumber() + 1;
+        console.log(`alice end block: ${aliceEndBlock}`)
+        var res = await rewardToken.methods.balanceOf(fromAlice.from).call(blockchainConnection.getSendingOptions(fromAlice));
+        var result = await liquidityMiningContract.methods.unlock(0, 1, aliceCreationBlock, false).send(blockchainConnection.getSendingOptions(fromAlice));
+        console.log(`alice end reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, result.blockNumber).call()}`);
+        res = await rewardToken.methods.balanceOf(fromAlice.from).call(blockchainConnection.getSendingOptions(fromAlice));
+        freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`alice end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
+        assert.strictEqual(aliceReward, res);
         assert.notStrictEqual(result, null);
     });
     it("donald should set a new staking position", async() => {
@@ -288,7 +337,7 @@ describe("LiquidityMining", () => {
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
         await mainToken.methods.approve(ammPluginAddress, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromDonald));
         await secondaryToken.methods.approve(ammPluginAddress, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromDonald));
-        var mainTokenAmount = web3.utils.toWei('0.017', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
+        var mainTokenAmount = web3.utils.toWei('0.002', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
         var secondaryTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
         var stake = {
             setupIndex,
@@ -302,21 +351,54 @@ describe("LiquidityMining", () => {
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromDonald));
         const { positionKey } = result.events.NewPosition.returnValues;
         const position = await liquidityMiningContract.methods.getPosition(positionKey).call();
-        // console.log(position);
+        donaldCreationBlock = position.creationBlock;
+        console.log(`donald creation block: ${donaldCreationBlock}`);
+        console.log(`donald creation reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, donaldCreationBlock).call()}`);
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`donald creation free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
     });
-    it("should allow alice to partial reward without unwrapping the pair", async () => {
-        var res = await liquidityPool.methods.balanceOf(liquidityMiningContract.options.address).call();
-        console.log(`contract liquidity pool token balance is ${res}`);
-        var result = await liquidityMiningContract.methods.partialReward(0, 1, aliceCreationBlock, false).send(blockchainConnection.getSendingOptions(fromAlice));
-        console.log(result);
+    it("should not allow charlie to unlock bob position", async () => {
+        try {
+            await liquidityMiningContract.methods.unlock(0, 2, bobCreationBlock, true).send(blockchainConnection.getSendingOptions(fromCharlie));
+        } catch (e) {
+            assert.notStrictEqual((e.message || e).toLowerCase().indexOf("invalid position"), -1);
+        }
+    });
+    it("should allow bob to unlock unwrapping the pair", async () => {
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        // console.log(freeSetup);
+        var currentBlock = await web3.eth.getBlockNumber();
+        var diff = endBlockLongTerm2 - currentBlock;
+        await blockchainConnection.fastForward(diff);
+        bobEndBlock = await web3.eth.getBlockNumber() + 1;
+        console.log(`bob end block: ${bobEndBlock}`)
+        var res = await rewardToken.methods.balanceOf(fromBob.from).call(blockchainConnection.getSendingOptions(fromBob));
+        var result = await liquidityMiningContract.methods.unlock(0, 2, bobCreationBlock, true).send(blockchainConnection.getSendingOptions(fromBob));
+        console.log(`bob end reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, result.blockNumber).call()}`);
+        res = await rewardToken.methods.balanceOf(fromBob.from).call(blockchainConnection.getSendingOptions(fromBob));
+        freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`bob end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
+        assert.strictEqual(bobReward, res);
         assert.notStrictEqual(result, null);
     });
-    it("should allow bob to partial reward unwrapping the pair", async () => {
-        var res = await liquidityPool.methods.balanceOf(liquidityMiningContract.options.address).call();
-        console.log(`contract liquidity pool token balance is ${res}`);
-        var result = await liquidityMiningContract.methods.partialReward(0, 2, bobCreationBlock, true).send(blockchainConnection.getSendingOptions(fromBob));
-        console.log(result);
+    it("should allow charlie to unlock its position without unwrapping the pair", async () => {
+        var currentBlock = await web3.eth.getBlockNumber();
+        charlieEndBlock = endBlockLongTerm2 + 150;
+        console.log(`charlie end block: ${charlieEndBlock + 1}`);
+        var diff = charlieEndBlock - currentBlock;
+        if (diff > 0) {
+            await blockchainConnection.fastForward(diff);
+        };
+        charlieEndBlock += 1;
+        var res = await rewardToken.methods.balanceOf(fromCharlie.from).call(blockchainConnection.getSendingOptions(fromCharlie));
+        console.log(`charlie reward balance: ${res}`);
+        var result = await liquidityMiningContract.methods.unlock(0, 0, charlieCreationBlock, false).send(blockchainConnection.getSendingOptions(fromCharlie));
+        res = await rewardToken.methods.balanceOf(fromCharlie.from).call(blockchainConnection.getSendingOptions(fromCharlie));
+        console.log(`charlie updated reward balance: ${res}`);
+        console.log(`charlie end reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, result.blockNumber).call()}`);
+        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
+        console.log(`charlie end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
     });
 })
