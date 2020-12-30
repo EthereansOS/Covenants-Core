@@ -44,7 +44,7 @@ contract LiquidityMining {
         uint256 lockedRewardPerBlock; // position locked reward per block.
         uint256 creationBlock; // block when this position was created.
     }
-    
+
     // stake data struct
     struct StakeData {
         uint256 setupIndex; // index of the chosen setup.
@@ -155,7 +155,7 @@ contract LiquidityMining {
 
     /** Public methods. */
 
-    /** @dev function called by external users to open a new position. 
+    /** @dev function called by external users to open a new position.
       * @param stakeData staking input data.
     */
     function stake(StakeData memory stakeData) public  {
@@ -193,11 +193,11 @@ contract LiquidityMining {
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
             // create the liquidity provider data for latter removal if requested
             liquidityPoolData = LiquidityPoolData(
-                chosenSetup.liquidityPoolTokenAddress, 
-                stakeData.liquidityPoolTokenAmount, 
-                tokens, 
-                new uint256[](0), 
-                address(this), 
+                chosenSetup.liquidityPoolTokenAddress,
+                stakeData.liquidityPoolTokenAmount,
+                tokens,
+                new uint256[](0),
+                address(this),
                 address(this)
             );
         } else {
@@ -220,13 +220,13 @@ contract LiquidityMining {
         if (stakeData.mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
             // creating a new position
             _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))] = Position(
-                { 
-                    objectId: objectId, 
-                    uniqueOwner: objectId == 0 ? uniqueOwner : address(0), 
-                    setup: chosenSetup, 
+                {
+                    objectId: objectId,
+                    uniqueOwner: objectId == 0 ? uniqueOwner : address(0),
+                    setup: chosenSetup,
                     liquidityPoolData: liquidityPoolData,
                     liquidityPoolTokenAmount: poolTokenAmount,
-                    reward: reward, 
+                    reward: reward,
                     lockedRewardPerBlock: lockedRewardPerBlock,
                     creationBlock: block.number
                 }
@@ -246,7 +246,7 @@ contract LiquidityMining {
       * @param creationBlockNumber number of the block when the position was created.
      */
     function partialReward(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber) public {
-        // check if wallet is withdrawing using a position token 
+        // check if wallet is withdrawing using a position token
         bool hasPositionItem = objectId != 0;
         // create position key
         bytes32 positionKey = hasPositionItem ? keccak256(abi.encode(msg.sender, objectId, creationBlockNumber)) : keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
@@ -284,7 +284,7 @@ contract LiquidityMining {
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
     function unlock(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber, bool unwrapPair) public {
-        // check if wallet is withdrawing using a position token 
+        // check if wallet is withdrawing using a position token
         bool hasPositionItem = objectId != 0;
         // create position key
         bytes32 positionKey = hasPositionItem ? keccak256(abi.encode(msg.sender, objectId, creationBlockNumber)) : keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
@@ -297,7 +297,7 @@ contract LiquidityMining {
         hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair, false) : _withdraw(positionKey, position, setupIndex, unwrapPair, false);
         _positionRedeemed[positionKey] = true;
     }
-    
+
     /** Private methods. */
 
     /** @dev function used to calculate the reward in a locked farming setup.
@@ -395,7 +395,7 @@ contract LiquidityMining {
       * @param reward amount to withdraw.
       * @param isPartial if it's a partial withdraw or not.
      */
-    function _withdrawHelper(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {        
+    function _withdrawHelper(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {
         // rebalance setup, if free
         if (_farmingSetups[setupIndex].free) {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
@@ -459,7 +459,7 @@ contract LiquidityMining {
         }
         // update the last block update variable
         setup.lastBlockUpdate = block.number;
-        // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value 
+        // update total supply in the setup AFTER the reward calculation - to let previous position holders to calculate the correct value
         fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
     }
 

@@ -2,7 +2,7 @@
 pragma solidity ^0.7.0;
 
 contract LiquidityMiningFactory {
-    
+
     // liquidity mining contract implementation address
     address public liquidityMiningImplementationAddress;
     // factory owner address (needed?)

@@ -5,20 +5,21 @@ module.exports = {
         (require('dotenv')).config();
         var options = {
             gasLimit : 7900000,
-            db : memdown()
+            db : memdown(),
+            total_accounts : 1000,
+            default_balance_ether : 999999999999
         };
         if(process.env.blockchain_connection_string) {
             options.fork = process.env.blockchain_connection_string;
             options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 0.83);
         }
         global.gasLimit = options.gasLimit;
-        require("ganache-cli").server(options).listen(process.env.ganache_port || 8545, async function(err, blockchain) {
-            if(err) {
-                return ko(err);
-            }
-            global.accounts = await (global.web3 = new Web3((global.blockchainProvider = blockchain)._provider, null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
+        try {
+            global.accounts = await (global.web3 = new Web3(global.blockchainProvider = require("ganache-cli").provider(options), null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
             return ok(global.web3);
-        });
+        } catch(e) {
+            return ko(e);
+        }
     }),
     getSendingOptions(edit) {
         return {

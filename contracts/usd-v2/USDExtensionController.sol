@@ -268,7 +268,7 @@ contract USDExtensionController is ERC1155Receiver {
     function rebalanceByCredit() public {
         require(
             block.number >=
-            _lastRedeemBlock + 
+            _lastRedeemBlock +
             IStateHolder(
                 IMVDProxy(IDoubleProxy(_doubleProxy).proxy())
                     .getStateHolderAddress()

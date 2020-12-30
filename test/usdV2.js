@@ -67,13 +67,13 @@ describe("USDV2", () => {
             wethToken.options.address,
             token.options.address
         ];
-        var value = web3.utils.toWei(valuePlain.toString(), 'ether');
+        var value = utilities.toDecimals(valuePlain.toString(), '18');
         await uniswapV2Router.methods.swapExactETHForTokens("1", path, accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({ value }));
     }
 
     async function wrapInItemAndReturnObjectId(token, valuePlain) {
         await token.methods.approve(ethItemERC20Wrapper.options.address, await token.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
-        var value = web3.utils.toWei(valuePlain.toString(), utilities.fromDecimalsToCurrency(await token.methods.decimals().call()));
+        var value = utilities.toDecimals(valuePlain.toString(), await token.methods.decimals().call());
         await ethItemERC20Wrapper.methods["mint(address,uint256)"](token.options.address, value).send(blockchainConnection.getSendingOptions());
         return await ethItemERC20Wrapper.methods.object(token.options.address).call();
     }
@@ -96,7 +96,7 @@ describe("USDV2", () => {
 
     it("Controller Creation", async() => {
         var arguments = [
-            dfo.doubleProxyAddress, 
+            dfo.doubleProxyAddress,
             ["15", "1000"],
             [accounts[0]],
             await encodeAMMV2Params()
@@ -137,32 +137,84 @@ describe("USDV2", () => {
         assert(JSON.stringify(allowed) === JSON.stringify(allowedAMMS));
     });
 
-    it("Send amount", async() => {
+    it("Retrieve a uSD amount not greather than 100. Difference will be sent back", async() => {
+        var floatPrecision = 5;
+
         var maxAmount = 50;
         var tokens = (await uniswapAMM.methods.tokens(allowedAMMS[0][1][1]).call()).map(it => new web3.eth.Contract(context.IERC20ABI, it));
-        var amount = web3.utils.toWei(maxAmount.toString(), utilities.fromDecimalsToCurrency(await tokens[0].methods.decimals().call()))
-        var amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[0], amount).call();
+        var amount = utilities.toDecimals(maxAmount.toString(), await tokens[0].methods.decimals().call())
+        var amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[0].options.address, amount).call();
         amounts = amounts[1];
         var amountsPlain = [
-            parseFloat(web3.utils.fromWei(amounts[0], utilities.fromDecimalsToCurrency(await tokens[0].methods.decimals().call()))),
-            parseFloat(web3.utils.fromWei(amounts[1], utilities.fromDecimalsToCurrency(await tokens[1].methods.decimals().call())))
+            parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
+            parseFloat(utilities.fromDecimals(amounts[1], await tokens[1].methods.decimals().call(), true))
         ];
-        console.log(amountsPlain);
+
+        var exactAmountIndex = amountsPlain.indexOf(maxAmount);
+        var otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
+
+        if(amountsPlain[otherAmountIndex] > maxAmount) {
+            exactAmountIndex = otherAmountIndex;
+            otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
+            amount = utilities.toDecimals(maxAmount.toString(), await tokens[exactAmountIndex].methods.decimals().call())
+            amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[exactAmountIndex].options.address, amount).call();
+            amounts = amounts[1];
+            amountsPlain = [
+                parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
+                parseFloat(utilities.fromDecimals(amounts[1], await tokens[1].methods.decimals().call(), true))
+            ];
+        }
 
         var objectIds = [
-            tokens[0] === USDC.options.address ? USDCItemObjectId : DAIItemObjectId,
-            tokens[1] === USDC.options.address ? USDCItemObjectId : DAIItemObjectId
+            tokens[0].options.address === USDC.options.address ? USDCItemObjectId : DAIItemObjectId,
+            tokens[1].options.address === USDC.options.address ? USDCItemObjectId : DAIItemObjectId
         ];
+
+        var exactBalanceOfBefore = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[exactAmountIndex]).call();
+        exactBalanceOfBefore = utilities.fromDecimals(exactBalanceOfBefore, 18, true);
+        exactBalanceOfBefore = parseFloat(exactBalanceOfBefore);
+
+        var exactBalanceOfExpected = exactBalanceOfBefore - amountsPlain[exactAmountIndex];
+        exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected, floatPrecision);
+
+        var otherBalanceOfBefore = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[otherAmountIndex]).call();
+        otherBalanceOfBefore = utilities.fromDecimals(otherBalanceOfBefore, 18, true);
+        otherBalanceOfBefore = parseFloat(otherBalanceOfBefore);
+
+        var otherBalanceOfExpected = otherBalanceOfBefore - amountsPlain[otherAmountIndex];
+        otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected, floatPrecision);
+
         var values = [
-            web3.utils.toWei("50", 'ether'),
-            web3.utils.toWei("50", 'ether')
+            utilities.toDecimals("50", '18'),
+            utilities.toDecimals("50", '18')
         ];
         var types = ['uint256', 'uint256', 'uint256'];
         var params = ['0', '1', '0'];
         var data = web3.eth.abi.encodeParameters(types, params);
-        var balanceStart = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
+
+        var expectedUsdBalance = utilities.formatMoney(usdBalanceBefore + amountsPlain[0] + amountsPlain[1], floatPrecision);
+
         await ethItemERC20Wrapper.methods.safeBatchTransferFrom(accounts[0], usdController.options.address, objectIds, values, data).send(blockchainConnection.getSendingOptions());
-        var balanceEnd = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
-        assert(parseInt(balanceEnd) > parseInt(balanceStart));
+
+        var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)), floatPrecision);
+
+        assert(expectedUsdBalance === usdBalanceAfter);
+
+        var exactBalanceOfAfter = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[exactAmountIndex]).call();
+        exactBalanceOfAfter = utilities.fromDecimals(exactBalanceOfAfter, 18, true);
+        exactBalanceOfAfter = parseFloat(exactBalanceOfAfter);
+        exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter, floatPrecision);
+
+        assert(exactBalanceOfAfter === exactBalanceOfExpected);
+
+        var otherBalanceOfAfter = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[otherAmountIndex]).call();
+        otherBalanceOfAfter = utilities.fromDecimals(otherBalanceOfAfter, 18, true);
+        otherBalanceOfAfter = parseFloat(otherBalanceOfAfter);
+        otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter, floatPrecision);
+
+        assert(otherBalanceOfAfter === otherBalanceOfExpected);
     });
 });

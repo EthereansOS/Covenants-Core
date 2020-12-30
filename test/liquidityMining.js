@@ -8,9 +8,8 @@ var LiquidityMining;
 var LiquidityMiningFactory;
 var UniswapV2AMMV1;
 
-var zero = "0x0000000000000000000000000000000000000000";
 var ethItemOrchestrator;
-var uniswapV2Router; 
+var uniswapV2Router;
 var uniswapV2Factory;
 var wethToken;
 var rewardToken;
@@ -91,7 +90,7 @@ describe("LiquidityMining", () => {
             wethToken.options.address,
             token.options.address
         ];
-        var value = web3.utils.toWei(amount.toString(), 'ether');
+        var value = utilities.toDecimals(amount.toString(), '18');
         await uniswapV2Router.methods.swapExactETHForTokens("1", path, from || accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({from: from || accounts[0], value}));
     };
 
@@ -121,7 +120,7 @@ describe("LiquidityMining", () => {
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
         var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address)"))[0].topics[2]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
-        assert.notStrictEqual(liquidityMiningContract.options.address, zero);
+        assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
 
         await rewardToken.methods.approve(liquidityMiningContractAddress, await rewardToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
     });
@@ -138,7 +137,7 @@ describe("LiquidityMining", () => {
     });
     it("should retrieve the position token collection", async() => {
         var positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
-        assert.notStrictEqual(positionTokenCollection, zero);
+        assert.notStrictEqual(positionTokenCollection, utilities.voidEthereumAddress);
     });
     it("Exit fee is 0", async() => {
         var exitFee = await liquidityMiningContract.methods._exitFee().call();
@@ -162,16 +161,16 @@ describe("LiquidityMining", () => {
         var startBlockLongTerm2 = currentBlock + 6;
         endBlockLongTerm1 = startBlockLongTerm1 + 29;
         endBlockLongTerm2 = startBlockLongTerm2 + 44;
-        const rewardPerBlockLongTerm1 = web3.utils.toWei('0.003', 'ether');
-        const rewardPerBlockLongTerm2 = web3.utils.toWei('0.007', 'ether');
-        const rewardPerBlockFree = web3.utils.toWei('0.025', 'ether');
+        const rewardPerBlockLongTerm1 = utilities.toDecimals('0.003', '18');
+        const rewardPerBlockLongTerm2 = utilities.toDecimals('0.007', '18');
+        const rewardPerBlockFree = utilities.toDecimals('0.025', '18');
         var longTerm1 = {
             ammPlugin: uniswapAMM.options.address,
             liquidityPoolTokenAddress: liquidityPool.options.address,
             startBlock: startBlockLongTerm1,
             endBlock: endBlockLongTerm1,
             rewardPerBlock: rewardPerBlockLongTerm1,
-            maximumLiquidity: web3.utils.toWei('0.09', 'ether'), 
+            maximumLiquidity: utilities.toDecimals('0.09', '18'),
             totalSupply: 0,
             lastBlockUpdate: 0,
             mainTokenAddress: mainToken.options.address,
@@ -184,7 +183,7 @@ describe("LiquidityMining", () => {
             startBlock: startBlockLongTerm2,
             endBlock: endBlockLongTerm2,
             rewardPerBlock: rewardPerBlockLongTerm2,
-            maximumLiquidity: web3.utils.toWei('0.35', 'ether'), 
+            maximumLiquidity: utilities.toDecimals('0.35', '18'),
             totalSupply: 0,
             lastBlockUpdate: 0,
             mainTokenAddress: mainToken.options.address,
@@ -197,7 +196,7 @@ describe("LiquidityMining", () => {
             startBlock: 0,
             endBlock: 0,
             rewardPerBlock: rewardPerBlockFree,
-            maximumLiquidity: 0, 
+            maximumLiquidity: 0,
             totalSupply: 0,
             lastBlockUpdate: 0,
             mainTokenAddress: mainToken.options.address,
@@ -211,16 +210,16 @@ describe("LiquidityMining", () => {
     it("should not set the farming setups", async() => {
         try {
             var setups = [{
-                ammPlugin: zero,
-                liquidityPoolTokenAddress: zero,
+                ammPlugin: utilities.voidEthereumAddress,
+                liquidityPoolTokenAddress: utilities.voidEthereumAddress,
                 startBlock: 0,
                 endBlock: 1,
                 rewardPerBlock: 0,
                 maximumLiquidity: 0,
                 totalSupply: 0,
                 lastBlockUpdate: 0,
-                mainTokenAddress: zero,
-                secondaryTokenAddresses: [zero],
+                mainTokenAddress: utilities.voidEthereumAddress,
+                secondaryTokenAddresses: [utilities.voidEthereumAddress],
                 free: false
             }];
             await liquidityMiningContract.methods.setFarmingSetups(setups).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
@@ -234,15 +233,15 @@ describe("LiquidityMining", () => {
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
         await mainToken.methods.approve(ammPluginAddress, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromAlice));
         await secondaryToken.methods.approve(ammPluginAddress, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromAlice));
-        var mainTokenAmount = web3.utils.toWei('0.009', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
-        var secondaryTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
+        var mainTokenAmount = utilities.toDecimals('0.009', await mainToken.methods.decimals().call());
+        var secondaryTokenAmount = utilities.toDecimals('0.001', await secondaryToken.methods.decimals().call());
         var stake = {
             setupIndex,
             secondaryTokenAddress: secondaryToken.options.address,
             liquidityPoolTokenAmount: 0,
             mainTokenAmount,
             secondaryTokenAmount,
-            positionOwner: zero,
+            positionOwner: utilities.voidEthereumAddress,
             mintPositionToken: false,
         };
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromAlice));
@@ -261,15 +260,15 @@ describe("LiquidityMining", () => {
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
         await mainToken.methods.approve(ammPluginAddress, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromBob));
         await secondaryToken.methods.approve(ammPluginAddress, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromBob));
-        var mainTokenAmount = web3.utils.toWei('0.35', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
-        var secondaryTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
+        var mainTokenAmount = utilities.toDecimals('0.35', await mainToken.methods.decimals().call());
+        var secondaryTokenAmount = utilities.toDecimals('0.001', await secondaryToken.methods.decimals().call());
         var stake = {
             setupIndex,
             secondaryTokenAddress: secondaryToken.options.address,
             liquidityPoolTokenAmount: 0,
             mainTokenAmount,
             secondaryTokenAmount,
-            positionOwner: zero,
+            positionOwner: utilities.voidEthereumAddress,
             mintPositionToken: false,
         };
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromBob));
@@ -288,15 +287,15 @@ describe("LiquidityMining", () => {
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
         await mainToken.methods.approve(ammPluginAddress, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromCharlie));
         await secondaryToken.methods.approve(ammPluginAddress, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromCharlie));
-        var mainTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
-        var secondaryTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
+        var mainTokenAmount = utilities.toDecimals('0.001', await mainToken.methods.decimals().call());
+        var secondaryTokenAmount = utilities.toDecimals('0.001', await secondaryToken.methods.decimals().call());
         var stake = {
             setupIndex,
             secondaryTokenAddress: secondaryToken.options.address,
             liquidityPoolTokenAmount: 0,
             mainTokenAmount,
             secondaryTokenAmount,
-            positionOwner: zero,
+            positionOwner: utilities.voidEthereumAddress,
             mintPositionToken: false,
         };
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromCharlie));
@@ -337,15 +336,15 @@ describe("LiquidityMining", () => {
         var ammPluginAddress = (await liquidityMiningContract.methods._farmingSetups(setupIndex).call()).ammPlugin;
         await mainToken.methods.approve(ammPluginAddress, await mainToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromDonald));
         await secondaryToken.methods.approve(ammPluginAddress, await secondaryToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions(fromDonald));
-        var mainTokenAmount = web3.utils.toWei('0.002', utilities.fromDecimalsToCurrency(await mainToken.methods.decimals().call()));
-        var secondaryTokenAmount = web3.utils.toWei('0.001', utilities.fromDecimalsToCurrency(await secondaryToken.methods.decimals().call()));
+        var mainTokenAmount = utilities.toDecimals('0.002', await mainToken.methods.decimals().call());
+        var secondaryTokenAmount = utilities.toDecimals('0.001', await secondaryToken.methods.decimals().call());
         var stake = {
             setupIndex,
             secondaryTokenAddress: secondaryToken.options.address,
             liquidityPoolTokenAmount: 0,
             mainTokenAmount,
             secondaryTokenAmount,
-            positionOwner: zero,
+            positionOwner: utilities.voidEthereumAddress,
             mintPositionToken: false,
         };
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(fromDonald));
@@ -401,4 +400,4 @@ describe("LiquidityMining", () => {
         console.log(`charlie end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
     });
-})
+});

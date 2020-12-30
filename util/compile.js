@@ -1,5 +1,5 @@
 var path = require("path");
-var os = require('os'); 
+var os = require('os');
 var fs = require("fs");
 var solidityManager = require('solc-vm/solc-manager');
 var solidityDownloader = require('solc-vm/solc-downloader');
