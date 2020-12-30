@@ -38,7 +38,7 @@ contract LiquidityMining {
         uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
-        LiquidityPoolData liquidityPoolData; // amm liquidity provider data.
+        LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
         uint256 liquidityPoolTokenAmount; // amount of liquidity pool token provided.
         uint256 reward; // position reward.
         uint256 lockedRewardPerBlock; // position locked reward per block.
@@ -176,7 +176,7 @@ contract LiquidityMining {
             uint256[] memory amounts = new uint256[](2);
             amounts[0] = stakeData.mainTokenAmount;
             amounts[1] = stakeData.secondaryTokenAmount;
-            // create the liquidity provider data
+            // create the liquidity pool data
             liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress,
                 stakeData.liquidityPoolTokenAmount,
@@ -191,7 +191,7 @@ contract LiquidityMining {
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
-            // create the liquidity provider data for latter removal if requested
+            // create the liquidity pool data for latter removal if requested
             liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress,
                 stakeData.liquidityPoolTokenAmount,

@@ -66,8 +66,11 @@ module.exports = async function compile(file, contractName) {
             if (error) {
                 return ko(error);
             }
-            if (stderr && stderr.indexOf('Warning: ') !== 0) {
-                return ko(stderr);
+            if (stderr) {
+                if(stderr.indexOf('Warning: ') !== 0) {
+                    return ko(stderr);
+                }
+                console.log(stderr);
             }
             return ok(cleanOutput(stdout)[location][contractName]);
         });

@@ -296,7 +296,7 @@ contract USDExtensionController is ERC1155Receiver {
         );
         require(
             liquidityPoolIndex >= 0 && liquidityPoolIndex < _allowedAMMs[ammIndex].liquidityPools.length,
-            "Unknown Liquidity Provider!"
+            "Unknown Liquidity Pool!"
         );
         _;
     }
@@ -404,8 +404,8 @@ contract USDExtensionController is ERC1155Receiver {
             liquidityPoolAmount,
             amm.tokens(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]),
             new uint256[](0),
-            owner,
-            address(this)
+            address(this),
+            owner
         );
         _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
         amm.removeLiquidity(data);

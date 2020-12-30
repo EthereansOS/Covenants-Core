@@ -137,27 +137,39 @@ describe("USDV2", () => {
         assert(JSON.stringify(allowed) === JSON.stringify(allowedAMMS));
     });
 
-    it("Retrieve a uSD amount not greather than 100. Difference will be sent back", async() => {
+    it("Retrieve a uSD amount not greather than 350. Difference will be sent back", async() => {
         var floatPrecision = 5;
 
-        var maxAmount = 50;
-        var tokens = (await uniswapAMM.methods.tokens(allowedAMMS[0][1][1]).call()).map(it => new web3.eth.Contract(context.IERC20ABI, it));
-        var amount = utilities.toDecimals(maxAmount.toString(), await tokens[0].methods.decimals().call())
-        var amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[0].options.address, amount).call();
+        var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
+
+        var liquidityPoolPosition = 2;
+        var ammPluginAddress = allowedAMMS[0][1][liquidityPoolPosition];
+        var testMainCode = USDT;
+        var mainObjectId = USDTItemObjectId;
+        var otherObjectId = DAIItemObjectId;
+        var maxAmountPerToken = 350;
+        var maxuSDExpected = maxAmountPerToken * 2;
+
+        var tokens = (await uniswapAMM.methods.tokens(ammPluginAddress).call()).map(it => new web3.eth.Contract(context.IERC20ABI, it));
+        var amount = utilities.toDecimals(maxAmountPerToken.toString(), await tokens[0].methods.decimals().call())
+        var amounts = await uniswapAMM.methods.byTokenAmount(ammPluginAddress, tokens[0].options.address, amount).call();
+        var liquidityPoolAmount = amounts[0];
         amounts = amounts[1];
         var amountsPlain = [
             parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
             parseFloat(utilities.fromDecimals(amounts[1], await tokens[1].methods.decimals().call(), true))
         ];
 
-        var exactAmountIndex = amountsPlain.indexOf(maxAmount);
+        var exactAmountIndex = amountsPlain.indexOf(maxAmountPerToken);
         var otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
 
-        if(amountsPlain[otherAmountIndex] > maxAmount) {
+        if(amountsPlain[otherAmountIndex] > maxAmountPerToken) {
             exactAmountIndex = otherAmountIndex;
             otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
-            amount = utilities.toDecimals(maxAmount.toString(), await tokens[exactAmountIndex].methods.decimals().call())
-            amounts = await uniswapAMM.methods.byTokenAmount(allowedAMMS[0][1][1], tokens[exactAmountIndex].options.address, amount).call();
+            amount = utilities.toDecimals(maxAmountPerToken.toString(), await tokens[exactAmountIndex].methods.decimals().call())
+            amounts = await uniswapAMM.methods.byTokenAmount(ammPluginAddress, tokens[exactAmountIndex].options.address, amount).call();
+            liquidityPoolAmount = amounts[0];
             amounts = amounts[1];
             amountsPlain = [
                 parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
@@ -165,9 +177,11 @@ describe("USDV2", () => {
             ];
         }
 
+        var expectedUsdBalance = utilities.formatMoney(usdBalanceBefore + amountsPlain[0] + amountsPlain[1], floatPrecision);
+
         var objectIds = [
-            tokens[0].options.address === USDC.options.address ? USDCItemObjectId : DAIItemObjectId,
-            tokens[1].options.address === USDC.options.address ? USDCItemObjectId : DAIItemObjectId
+            tokens[0].options.address === testMainCode.options.address ? mainObjectId : otherObjectId,
+            tokens[1].options.address === testMainCode.options.address ? mainObjectId : otherObjectId
         ];
 
         var exactBalanceOfBefore = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[exactAmountIndex]).call();
@@ -185,36 +199,146 @@ describe("USDV2", () => {
         otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected, floatPrecision);
 
         var values = [
-            utilities.toDecimals("50", '18'),
-            utilities.toDecimals("50", '18')
+            utilities.toDecimals(maxAmountPerToken, '18'),
+            utilities.toDecimals(maxAmountPerToken, '18')
         ];
         var types = ['uint256', 'uint256', 'uint256'];
-        var params = ['0', '1', '0'];
+        var params = ['0', liquidityPoolPosition, liquidityPoolAmount];
         var data = web3.eth.abi.encodeParameters(types, params);
-        var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
-        usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
-
-        var expectedUsdBalance = utilities.formatMoney(usdBalanceBefore + amountsPlain[0] + amountsPlain[1], floatPrecision);
 
         await ethItemERC20Wrapper.methods.safeBatchTransferFrom(accounts[0], usdController.options.address, objectIds, values, data).send(blockchainConnection.getSendingOptions());
 
         var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)), floatPrecision);
 
-        assert(expectedUsdBalance === usdBalanceAfter);
+        assert(utilities.formatNumber(maxuSDExpected) >= utilities.formatNumber(usdBalanceAfter) && utilities.formatNumber(usdBalanceAfter) >= utilities.formatNumber(expectedUsdBalance));
 
         var exactBalanceOfAfter = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[exactAmountIndex]).call();
         exactBalanceOfAfter = utilities.fromDecimals(exactBalanceOfAfter, 18, true);
         exactBalanceOfAfter = parseFloat(exactBalanceOfAfter);
         exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter, floatPrecision);
 
-        assert(exactBalanceOfAfter === exactBalanceOfExpected);
+        assert(exactBalanceOfExpected === exactBalanceOfAfter);
 
         var otherBalanceOfAfter = await ethItemERC20Wrapper.methods.balanceOf(accounts[0], objectIds[otherAmountIndex]).call();
         otherBalanceOfAfter = utilities.fromDecimals(otherBalanceOfAfter, 18, true);
         otherBalanceOfAfter = parseFloat(otherBalanceOfAfter);
         otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter, floatPrecision);
 
-        assert(otherBalanceOfAfter === otherBalanceOfExpected);
+        assert(otherBalanceOfExpected === otherBalanceOfAfter);
+    });
+    it("Burn a uSD amount not greather than 350. Difference will be sent back", async() => {
+        var floatPrecision = 5;
+
+        var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
+
+        var consume = async function consume(liquidityPoolPosition, testMainCode, mainObjectId, otherObjectId, maxAmountPerToken) {
+            var ammPluginAddress = allowedAMMS[0][1][liquidityPoolPosition];
+
+            var maxuSDExpected = maxAmountPerToken * 2;
+
+            var tokens = (await uniswapAMM.methods.tokens(ammPluginAddress).call()).map(it => new web3.eth.Contract(context.IERC20ABI, it));
+            var amount = utilities.toDecimals(maxAmountPerToken, await tokens[0].methods.decimals().call())
+            var amounts = await uniswapAMM.methods.byTokenAmount(ammPluginAddress, tokens[0].options.address, amount).call();
+            var liquidityPoolAmount = amounts[0];
+            amounts = amounts[1];
+            var amountsPlain = [
+                parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
+                parseFloat(utilities.fromDecimals(amounts[1], await tokens[1].methods.decimals().call(), true))
+            ];
+
+            var exactAmountIndex = amountsPlain.indexOf(maxAmountPerToken);
+            var otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
+
+            if(amountsPlain[otherAmountIndex] > maxAmountPerToken) {
+                exactAmountIndex = otherAmountIndex;
+                otherAmountIndex = exactAmountIndex === 0 ? 1 : 0;
+                amount = utilities.toDecimals(maxAmountPerToken, await tokens[exactAmountIndex].methods.decimals().call())
+                amounts = await uniswapAMM.methods.byTokenAmount(ammPluginAddress, tokens[exactAmountIndex].options.address, amount).call();
+                liquidityPoolAmount = amounts[0];
+                amounts = amounts[1];
+                amountsPlain = [
+                    parseFloat(utilities.fromDecimals(amounts[0], await tokens[0].methods.decimals().call(), true)),
+                    parseFloat(utilities.fromDecimals(amounts[1], await tokens[1].methods.decimals().call(), true))
+                ];
+            }
+
+            var objectIds = [
+                tokens[0].options.address === testMainCode.options.address ? mainObjectId : otherObjectId,
+                tokens[1].options.address === testMainCode.options.address ? mainObjectId : otherObjectId
+            ];
+
+            var exactBalanceOfBefore = await tokens[exactAmountIndex].methods.balanceOf(accounts[0]).call();
+            exactBalanceOfBefore = utilities.fromDecimals(exactBalanceOfBefore, await tokens[exactAmountIndex].methods.decimals().call(), true);
+            exactBalanceOfBefore = parseFloat(exactBalanceOfBefore);
+
+            var exactBalanceOfExpected = exactBalanceOfBefore + amountsPlain[exactAmountIndex];
+            exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected, floatPrecision);
+
+            var otherBalanceOfBefore = await tokens[otherAmountIndex].methods.balanceOf(accounts[0]).call();
+            otherBalanceOfBefore = utilities.fromDecimals(otherBalanceOfBefore, await tokens[otherAmountIndex].methods.decimals().call(), true);
+            otherBalanceOfBefore = parseFloat(otherBalanceOfBefore);
+
+            var otherBalanceOfExpected = otherBalanceOfBefore + amountsPlain[otherAmountIndex];
+            otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected, floatPrecision);
+
+            var types = ['uint256', 'uint256', 'uint256', 'address'];
+            var params = ['0', liquidityPoolPosition, liquidityPoolAmount, ethItemERC20Wrapper.options.address];
+            var data = web3.eth.abi.encodeParameters(types, params);
+            return {
+                tokens,
+                maxuSDExpected,
+                data,
+                objectIds,
+                exactBalanceOfBefore,
+                exactBalanceOfExpected,
+                otherBalanceOfBefore,
+                otherBalanceOfExpected,
+                amountsPlain,
+                exactAmountIndex,
+                otherAmountIndex
+            };
+        };
+
+        var inputs = [
+            await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 32)
+        ];
+
+        var expectedUsdBalance = usdBalanceBefore;
+        inputs.forEach(it => expectedUsdBalance -= (it.amountsPlain[0] + it.amountsPlain[1]));
+        expectedUsdBalance = utilities.formatMoney(expectedUsdBalance, floatPrecision);
+
+        var minUsdExpected = usdBalanceBefore;
+        inputs.forEach(it => minUsdExpected -= it.maxuSDExpected);
+
+        var objectIds = inputs.map(() => usdObjectId);
+        var values = inputs.map(it => utilities.toDecimals(it.maxuSDExpected, 18));
+
+        var data = inputs.map(it => abi.encode(["uint256","bytes"], [0, it.data]));
+        data = abi.encode(["bytes[]"], [data]);
+
+        await usdCollection.methods.safeBatchTransferFrom(accounts[0], usdController.options.address, objectIds, values, data).send(blockchainConnection.getSendingOptions());
+
+        var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
+        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)), floatPrecision);
+
+        assert(utilities.formatNumber(minUsdExpected) <= utilities.formatNumber(usdBalanceAfter) && utilities.formatNumber(usdBalanceAfter) <= utilities.formatNumber(expectedUsdBalance));
+
+        for(var input of inputs) {
+            var exactBalanceOfAfter = await input.tokens[input.exactAmountIndex].methods.balanceOf(accounts[0]).call();
+            exactBalanceOfAfter = utilities.fromDecimals(exactBalanceOfAfter, await input.tokens[input.exactAmountIndex].methods.decimals().call(), true);
+            exactBalanceOfAfter = parseFloat(exactBalanceOfAfter);
+            exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter, floatPrecision);
+
+            assert(input.exactBalanceOfExpected === exactBalanceOfAfter);
+
+            var otherBalanceOfAfter = await input.tokens[input.otherAmountIndex].methods.balanceOf(accounts[0]).call();
+            otherBalanceOfAfter = utilities.fromDecimals(otherBalanceOfAfter, await input.tokens[input.otherAmountIndex].methods.decimals().call(), true);
+            otherBalanceOfAfter = parseFloat(otherBalanceOfAfter);
+            otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter, floatPrecision);
+
+            assert(input.otherBalanceOfExpected === otherBalanceOfAfter);
+        }
     });
 });

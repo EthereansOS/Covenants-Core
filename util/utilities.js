@@ -44,7 +44,7 @@ function numberToString(num, locale) {
         num = 0;
     }
     if ((typeof num).toLowerCase() === 'string') {
-        return num;
+        return num.split(',').join('');
     }
     let numStr = String(num);
 
@@ -83,6 +83,10 @@ function formatMoney(value, decPlaces, thouSeparator, decSeparator) {
         j = (j = i.length) > 3 ? j % 3 : 0;
     var result = sign + (j ? i.substr(0, j) + thouSeparator : "") + i.substr(j).replace(/(\d{3})(?=\d)/g, "$1" + thouSeparator) + (decPlaces ? decSeparator + Math.abs(n - i).toFixed(decPlaces).slice(2) : "");
     return eliminateFloatingFinalZeroes(result, decSeparator);
+}
+
+function formatNumber(value) {
+    return parseFloat(numberToString(value).split(',').join(''));
 }
 
 function eliminateFloatingFinalZeroes(value, decSeparator) {
@@ -142,6 +146,7 @@ module.exports = {
     fromDecimals,
     toDecimals,
     numberToString,
+    formatNumber,
     formatMoney,
     eliminateFloatingFinalZeroes,
     toEthereumSymbol
