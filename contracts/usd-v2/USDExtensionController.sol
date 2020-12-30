@@ -202,6 +202,26 @@ contract USDExtensionController is ERC1155Receiver {
             return this.onERC1155Received.selector;
     }
 
+    function onERC1155BatchReceived(
+        address,
+        address from,
+        uint256[] memory ids,
+        uint256[] memory values,
+        bytes memory data
+    )
+        public
+        override
+        returns(bytes4) {
+
+        require(msg.sender == _collection, "Only uSD collection allowed here");
+        bytes[] memory payloads = abi.decode(data, (bytes[]));
+        require(payloads.length == ids.length, "Wrong payloads length");
+        for(uint256 i = 0; i < ids.length; i++) {
+            _onSingleReceived(from, ids[i], values[i], payloads[i]);
+        }
+        return this.onERC1155BatchReceived.selector;
+    }
+
     function _onSingleReceived(
         address from,
         uint256 id,
@@ -213,17 +233,6 @@ contract USDExtensionController is ERC1155Receiver {
                 _rebalanceByDebt(from, value);
             } else {
                 _burn(from, value, payload);
-            }
-    }
-
-    function _burnBatch(address from,
-        uint256[] memory ids,
-        uint256[] memory values,
-        bytes memory data) private {
-            bytes[] memory payloads = abi.decode(data, (bytes[]));
-            require(payloads.length == ids.length, "Wrong payloads length");
-            for(uint256 i = 0; i < ids.length; i++) {
-                _onSingleReceived(from, ids[i], values[i], payloads[i]);
             }
     }
 
@@ -243,26 +252,6 @@ contract USDExtensionController is ERC1155Receiver {
         require(value <= debt, "Cannot Burn this amount");
         INativeV1(_collection).burn(_usdObjectId, value);
         USDExtension(_extension).mint(_usdCreditObjectId, value, from);
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address from,
-        uint256[] memory ids,
-        uint256[] memory values,
-        bytes memory data
-    )
-        public
-        override
-        returns(bytes4) {
-
-        if(msg.sender == _collection) {
-            _burnBatch(from, ids, values, data);
-        } else {
-            _addLiquidityBatch(from, ids, values, data);
-        }
-
-        return this.onERC1155BatchReceived.selector;
     }
 
     function rebalanceByCredit() public {
@@ -301,42 +290,23 @@ contract USDExtensionController is ERC1155Receiver {
         _;
     }
 
-    function _addLiquidityBatch(address from,
-        uint256[] memory ids,
-        uint256[] memory values,
-        bytes memory data) private {
-        address[] memory tokens = new address[](ids.length);
-        uint256[] memory newValues = new uint256[](ids.length);
-            for(uint256 i = 0; i < ids.length; i++) {
-                IERC20WrapperV1 wrapper = IERC20WrapperV1(msg.sender);
-                wrapper.burn(ids[i], values[i]);
-                IERC20 token = IERC20(tokens[i] = wrapper.source(ids[i]));
-                newValues[i] = token.balanceOf(address(this));
-            }
-            (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount) = abi.decode(data, (uint256, uint256, uint256));
-            uint256 toMint = _addLiquidity(tokens, newValues, from, ammPosition, liquidityPoolPosition, liquidityPoolAmount, msg.sender);
-            USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), from);
-    }
-
-    function _addLiquidity(
+    function addLiquidity(
         address[] memory tokens,
         uint256[] memory amounts,
-        address owner,
         uint256 ammPosition,
         uint256 liquidityPoolPosition,
-        uint256 liquidityPoolAmount,
-        address erc20WrapperForItemReconversion
+        uint256 liquidityPoolAmount
     )
-        private
+        public
         _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
-        returns(uint256 addedAmount)
+        returns(uint256 toMint)
     {
         LiquidityPoolData memory data = LiquidityPoolData(
             _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
             liquidityPoolAmount,
             tokens,
             amounts,
-            erc20WrapperForItemReconversion == address(0) ? owner : address(this),
+            msg.sender,
             _extension
         );
         bool ethInvolved = false;
@@ -347,39 +317,12 @@ contract USDExtensionController is ERC1155Receiver {
                 ethValue += amounts[i];
             }
         }
-        _checkAllowance(tokens, amounts, _allowedAMMs[ammPosition].ammAddress);
         if(ethInvolved) {
-            addedAmount = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
+            toMint = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
         } else {
-            addedAmount = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
+            toMint = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
         }
-
-        if(erc20WrapperForItemReconversion != address(0)) {
-            _reconvertToItemAndSendBack(erc20WrapperForItemReconversion, tokens, owner);
-        }
-    }
-
-    function _reconvertToItemAndSendBack(address erc20WrapperForItemReconversion, address[] memory tokens, address owner) private {
-        IERC20WrapperV1 wrapper = IERC20WrapperV1(erc20WrapperForItemReconversion);
-        for(uint256 i = 0; i < tokens.length; i++) {
-            uint256 balanceOf = tokens[i] == address(0) ? address(this).balance : IERC20(tokens[i]).balanceOf(address(this));
-            if(balanceOf == 0) {
-                continue;
-            }
-            _checkAllowance(tokens[i], balanceOf, erc20WrapperForItemReconversion);
-            address wrapperAddress;
-            if(tokens[i] == address(0)) {
-                (,wrapperAddress) = wrapper.mintETH{value: balanceOf}();
-            } else {
-                (,wrapperAddress) = wrapper.mint(tokens[i], balanceOf);
-            }
-            IERC20 token = IERC20(wrapperAddress);
-            balanceOf = token.balanceOf(address(this));
-            if(balanceOf == 0) {
-                continue;
-            }
-            token.transfer(owner, balanceOf);
-        }
+        USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
     }
 
     function _removeLiquidity(
@@ -420,12 +363,6 @@ contract USDExtensionController is ERC1155Receiver {
             for(uint256 i = 0; i < amounts.length; i++) {
                 amount += amounts[i];
             }
-    }
-
-    function _checkAllowance(address[] memory tokens, uint256[] memory amounts, address operator) internal virtual {
-        for(uint256 i = 0; i < tokens.length; i++) {
-            _checkAllowance(tokens[i], amounts[i], operator);
-        }
     }
 
     function _checkAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
