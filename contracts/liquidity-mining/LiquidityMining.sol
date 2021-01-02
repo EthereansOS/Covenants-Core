@@ -2,6 +2,7 @@
 pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
+import "./ILiquidityMiningFactory.sol";
 import "../amm-aggregator/common/AMMData.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "./util/IERC20.sol";
@@ -17,6 +18,8 @@ contract LiquidityMining {
 
     // new position event
     event NewPosition(bytes32 positionKey);
+    // event that tracks liquidity mining contracts deployed
+    event LiquidityMiningInitialized(address indexed contractAddress, address indexed rewardTokenAddress);
 
     // farming setup struct
     struct FarmingSetup {
@@ -57,7 +60,7 @@ contract LiquidityMining {
     }
 
     // factory address that will create clones of this contract
-    address public FACTORY;
+    address public _factory;
     // address of the owner of this contract
     address private _owner;
     // address of the reward token
@@ -65,7 +68,7 @@ contract LiquidityMining {
     // position token collection
     address public _positionTokenCollection;
     // whether the token is by mint or by reserve
-    bool private _byMint;
+    bool public _byMint;
     // array containing all the currently available farming setups
     FarmingSetup[] public _farmingSetups;
     // mapping containing all the positions
@@ -76,8 +79,6 @@ contract LiquidityMining {
     mapping(uint256 => uint256[]) public _setupUpdateBlocks;
     // mapping containing whether a position has been redeemed or not
     mapping(bytes32 => bool) public _positionRedeemed;
-    // owner exit fee
-    uint256 public _exitFee;
     // pinned setup index
     uint256 private _pinnedSetupIndex;
 
@@ -85,7 +86,7 @@ contract LiquidityMining {
 
     /** @dev onlyFactory modifier used to check for unauthorized initializations. */
     modifier onlyFactory() {
-        require(msg.sender == FACTORY, "Unauthorized.");
+        require(msg.sender == _factory, "Unauthorized.");
         _;
     }
 
@@ -110,10 +111,10 @@ contract LiquidityMining {
      */
     function initialize(address owner, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public returns(bool initSuccess) {
         require(
-            FACTORY == address(0),
+            _factory == address(0),
             "Already initialized."
         );
-        FACTORY = msg.sender;
+        _factory = msg.sender;
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
@@ -122,6 +123,7 @@ contract LiquidityMining {
             (bool result,) = _owner.call(ownerInitData);
             require(result, "Error while initializing owner.");
         }
+        emit LiquidityMiningInitialized(address(this), _rewardTokenAddress);
         initSuccess = true;
     }
 
@@ -132,13 +134,6 @@ contract LiquidityMining {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
             _farmingSetups.push(farmingSetups[i]);
         }
-    }
-
-    /** @dev allows the owner to update the exit fee.
-      * @param newExitFee new exit fee value.
-      */
-    function setExitFee(uint256 newExitFee) public onlyOwner {
-        _exitFee = newExitFee;
     }
 
     /** @dev updates the pinned setup index and updates the relative reward per block.
@@ -298,6 +293,30 @@ contract LiquidityMining {
         _positionRedeemed[positionKey] = true;
     }
 
+    /** @dev returns the reward token address and if it's rewarded by mint or not
+      * @return reward token address, byMint tuple.
+     */
+    function getRewardTokenData() public view returns(address, bool) {
+        return (_rewardTokenAddress, _byMint);
+    }
+
+    /** @dev returns the position associated with the input key.
+      * @param key position key.
+      * @return position stored at the given key.
+     */
+    function getPosition(bytes32 key) public view returns(Position memory) {
+        return _positions[key];
+    }
+
+    /** @dev returns the reward per token for the setup index at the given block number.
+      * @param setupIndex index of the setup.
+      * @param blockNumber block that wants to be inspected.
+      * @return reward per token.
+     */
+    function getRewardPerToken(uint256 setupIndex, uint256 blockNumber) public view returns(uint256) {
+        return _rewardPerTokenPerSetupPerBlock[setupIndex][blockNumber];
+    }
+
     /** Private methods. */
 
     /** @dev function used to calculate the reward in a locked farming setup.
@@ -410,9 +429,10 @@ contract LiquidityMining {
             }
         }
         if (!isPartial) {
+            uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
             // pay the fees!
-            uint256 fee = position.liquidityPoolTokenAmount.mul(_exitFee.mul(1e18).div(100)).div(1e18);
-            if (_exitFee > 0) {
+            uint256 fee = position.liquidityPoolTokenAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
+            if (exitFee > 0) {
                 _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
             }
             // check if the user wants to unwrap its pair or not
@@ -468,6 +488,11 @@ contract LiquidityMining {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
     }
 
+    /** @dev function used to safe transfer ERC20 tokens.
+      * @param erc20TokenAddress address of the token to transfer.
+      * @param to receiver of the tokens.
+      * @param value amount of tokens to transfer.
+     */
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
@@ -484,11 +509,17 @@ contract LiquidityMining {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
     }
 
-    function getPosition(bytes32 key) public view returns(Position memory) {
-        return _positions[key];
+    /** @dev allows the contract to retrieve the exit fee from the factory.
+      * @return exitFee contract exit fee.
+     */
+    function _getExitFee() private returns(uint256 exitFee) {
+        exitFee = ILiquidityMiningFactory(_factory)._exitFee();
     }
 
-    function getRewardPerToken(uint256 setupIndex, uint256 blockNumber) public view returns(uint256) {
-        return _rewardPerTokenPerSetupPerBlock[setupIndex][blockNumber];
+    /** @dev allows the contract to retrieve the wallet from the factory.
+      * @return wallet external wallet for tokens.
+     */
+    function _getWallet() private returns(address wallet) {
+        wallet = ILiquidityMiningFactory(_factory)._wallet();
     }
 }

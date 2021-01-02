@@ -5,13 +5,21 @@ contract LiquidityMiningFactory {
 
     // liquidity mining contract implementation address
     address public liquidityMiningImplementationAddress;
-    // factory owner address (needed?)
+    // factory owner address
     address private factoryOwner;
+    // owner wallet (UniFi)
+    address public _wallet;
+    // owner wallet exit fee
+    uint256 public _exitFee;
 
+    // event that tracks wallet changes
+    event ExitFeeChanged(uint256 oldValue, uint256 newValue);
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningDeployed(address indexed owner, address indexed contractAddress);
     // event that tracks logic contract address change
     event LiquidityMiningLogicChanged(address oldAddress, address newAddress);
+    // event that tracks wallet changes
+    event WalletChanged(address oldAddress, address newAddress);
 
     /** @dev creates a new liquidity mining factory instance.
       * @param _factoryOwner owner of this factory contract (or msg.sender if address(0) is provided).
@@ -25,19 +33,15 @@ contract LiquidityMiningFactory {
         liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress;
     }
 
+    /** MODIFIERS */
+
     /** @dev onlyOwner modifier used to check for unauthorized changes. */
     modifier onlyOwner {
         require(msg.sender == factoryOwner, "Unauthorized.");
         _;
     }
 
-    /** @dev allows the factory owner to update the logic contract address.
-      * @param _liquidityMiningImplementationAddress new liquidity mining implementation address.
-     */
-    function updateLogicAddress(address _liquidityMiningImplementationAddress) public onlyOwner {
-        emit LiquidityMiningLogicChanged(liquidityMiningImplementationAddress, _liquidityMiningImplementationAddress);
-        liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress;
-    }
+    /** PUBLIC METHODS */
 
     /** @dev this function deploys a new LiquidityMining contract and calls the encoded function passed as data.
       * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
@@ -48,6 +52,32 @@ contract LiquidityMiningFactory {
         require(initSuccess, "Error while creating new liquidity mining contract");
         emit LiquidityMiningDeployed(msg.sender, contractAddress);
     }
+
+    /** @dev allows the owner to update the exit fee.
+      * @param newExitFee new exit fee value.
+      */
+    function updateExitFee(uint256 newExitFee) public onlyOwner {
+        emit ExitFeeChanged(_exitFee, newExitFee);
+        _exitFee = newExitFee;
+    }
+
+    /** @dev allows the factory owner to update the logic contract address.
+      * @param _liquidityMiningImplementationAddress new liquidity mining implementation address.
+     */
+    function updateLogicAddress(address _liquidityMiningImplementationAddress) public onlyOwner {
+        emit LiquidityMiningLogicChanged(liquidityMiningImplementationAddress, _liquidityMiningImplementationAddress);
+        liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress;
+    }
+
+    /** @dev allows the owner to update the wallet.
+      * @param newWallet new wallet address.
+      */
+    function updateWallet(address newWallet) public onlyOwner {
+        emit WalletChanged(_wallet, newWallet);
+        _wallet = newWallet;
+    }
+
+    /** PRIVATE METHODS */
 
     /** @dev clones the input contract address and returns the copied contract address.
       * @param original address of the original contract.

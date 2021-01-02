@@ -132,13 +132,14 @@ describe("LiquidityMining", () => {
         }
     });
     it("should retrieve the correct factory address", async() => {
-        var factoryAddress = await liquidityMiningContract.methods.FACTORY().call();
+        var factoryAddress = await liquidityMiningContract.methods._factory().call();
         assert.strictEqual(factoryAddress, liquidityMiningFactory.options.address);
     });
     it("should retrieve the position token collection", async() => {
         var positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
         assert.notStrictEqual(positionTokenCollection, utilities.voidEthereumAddress);
     });
+    /*
     it("Exit fee is 0", async() => {
         var exitFee = await liquidityMiningContract.methods._exitFee().call();
         assert.strictEqual(parseInt(exitFee), 0);
@@ -155,6 +156,7 @@ describe("LiquidityMining", () => {
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("unauthorized"), -1);
         }
     });
+    */
     it("should set the farming setups", async() => {
         var currentBlock = await web3.eth.getBlockNumber();
         var startBlockLongTerm1 = currentBlock + 1;
