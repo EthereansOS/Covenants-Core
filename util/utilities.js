@@ -1,5 +1,7 @@
 var voidEthereumAddress = "0x0000000000000000000000000000000000000000";
 
+global.formatMoneyDecPlaces = 2;
+
 function fromDecimals(n, d, noFormat) {
     n = (n && n.value || n);
     d = (d && d.value || d);
@@ -75,7 +77,7 @@ function numberToString(num, locale) {
 function formatMoney(value, decPlaces, thouSeparator, decSeparator) {
     value = (typeof value).toLowerCase() !== 'number' ? parseFloat(value) : value;
     var n = value,
-        decPlaces = isNaN(decPlaces = Math.abs(decPlaces)) ? 2 : decPlaces,
+        decPlaces = isNaN(decPlaces = Math.abs(decPlaces)) ? global.formatMoneyDecPlaces : decPlaces,
         decSeparator = decSeparator == undefined ? "." : decSeparator,
         thouSeparator = thouSeparator == undefined ? "," : thouSeparator,
         sign = n < 0 ? "-" : "",

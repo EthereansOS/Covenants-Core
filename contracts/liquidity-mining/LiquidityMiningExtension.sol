@@ -9,16 +9,11 @@ import "./util/IERC20Mintable.sol";
 
 contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
-    // factory address that creates the liquidity mining contracts
-    address public _factory;
     // double proxy address of the linked DFO
     address private _doubleProxy;
     // mapping that contains all the liquidity mining contracts linked to this extension
     mapping(address => bool) private _liquidityMiningContracts;
 
-    constructor(address factory) {
-        _factory = factory;
-    }
 
     /** MODIFIERS */
 
@@ -36,19 +31,17 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** PUBLIC METHODS */
 
-    /** @dev function called by the factory to add a new liquidity mining contract to the extension.
-      * @param liquidityMiningAddress new liquidity mining address to set.
-     */
-    function addLiquidityMiningContract(address liquidityMiningAddress) override public {
-        require(msg.sender == _factory, "Unauthorized.");
-        _liquidityMiningContracts[liquidityMiningAddress] = true;
+    function init(address doubleProxyAddress) override public {
+        require(_doubleProxy == address(0), "Init already called!");
+        _doubleProxy = doubleProxyAddress;
+        _liquidityMiningContracts[msg.sender] = true;
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
       * @return true if everything was ok, false otherwise.
      */
-    function backToYou(uint256 amount) override public onlyLiquidityMining returns(bool) {        
+    function backToYou(uint256 amount) override public onlyLiquidityMining returns(bool) {
         (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
         if (byMint) {
             return IERC20Mintable(rewardTokenAddress).burn(msg.sender, amount);
@@ -63,13 +56,6 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
      */
     function setDoubleProxy(address newDoubleProxy) public onlyDFO {
         _doubleProxy = newDoubleProxy;
-    }
-
-    /** @dev allows the DFO to update the factory address.
-      * @param newFactory new factory address.
-     */
-    function setFactory(address newFactory) public onlyDFO {
-        _factory = newFactory;
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.

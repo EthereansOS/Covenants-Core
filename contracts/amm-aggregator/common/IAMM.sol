@@ -8,8 +8,8 @@ interface IAMM {
 
     function info() external pure returns(string memory name, uint256 version);
 
-    function addLiquidity(LiquidityPoolData calldata data) external payable returns(uint256);
-    function addLiquidityBatch(LiquidityPoolData[] calldata data) external payable returns(uint256[] memory);
+    function addLiquidity(LiquidityPoolData calldata data) external payable returns(uint256, uint256[] memory);
+    function addLiquidityBatch(LiquidityPoolData[] calldata data) external payable returns(uint256[] memory, uint256[][] memory);
 
     function removeLiquidity(LiquidityPoolData calldata data) external returns(uint256[] memory);
     function removeLiquidityBatch(LiquidityPoolData[] calldata data) external returns(uint256[][] memory);
@@ -18,6 +18,8 @@ interface IAMM {
     function swapLiquidityBatch(LiquidityToSwap[] calldata data) external payable;
 
     function tokens(address liquidityPoolAddress) external view returns(address[] memory);
+    function liquidityPool(address[] memory tokens) external view returns(address);
+
     function amounts(address liquidityPoolAddress) external view returns(uint256, uint256[] memory);
 
     function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeTokenAmountsToTheseDecimals) external view returns (uint256, uint256[] memory);

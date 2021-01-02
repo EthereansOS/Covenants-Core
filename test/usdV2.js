@@ -9,6 +9,8 @@ var abi = new ethers.utils.AbiCoder();
 
 describe("USDV2", () => {
 
+    global.formatMoneyDecPlaces = 4;
+
     var USDExtensionController;
     var UniswapV2AMMV1;
 
@@ -134,11 +136,10 @@ describe("USDV2", () => {
 
     it("Allowed AMMs", async() => {
         var allowed = await usdController.methods.allowedAMMs().call();
-        assert(JSON.stringify(allowed) === JSON.stringify(allowedAMMS));
+        assert.strictEqual(JSON.stringify(allowed), JSON.stringify(allowedAMMS));
     });
 
     it("Retrieve a uSD amount not greather than 350. Difference will be sent back", async() => {
-        var floatPrecision = 5;
 
         var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
@@ -174,21 +175,21 @@ describe("USDV2", () => {
             ];
         }
 
-        var expectedUsdBalance = utilities.formatMoney(usdBalanceBefore + amountsPlain[0] + amountsPlain[1], floatPrecision);
+        var expectedUsdBalance = utilities.formatMoney(usdBalanceBefore + amountsPlain[0] + amountsPlain[1]);
 
         var exactBalanceOfBefore = await tokens[exactAmountIndex].methods.balanceOf(accounts[0]).call();
         exactBalanceOfBefore = utilities.fromDecimals(exactBalanceOfBefore, await tokens[exactAmountIndex].methods.decimals().call(), true);
         exactBalanceOfBefore = parseFloat(exactBalanceOfBefore);
 
         var exactBalanceOfExpected = exactBalanceOfBefore - amountsPlain[exactAmountIndex];
-        exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected, floatPrecision);
+        exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected);
 
         var otherBalanceOfBefore = await tokens[otherAmountIndex].methods.balanceOf(accounts[0]).call();
         otherBalanceOfBefore = utilities.fromDecimals(otherBalanceOfBefore, await tokens[otherAmountIndex].methods.decimals().call(), true);
         otherBalanceOfBefore = parseFloat(otherBalanceOfBefore);
 
         var otherBalanceOfExpected = otherBalanceOfBefore - amountsPlain[otherAmountIndex];
-        otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected, floatPrecision);
+        otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected);
 
         var values = [
             utilities.toDecimals(maxAmountPerToken, await tokens[0].methods.decimals().call()),
@@ -201,27 +202,25 @@ describe("USDV2", () => {
         await usdController.methods.addLiquidity(tokens.map(it => it.options.address), values, 0, liquidityPoolPosition, liquidityPoolAmount).send(blockchainConnection.getSendingOptions());
 
         var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
-        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)), floatPrecision);
+        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)));
 
         assert(utilities.formatNumber(maxuSDExpected) >= utilities.formatNumber(usdBalanceAfter) && utilities.formatNumber(usdBalanceAfter) >= utilities.formatNumber(expectedUsdBalance));
 
         var exactBalanceOfAfter = await tokens[exactAmountIndex].methods.balanceOf(accounts[0]).call();
         exactBalanceOfAfter = utilities.fromDecimals(exactBalanceOfAfter, await tokens[exactAmountIndex].methods.decimals().call(), true);
         exactBalanceOfAfter = parseFloat(exactBalanceOfAfter);
-        exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter, floatPrecision);
+        exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter);
 
-        assert(exactBalanceOfExpected === exactBalanceOfAfter);
+        assert.strictEqual(exactBalanceOfAfter, exactBalanceOfExpected);
 
         var otherBalanceOfAfter = await tokens[otherAmountIndex].methods.balanceOf(accounts[0]).call();
         otherBalanceOfAfter = utilities.fromDecimals(otherBalanceOfAfter, await tokens[otherAmountIndex].methods.decimals().call(), true);
         otherBalanceOfAfter = parseFloat(otherBalanceOfAfter);
-        otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter, floatPrecision);
+        otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter);
 
-        assert(otherBalanceOfExpected === otherBalanceOfAfter);
+        assert.strictEqual(otherBalanceOfAfter, otherBalanceOfExpected);
     });
     it("Burn a uSD amount not greather than 350. Difference will be sent back", async() => {
-        var floatPrecision = 5;
-
         var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
 
@@ -266,14 +265,14 @@ describe("USDV2", () => {
             exactBalanceOfBefore = parseFloat(exactBalanceOfBefore);
 
             var exactBalanceOfExpected = exactBalanceOfBefore + amountsPlain[exactAmountIndex];
-            exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected, floatPrecision);
+            exactBalanceOfExpected = utilities.formatMoney(exactBalanceOfExpected);
 
             var otherBalanceOfBefore = await tokens[otherAmountIndex].methods.balanceOf(accounts[0]).call();
             otherBalanceOfBefore = utilities.fromDecimals(otherBalanceOfBefore, await tokens[otherAmountIndex].methods.decimals().call(), true);
             otherBalanceOfBefore = parseFloat(otherBalanceOfBefore);
 
             var otherBalanceOfExpected = otherBalanceOfBefore + amountsPlain[otherAmountIndex];
-            otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected, floatPrecision);
+            otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected);
 
             var types = ['uint256', 'uint256', 'uint256'];
             var params = ['0', liquidityPoolPosition, liquidityPoolAmount];
@@ -299,7 +298,7 @@ describe("USDV2", () => {
 
         var expectedUsdBalance = usdBalanceBefore;
         inputs.forEach(it => expectedUsdBalance -= (it.amountsPlain[0] + it.amountsPlain[1]));
-        expectedUsdBalance = utilities.formatMoney(expectedUsdBalance, floatPrecision);
+        expectedUsdBalance = utilities.formatMoney(expectedUsdBalance);
 
         var minUsdExpected = usdBalanceBefore;
         inputs.forEach(it => minUsdExpected -= it.maxuSDExpected);
@@ -313,7 +312,7 @@ describe("USDV2", () => {
         await usdCollection.methods.safeBatchTransferFrom(accounts[0], usdController.options.address, objectIds, values, data).send(blockchainConnection.getSendingOptions());
 
         var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
-        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)), floatPrecision);
+        usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)));
 
         assert(utilities.formatNumber(minUsdExpected) <= utilities.formatNumber(usdBalanceAfter) && utilities.formatNumber(usdBalanceAfter) <= utilities.formatNumber(expectedUsdBalance));
 
@@ -321,16 +320,16 @@ describe("USDV2", () => {
             var exactBalanceOfAfter = await input.tokens[input.exactAmountIndex].methods.balanceOf(accounts[0]).call();
             exactBalanceOfAfter = utilities.fromDecimals(exactBalanceOfAfter, await input.tokens[input.exactAmountIndex].methods.decimals().call(), true);
             exactBalanceOfAfter = parseFloat(exactBalanceOfAfter);
-            exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter, floatPrecision);
+            exactBalanceOfAfter = utilities.formatMoney(exactBalanceOfAfter);
 
-            assert(input.exactBalanceOfExpected === exactBalanceOfAfter);
+            assert.strictEqual(exactBalanceOfAfter, input.exactBalanceOfExpected);
 
             var otherBalanceOfAfter = await input.tokens[input.otherAmountIndex].methods.balanceOf(accounts[0]).call();
             otherBalanceOfAfter = utilities.fromDecimals(otherBalanceOfAfter, await input.tokens[input.otherAmountIndex].methods.decimals().call(), true);
             otherBalanceOfAfter = parseFloat(otherBalanceOfAfter);
-            otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter, floatPrecision);
+            otherBalanceOfAfter = utilities.formatMoney(otherBalanceOfAfter);
 
-            assert(input.otherBalanceOfExpected === otherBalanceOfAfter);
+            assert.strictEqual(otherBalanceOfAfter, input.otherBalanceOfExpected);
         }
     });
 });

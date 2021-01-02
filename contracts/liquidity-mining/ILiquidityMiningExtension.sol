@@ -6,8 +6,7 @@ import "./util/DFOHub.sol";
 
 interface ILiquidityMiningExtension {
 
+    function init(address doubleProxyAddress) external;
     function transferMe(uint256 amount) external returns(bool);
     function backToYou(uint256 amount) external returns(bool);
-    function addLiquidityMiningContract(address liquidityMiningAddress) external;
-    
 } 

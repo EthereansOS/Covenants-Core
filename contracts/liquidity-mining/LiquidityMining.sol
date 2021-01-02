@@ -62,7 +62,7 @@ contract LiquidityMining {
     // factory address that will create clones of this contract
     address public _factory;
     // address of the owner of this contract
-    address private _owner;
+    address public _owner;
     // address of the reward token
     address private _rewardTokenAddress;
     // position token collection
@@ -80,7 +80,7 @@ contract LiquidityMining {
     // mapping containing whether a position has been redeemed or not
     mapping(bytes32 => bool) public _positionRedeemed;
     // pinned setup index
-    uint256 private _pinnedSetupIndex;
+    uint256 public _pinnedSetupIndex;
 
     /** Modifiers. */
 
@@ -160,17 +160,15 @@ contract LiquidityMining {
         require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, stakeData.secondaryTokenAddress), "Invalid secondary token.");
         // retrieve the unique owner
         address uniqueOwner = (stakeData.positionOwner != address(0)) ? stakeData.positionOwner : msg.sender;
-        uint256 poolTokenAmount = stakeData.liquidityPoolTokenAmount;
         LiquidityPoolData memory liquidityPoolData;
+        IAMM ammPlugin = IAMM(chosenSetup.ammPlugin);
         // create tokens array
-        address[] memory tokens = new address[](2);
-        tokens[0] = chosenSetup.mainTokenAddress;
-        tokens[1] = stakeData.secondaryTokenAddress;
+        address[] memory tokens = ammPlugin.tokens(chosenSetup.liquidityPoolTokenAddress);
         if (stakeData.mainTokenAmount > 0 && stakeData.secondaryTokenAmount > 0) {
             // create amounts array
             uint256[] memory amounts = new uint256[](2);
-            amounts[0] = stakeData.mainTokenAmount;
-            amounts[1] = stakeData.secondaryTokenAmount;
+            amounts[0] = tokens[0] == chosenSetup.mainTokenAddress ? stakeData.mainTokenAmount : stakeData.secondaryTokenAmount;
+            amounts[1] = tokens[1] == chosenSetup.mainTokenAddress ? stakeData.mainTokenAmount : stakeData.secondaryTokenAmount;
             // create the liquidity pool data
             liquidityPoolData = LiquidityPoolData(
                 chosenSetup.liquidityPoolTokenAddress,
@@ -181,8 +179,9 @@ contract LiquidityMining {
                 address(this)
             );
             // retrieve the poolTokenAmount from the amm
-            poolTokenAmount = IAMM(chosenSetup.ammPlugin).addLiquidity(liquidityPoolData);
-            liquidityPoolData.liquidityPoolAmount = poolTokenAmount;
+            (liquidityPoolData.liquidityPoolAmount, amounts) = ammPlugin.addLiquidity(liquidityPoolData);
+            stakeData.mainTokenAmount = amounts[tokens[0] == chosenSetup.mainTokenAddress ? 0 : 1];
+            stakeData.secondaryTokenAmount = amounts[tokens[1] == chosenSetup.mainTokenAddress ? 1 : 0];
         } else if (stakeData.liquidityPoolTokenAmount > 0) {
             // open position using liquidity pool token
             _safeTransferFrom(chosenSetup.liquidityPoolTokenAddress, msg.sender, address(this), stakeData.liquidityPoolTokenAmount);
@@ -209,6 +208,7 @@ contract LiquidityMining {
         uint256 lockedRewardPerBlock;
         if (!chosenSetup.free) {
             (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(chosenSetup, stakeData.mainTokenAmount);
+            require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
         }
         // retrieve position for the key
         Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
@@ -220,7 +220,7 @@ contract LiquidityMining {
                     uniqueOwner: objectId == 0 ? uniqueOwner : address(0),
                     setup: chosenSetup,
                     liquidityPoolData: liquidityPoolData,
-                    liquidityPoolTokenAmount: poolTokenAmount,
+                    liquidityPoolTokenAmount: liquidityPoolData.liquidityPoolAmount,
                     reward: reward,
                     lockedRewardPerBlock: lockedRewardPerBlock,
                     creationBlock: block.number
@@ -228,7 +228,7 @@ contract LiquidityMining {
             );
         }
         if (chosenSetup.free) {
-            _rebalanceRewardPerToken(stakeData.setupIndex, poolTokenAmount, false);
+            _rebalanceRewardPerToken(stakeData.setupIndex, liquidityPoolData.liquidityPoolAmount, false);
         } else {
             _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
@@ -431,9 +431,10 @@ contract LiquidityMining {
         if (!isPartial) {
             uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
             // pay the fees!
-            uint256 fee = position.liquidityPoolTokenAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
             if (exitFee > 0) {
+                uint256 fee = position.liquidityPoolData.liquidityPoolAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
                 _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
+                position.liquidityPoolData.liquidityPoolAmount = position.liquidityPoolData.liquidityPoolAmount.sub(fee);
             }
             // check if the user wants to unwrap its pair or not
             if (unwrapPair) {
@@ -445,7 +446,7 @@ contract LiquidityMining {
                 require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
             } else {
                 // send back the liquidity pool token amount without the fee
-                _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolTokenAmount.sub(fee));
+                _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolData.liquidityPoolAmount);
             }
             // rebalance the setup if not free
             if (!_farmingSetups[setupIndex].free) {

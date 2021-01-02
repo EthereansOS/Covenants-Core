@@ -66,13 +66,12 @@ module.exports = async function compile(file, contractName) {
             if (error) {
                 return ko(error);
             }
-            if (stderr) {
-                if(stderr.indexOf('Warning: ') !== 0) {
-                    return ko(stderr);
-                }
-                console.log(stderr);
+            if (stderr && stderr.toLowerCase().indexOf('warning: ') === -1) {
+                return ko(stderr);
             }
-            return ok(cleanOutput(stdout)[location][contractName]);
+            var output = cleanOutput(stdout)[location][contractName];
+            stderr && (output.warning = stderr);
+            return ok(output);
         });
     });
 };

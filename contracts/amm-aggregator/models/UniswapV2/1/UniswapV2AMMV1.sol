@@ -30,25 +30,28 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         return ("UniswapV2AMM", 1);
     }
 
-    function addLiquidity(LiquidityPoolData memory data) public payable virtual override returns(uint256 amount) {
+    function addLiquidity(LiquidityPoolData memory data) public payable virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
         _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, true);
-        amount = _addLiquidityWork(data);
+        (liquidityPoolAmount, tokenAmounts) = _addLiquidityWork(data);
         _flushBack(_sender(data), data.tokens, data.tokens.length);
     }
 
-    function addLiquidityBatch(LiquidityPoolData[] memory data) public payable virtual override returns(uint256[] memory amounts) {
+    function addLiquidityBatch(LiquidityPoolData[] memory data) public payable virtual override returns(uint256[] memory amounts, uint256[][] memory tokenAmounts) {
         (address[] memory tokens, uint256 tokensLength) = _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, true);
         amounts = new uint256[](data.length);
+        tokenAmounts = new uint256[][](data.length);
         for(uint256 i = 0; i < data.length; i++) {
-            amounts[i] = _addLiquidityWork(data[i]);
+            (amounts[i], tokenAmounts[i]) = _addLiquidityWork(data[i]);
         }
         _flushBack(_sender(data[0]), tokens, tokensLength);
     }
 
-    function _addLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256 amount) {
+    function _addLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
         require(data.receiver != address(0), "Receiver cannot be void address");
+        uint256 tokenAAmount;
+        uint256 tokenBAmount;
         if(data.tokens[0] != address(0) && data.tokens[1] != address(0)) {
-            (,,amount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidity(
+            (tokenAAmount, tokenBAmount, liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidity(
                 data.tokens[0],
                 data.tokens[1],
                 data.amounts[0],
@@ -62,7 +65,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
             address token = data.tokens[0] != address(0) ? data.tokens[0] : data.tokens[1];
             uint256 amountTokenDesired = data.tokens[0] != address(0) ? data.amounts[0] : data.amounts[1];
             uint256 amountETHDesired = data.tokens[0] == address(0) ? data.amounts[0] : data.amounts[1];
-            (,,amount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
+            (tokenAAmount, tokenBAmount, liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
                 1,
@@ -71,6 +74,9 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
                 block.timestamp + 10000
             );
         }
+        tokenAmounts = new uint256[](2);
+        tokenAmounts[0] = tokenAAmount;
+        tokenAmounts[1] = tokenBAmount;
     }
 
     function removeLiquidity(LiquidityPoolData memory data) public virtual override returns(uint256[] memory amounts) {
@@ -139,6 +145,10 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
         tkns[0] = pair.token0();
         tkns[1] = pair.token1();
+    }
+
+    function liquidityPool(address[] memory tokens) public override view returns(address) {
+        return IUniswapV2Factory(_factoryAddress).getPair(tokens[0] == address(0) ? _wethAddress : tokens[0], tokens[1] == address(0) ? _wethAddress : tokens[1]);
     }
 
     function amounts(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {

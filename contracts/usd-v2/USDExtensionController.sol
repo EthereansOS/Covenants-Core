@@ -318,9 +318,9 @@ contract USDExtensionController is ERC1155Receiver {
             }
         }
         if(ethInvolved) {
-            toMint = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
+            (toMint,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
         } else {
-            toMint = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
+            (toMint,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
         }
         USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
     }
