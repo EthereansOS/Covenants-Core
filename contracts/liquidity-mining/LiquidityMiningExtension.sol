@@ -56,7 +56,12 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         _doubleProxy = newDoubleProxy;
     }
 
+    /** @dev this function calls the liquidity mining contract with the given address and sets the given farming setups.
+      * @param farmingSetups array containing all the farming setups.
+      * @param liquidityMiningContract address of the liquidity mining contract.
+     */
     function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContract) public override onlyDFO {
+        require(_liquidityMiningContracts[liquidityMiningContract], "Invalid liquidity mining contract.");
         ILiquidityMining(liquidityMiningContract).setFarmingSetups(farmingSetups);
     }
 
@@ -70,6 +75,9 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** PRIVATE METHODS */
 
+    /** @dev this function returns the address of the functionality with the FUNCTIONALITY_NAME.
+      * @return functionalityAddress functionality FUNCTIONALITY_NAME address.
+     */
     function _getFunctionalityAddress() private view returns(address functionalityAddress) {
         (functionalityAddress,,,,) = IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).getFunctionalityData(FUNCTIONALITY_NAME);
     }
@@ -89,19 +97,24 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         return IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender);
     }
 
+    /** this function safely approves the transfer of the ERC20 token with the given address.
+      * @param erc20TokenAddress erc20 token address.
+      * @param to address to.
+      * @param value amount to transfer.
+     */
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
+    }
+
     /** @dev this function safely transfers the given ERC20 value from an address to another.
       * @param erc20TokenAddress erc20 token address.
       * @param from address from.
       * @param to address to.
       * @param value amount to transfer.
      */
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
-    }
-
-    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
     }
 }
