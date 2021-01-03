@@ -37,7 +37,6 @@ describe("LiquidityMining", () => {
 
     before(async () => {
         await blockchainConnection.init;
-
         LiquidityMining = await compile('liquidity-mining/LiquidityMining');
         LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
         LiquidityMiningExtension = await compile('liquidity-mining/LiquidityMiningExtension');
@@ -63,8 +62,8 @@ describe("LiquidityMining", () => {
 
         await initActor("Alice", accounts[1], 0, 30, 1, false, 0.09, 0.247, 0.09, 0.003);
         await initActor("Bob", accounts[2], 15, 50, 2, true, 3.15, 0.177, 2.45, 0.07);
-        await initActor("Charlie", accounts[3], 20, 200, 0, false, 30.15, 0.177, 18.3075);
-        await initActor("Donald", accounts[4], 40, 201, 0, true, 0.02, 0.180);
+        await initActor("Charlie", accounts[3], 20, 200, 0, false, 30, 0.177, 18.3075);
+        await initActor("Donald", accounts[4], 40, 201, 0, true, 50, 0.180);
 
     });
 
@@ -98,6 +97,21 @@ describe("LiquidityMining", () => {
         var value = utilities.toDecimals(amount.toString(), '18');
         await uniswapV2Router.methods.swapExactETHForTokens("1", path, (from && (from.from || from)) || accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({from: (from && (from.from || from)) || accounts[0], value}));
     };
+
+    async function logData(blockNumber) {
+        const setupUpdateBlocks = [];
+        for (let i = 0; i < 10000; i++) {
+            try {
+                const res = await liquidityMiningContract.methods._setupUpdateBlocks(0, i).call();
+                setupUpdateBlocks.push(res);
+            } catch (e) {
+                break;
+            }
+        }
+        console.log('setup update blocks: ', setupUpdateBlocks);
+        const rewardPerToken = await liquidityMiningContract.methods._rewardPerTokenPerSetupPerBlock(0, blockNumber).call();
+        console.log(`reward per token at block ${blockNumber} is ${rewardPerToken}`);
+    }
 
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
@@ -316,6 +330,7 @@ describe("LiquidityMining", () => {
             mintPositionToken: false,
         };
         var result = await liquidityMiningContract.methods.stake(stake).send(blockchainConnection.getSendingOptions(from));
+        await logData(await web3.eth.getBlockNumber());
         var { positionKey } = result.events.NewPosition.returnValues;
         var position = await liquidityMiningContract.methods.getPosition(positionKey).call();
         actor.positionKey = positionKey;
@@ -331,7 +346,7 @@ describe("LiquidityMining", () => {
         var pinnedFreeRewardPerBlock = utilities.fromDecimals(pinnedFreeSetup.rewardPerBlock, await rewardToken.methods.decimals().call());
         assert.strictEqual(pinnedFreeRewardPerBlock, expectedPinnedFreeRewardPerBlock);
 
-        console.log(actor.name, actor.enterBlock - zeroBlock, "Stake", pinnedFreeRewardPerBlock);
+        console.log(actor.name, actor.enterBlock - zeroBlock, "stake - ", pinnedFreeRewardPerBlock, "free rpb - ", position.liquidityPoolTokenAmount, " lpt amount");
 
         return position;
     }
@@ -399,7 +414,8 @@ describe("LiquidityMining", () => {
         var mainBalance = utilities.fromDecimals(await mainToken.methods.balanceOf(actor.address).call(), await mainToken.methods.decimals().call());
         var secondaryBalance = utilities.fromDecimals(await secondaryToken.methods.balanceOf(actor.address).call(), await secondaryToken.methods.decimals().call());
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
-
+        await logData(actor.exitBlock);
+        console.log(actor.name, rewardBalance, expectedRewardBalance);
         assert.strictEqual(rewardBalance, expectedRewardBalance);
 
         if(actor.unwrap) {
@@ -410,7 +426,7 @@ describe("LiquidityMining", () => {
         }
     }
     it("should allow alice to unlock without unwrapping the pair", async () => {
-        return withdrawStakingPosition(actors.Alice);
+        return await withdrawStakingPosition(actors.Alice);
     });
     it("donald should set a new staking position", async () => {
         await createNewStakingPosition(actors.Donald);
@@ -422,23 +438,10 @@ describe("LiquidityMining", () => {
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("invalid position"), -1);
         }
     });
-    it("should allow bob to unlock unwrapping the pair", () => {
-        return withdrawStakingPosition(actors.Bob);
+    it("should allow bob to unlock unwrapping the pair", async () => {
+        return await withdrawStakingPosition(actors.Bob);
     });
-    /*it("OLD - should allow charlie to unlock its position without unwrapping the pair", async () => {
-        var actor = actors.Charlie;
-        await blockchainConnection.jumpToBlock(actor.exitBlock);
-        var res = await rewardToken.methods.balanceOf(actor.address).call();
-        console.log(`charlie reward balance: ${res}`);
-        var result = await liquidityMiningContract.methods.unlock(0, actor.setupIndex, actor.enterBlock, false).send(actor.from);
-        res = await rewardToken.methods.balanceOf(actor.address).call();
-        console.log(`charlie updated reward balance: ${res}`);
-        console.log(`charlie end reward per token: ${await liquidityMiningContract.methods.getRewardPerToken(0, result.blockNumber).call()}`);
-        var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
-        console.log(`charlie end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
-        assert.notStrictEqual(result, null);
-    });*/
-    it("should allow charlie to unlock its position without unwrapping the pair", () => {
-        return withdrawStakingPosition(actors.Charlie);
+    it("should allow charlie to unlock its position without unwrapping the pair", async () => {
+        return await withdrawStakingPosition(actors.Charlie);
     });
 });

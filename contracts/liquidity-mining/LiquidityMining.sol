@@ -449,8 +449,8 @@ contract LiquidityMining {
       */
     function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
         FarmingSetup storage setup = _farmingSetups[_pinnedSetupIndex];
-        fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
         _rebalanceRewardPerToken(_pinnedSetupIndex, 0, fromExit);
+        fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
     }
 
     /** @dev function used to rebalance the reward per token in a free farming setup.

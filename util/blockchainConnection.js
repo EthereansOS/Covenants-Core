@@ -7,7 +7,7 @@ module.exports = {
             var options = {
                 gasLimit: 7900000,
                 db: memdown(),
-                total_accounts: 1000,
+                total_accounts: 10,
                 default_balance_ether: 999999999999
             };
             if (process.env.blockchain_connection_string) {
@@ -18,6 +18,7 @@ module.exports = {
             global.accounts = await (global.web3 = new Web3(global.blockchainProvider = require("ganache-cli").provider(options), null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
             return ok(global.web3);
         } catch (e) {
+            console.log(e);
             return ko(e);
         }
     }),
