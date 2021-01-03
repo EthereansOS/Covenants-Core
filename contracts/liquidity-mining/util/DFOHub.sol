@@ -14,6 +14,7 @@ interface IMVDProxy {
 }
 
 interface IMVDFunctionalitiesManager {
+    function getFunctionalityData(string calldata codeName) external view returns(address, uint256, string memory, address, uint256);
     function isAuthorizedFunctionality(address functionality) external view returns(bool);
 }
 

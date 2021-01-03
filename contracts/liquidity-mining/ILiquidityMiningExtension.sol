@@ -3,10 +3,12 @@ pragma solidity ^0.7.0;
 pragma experimental ABIEncoderV2;
 
 import "./util/DFOHub.sol";
+import "./FarmingSetup.sol";
 
 interface ILiquidityMiningExtension {
 
     function init(address doubleProxyAddress) external;
-    function transferMe(uint256 amount) external returns(bool);
-    function backToYou(uint256 amount) external returns(bool);
+    function transferTo(uint256 amount, address recipient) external;
+    function backToYou(uint256 amount) external;
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContractAddress) external;
 } 

@@ -70,6 +70,10 @@ module.exports = async function compile(file, contractName) {
                 return ko(stderr);
             }
             var output = cleanOutput(stdout)[location][contractName];
+            if(!output) {
+                stderr && console.log(stderr);
+                return ko(new Error("No output"));
+            }
             stderr && (output.warning = stderr);
             return ok(output);
         });

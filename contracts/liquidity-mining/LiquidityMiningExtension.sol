@@ -6,14 +6,16 @@ import "./ILiquidityMiningExtension.sol";
 import "./ILiquidityMining.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
+import "./FarmingSetup.sol";
 
 contract LiquidityMiningExtension is ILiquidityMiningExtension {
+
+    string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
 
     // double proxy address of the linked DFO
     address private _doubleProxy;
     // mapping that contains all the liquidity mining contracts linked to this extension
     mapping(address => bool) private _liquidityMiningContracts;
-
 
     /** MODIFIERS */
 
@@ -39,16 +41,12 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
-      * @return true if everything was ok, false otherwise.
      */
-    function backToYou(uint256 amount) override public onlyLiquidityMining returns(bool) {
+    function backToYou(uint256 amount) override public onlyLiquidityMining {
         (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
-        if (byMint) {
-            return IERC20Mintable(rewardTokenAddress).burn(msg.sender, amount);
-        } else {
-            _safeTransferFrom(rewardTokenAddress, msg.sender, _getDFOWallet(), amount);
-            return true;
-        }
+        _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
+        _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
     }
 
     /** @dev allows the DFO to update the double proxy address.
@@ -58,21 +56,23 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         _doubleProxy = newDoubleProxy;
     }
 
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContract) public override onlyDFO {
+        ILiquidityMining(liquidityMiningContract).setFarmingSetups(farmingSetups);
+    }
+
     /** @dev transfers the input amount to the caller liquidity mining contract.
       * @param amount amount of erc20 to transfer or mint.
-      * @return true if everything was ok, false otherwise.
      */
-    function transferMe(uint256 amount) override public onlyLiquidityMining returns(bool) {
+    function transferTo(uint256 amount, address recipient) override public onlyLiquidityMining {
         (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
-        if (byMint) {
-            return IERC20Mintable(rewardTokenAddress).mint(msg.sender, amount);
-        } else {
-            _safeTransferFrom(rewardTokenAddress, _getDFOWallet(), msg.sender, amount);
-            return true;
-        }
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, rewardTokenAddress, recipient, amount, byMint));
     }
 
     /** PRIVATE METHODS */
+
+    function _getFunctionalityAddress() private view returns(address functionalityAddress) {
+        (functionalityAddress,,,,) = IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).getFunctionalityData(FUNCTIONALITY_NAME);
+    }
 
     /** @dev this function returns the address of the wallet of the linked DFO.
       * @return linked DFO wallet address.
@@ -98,5 +98,10 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
+    }
+
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
     }
 }

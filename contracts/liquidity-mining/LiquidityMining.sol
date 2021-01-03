@@ -11,6 +11,8 @@ import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/Math.sol";
 import "./util/SafeMath.sol";
+import "./FarmingSetup.sol";
+import "./ILiquidityMiningExtension.sol";
 
 contract LiquidityMining {
     // SafeMath library
@@ -20,21 +22,6 @@ contract LiquidityMining {
     event NewPosition(bytes32 positionKey);
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningInitialized(address indexed contractAddress, address indexed rewardTokenAddress);
-
-    // farming setup struct
-    struct FarmingSetup {
-        address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-        address liquidityPoolTokenAddress; // address of the liquidity pool token
-        uint256 startBlock; // farming setup start block (used only if free is false).
-        uint256 endBlock; // farming setup end block (used only if free is false).
-        uint256 rewardPerBlock; // farming setup reward per single block.
-        uint256 maximumLiquidity; // maximum total liquidity (used only if free is false).
-        uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
-        uint256 lastBlockUpdate; // number of the block where an update was triggered.
-        address mainTokenAddress; // eg. buidl address.
-        address[] secondaryTokenAddresses; // eg. [address(0), dai address].
-        bool free; // if the setup is a free farming setup or a locked one.
-    }
 
     // position struct
     struct Position {
@@ -209,6 +196,7 @@ contract LiquidityMining {
         if (!chosenSetup.free) {
             (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(chosenSetup, stakeData.mainTokenAmount);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
+            ILiquidityMiningExtension(_owner).transferTo(reward, address(this));
         }
         // retrieve position for the key
         Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
@@ -422,10 +410,10 @@ contract LiquidityMining {
         }
         // transfer the reward
         if (reward > 0) {
-            if (_byMint) {
-                IERC20Mintable(_rewardTokenAddress).mint(position.uniqueOwner, reward);
+            if(!position.setup.free) {
+                _safeTransfer(_rewardTokenAddress, position.uniqueOwner, reward);
             } else {
-                _safeTransferFrom(_rewardTokenAddress, _owner, position.uniqueOwner, reward);
+                ILiquidityMiningExtension(_owner).transferTo(reward, position.uniqueOwner);
             }
         }
         if (!isPartial) {

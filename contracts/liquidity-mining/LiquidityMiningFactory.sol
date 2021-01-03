@@ -1,12 +1,14 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
 
+import "./util/DFOHub.sol";
+
 contract LiquidityMiningFactory {
 
     // liquidity mining contract implementation address
     address public liquidityMiningImplementationAddress;
-    // factory owner address
-    address private factoryOwner;
+    // double proxy address of the linked DFO
+    address private _doubleProxy;
     // owner wallet (UniFi)
     address public _wallet;
     // owner wallet exit fee
@@ -21,24 +23,9 @@ contract LiquidityMiningFactory {
     // event that tracks wallet changes
     event WalletChanged(address oldAddress, address newAddress);
 
-    /** @dev creates a new liquidity mining factory instance.
-      * @param _factoryOwner owner of this factory contract (or msg.sender if address(0) is provided).
-      * @param _liquidityMiningImplementationAddress liquidity mining implementation address.
-     */
-    constructor(address _factoryOwner, address _liquidityMiningImplementationAddress) {
-        if (_factoryOwner == address(0)) {
-            _factoryOwner = msg.sender;
-        }
-        factoryOwner = _factoryOwner;
+    constructor(address doubleProxy, address _liquidityMiningImplementationAddress) {
+        _doubleProxy = doubleProxy;
         liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress;
-    }
-
-    /** MODIFIERS */
-
-    /** @dev onlyOwner modifier used to check for unauthorized changes. */
-    modifier onlyOwner {
-        require(msg.sender == factoryOwner, "Unauthorized.");
-        _;
     }
 
     /** PUBLIC METHODS */
@@ -56,7 +43,7 @@ contract LiquidityMiningFactory {
     /** @dev allows the owner to update the exit fee.
       * @param newExitFee new exit fee value.
       */
-    function updateExitFee(uint256 newExitFee) public onlyOwner {
+    function updateExitFee(uint256 newExitFee) public onlyDFO {
         emit ExitFeeChanged(_exitFee, newExitFee);
         _exitFee = newExitFee;
     }
@@ -64,7 +51,7 @@ contract LiquidityMiningFactory {
     /** @dev allows the factory owner to update the logic contract address.
       * @param _liquidityMiningImplementationAddress new liquidity mining implementation address.
      */
-    function updateLogicAddress(address _liquidityMiningImplementationAddress) public onlyOwner {
+    function updateLogicAddress(address _liquidityMiningImplementationAddress) public onlyDFO {
         emit LiquidityMiningLogicChanged(liquidityMiningImplementationAddress, _liquidityMiningImplementationAddress);
         liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress;
     }
@@ -72,7 +59,7 @@ contract LiquidityMiningFactory {
     /** @dev allows the owner to update the wallet.
       * @param newWallet new wallet address.
       */
-    function updateWallet(address newWallet) public onlyOwner {
+    function updateWallet(address newWallet) public onlyDFO {
         emit WalletChanged(_wallet, newWallet);
         _wallet = newWallet;
     }
@@ -98,5 +85,35 @@ contract LiquidityMiningFactory {
                     invalid()
                 }
         }
+    }
+
+    /** @dev onlyDFO modifier used to check for unauthorized accesses. */
+    modifier onlyDFO() {
+        require(_isFromDFO(msg.sender), "Unauthorized.");
+        _;
+    }
+
+    /** @dev allows the DFO to update the double proxy address.
+      * @param newDoubleProxy new double proxy address.
+     */
+    function setDoubleProxy(address newDoubleProxy) public onlyDFO {
+        _doubleProxy = newDoubleProxy;
+    }
+
+    /** PRIVATE METHODS */
+
+    /** @dev this function returns the address of the wallet of the linked DFO.
+      * @return linked DFO wallet address.
+     */
+    function _getDFOWallet() private view returns(address) {
+        return IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress();
+    }
+
+    /** @dev this function returns true if the sender is an authorized DFO functionality, false otherwise.
+      * @param sender address of the caller.
+      * @return true if the call is from a DFO, false otherwise.
+     */
+    function _isFromDFO(address sender) private view returns(bool) {
+        return IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender);
     }
 }

@@ -4,6 +4,8 @@ var context = require("../util/context.json");
 var compile = require("../util/compile");
 var blockchainConnection = require("../util/blockchainConnection");
 var dfoManager = require('../util/dfo');
+var path = require('path');
+var fs = require('fs');
 
 global.formatMoneyDecPlaces = 4;
 
@@ -25,7 +27,7 @@ var dfo;
 var liquidityMiningContract;
 var liquidityPool;
 var uniswapAMM;
-var ethToSpend = 500;
+var ethToSpend = 600;
 
 var actors = {};
 
@@ -64,8 +66,6 @@ describe("LiquidityMining", () => {
         await initActor("Charlie", accounts[3], 20, 200, 0, false, 30.15, 0.177, 18.3075);
         await initActor("Donald", accounts[4], 40, 201, 0, true, 0.02, 0.180);
 
-        var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
-        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [accounts[0], liquidityMiningModel.options.address]}).send(blockchainConnection.getSendingOptions());
     });
 
     async function initActor(name, address, enterBlock, exitBlock, setupIndex, unwrap, mainTokenAmountPlain, expectedPinnedFreeRewardPerBlock, expectedReward, expectedRewardPerBlock) {
@@ -101,9 +101,18 @@ describe("LiquidityMining", () => {
 
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
+        dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
+
+        await rewardToken.methods.transfer(dfo.mvdWalletAddress, await rewardToken.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
+
+        var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
+        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address]}).send(blockchainConnection.getSendingOptions());
+
         liquidityMiningExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
 
-        dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
+        await dfoManager.finalizeProposal(dfo, proposal);
 
         var params = [
             "address",
@@ -132,38 +141,7 @@ describe("LiquidityMining", () => {
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
 
-        assert.strictEqual(liquidityMiningExtension.options.address, await liquidityMiningContract.methods._owner().call());
-    });
-    it("New LiquidityMining Contract by Factory", async () => {
-
-        var params = [
-            "address",
-            "bytes",
-            "address",
-            "string",
-            "string",
-            "string",
-            "address",
-            "bool"
-        ];
-        var values = [
-            accounts[0],
-            "0x",
-            ethItemOrchestrator.options.address,
-            "LiquidityMiningToken",
-            "LMT",
-            "google.com",
-            rewardToken.options.address,
-            false
-        ];
-        var payload = web3.utils.sha3(`initialize(${params.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(params, values).substring(2));
-        var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
-        deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-        var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address)"))[0].topics[2]);
-        liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
-        assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
-
-        await rewardToken.methods.approve(liquidityMiningContractAddress, await rewardToken.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+        assert.strictEqual(await liquidityMiningContract.methods._owner().call(), liquidityMiningExtension.options.address);
     });
     it("Previously created LiquidityMining Contract cannot be initialized more than a time", async() => {
         try {
@@ -180,24 +158,25 @@ describe("LiquidityMining", () => {
         var positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
         assert.notStrictEqual(positionTokenCollection, utilities.voidEthereumAddress);
     });
-    /*
     it("Exit fee is 0", async() => {
-        var exitFee = await liquidityMiningContract.methods._exitFee().call();
+        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
         assert.strictEqual(parseInt(exitFee), 0);
     });
-    it("Account 0 can update the exit fee to 1", async() => {
-        await liquidityMiningContract.methods.setExitFee(1).send(blockchainConnection.getSendingOptions());
-        var exitFee = await liquidityMiningContract.methods._exitFee().call();
-        assert.strictEqual(parseInt(exitFee), 1);
+    it("DFO can update the exit fee to 1", async() => {
+        var exitFeeExpected = 1;
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFeeProposal.sol'), 'UTF-8').format(liquidityMiningFactory.options.address, exitFeeExpected);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
+        assert.strictEqual(parseInt(exitFee), exitFeeExpected);
     });
     it("Another account cannot update the exit fee", async() => {
         try {
-            await liquidityMiningContract.methods.setExitFee(0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
+            await liquidityMiningFactory.methods.updateExitFee(0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
         } catch (e) {
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("unauthorized"), -1);
         }
     });
-    */
     it("should not set the farming setups", async() => {
         try {
             var setups = [{
@@ -220,7 +199,7 @@ describe("LiquidityMining", () => {
         }
     });
     it("should set the farming setups", async() => {
-        zeroBlock = (await web3.eth.getBlockNumber()) + 2;
+        zeroBlock = (await web3.eth.getBlockNumber()) + 4;
 
         Object.values(actors).forEach(it => {
             it.enterBlock += zeroBlock;
@@ -280,7 +259,13 @@ describe("LiquidityMining", () => {
             secondaryTokenAddresses: [secondaryToken.options.address],
             free: true
         };
-        await liquidityMiningContract.methods.setFarmingSetups([pinnedFreeSetup, longTerm1Setup, longTerm2Setup]).send(blockchainConnection.getSendingOptions());
+
+        var farmingSetups = [pinnedFreeSetup, longTerm1Setup, longTerm2Setup];
+        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free});`).join('\n        ');
+
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
     });
     async function createNewStakingPosition(actor) {
 
@@ -440,7 +425,7 @@ describe("LiquidityMining", () => {
     it("should allow bob to unlock unwrapping the pair", () => {
         return withdrawStakingPosition(actors.Bob);
     });
-    it("OLD - should allow charlie to unlock its position without unwrapping the pair", async () => {
+    /*it("OLD - should allow charlie to unlock its position without unwrapping the pair", async () => {
         var actor = actors.Charlie;
         await blockchainConnection.jumpToBlock(actor.exitBlock);
         var res = await rewardToken.methods.balanceOf(actor.address).call();
@@ -452,7 +437,7 @@ describe("LiquidityMining", () => {
         var freeSetup = await liquidityMiningContract.methods._farmingSetups(0).call();
         console.log(`charlie end free reward per block ${freeSetup.rewardPerBlock} and supply ${freeSetup.totalSupply}`);
         assert.notStrictEqual(result, null);
-    });
+    });*/
     it("should allow charlie to unlock its position without unwrapping the pair", () => {
         return withdrawStakingPosition(actors.Charlie);
     });

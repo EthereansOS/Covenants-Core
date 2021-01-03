@@ -82,8 +82,8 @@ async function createProposal(dfo, codeName, submitable, code, methodSignature, 
         ""
     ];
     args && arguments.push(...args);
-    var contract = new web3.eth.Contract(compiled.abi).deploy({data : compiled.bin, arguments}).send(blockchainConnection.getSendingOptions());
-    var response = await dfo.methods.newProposal(
+    var contract = await new web3.eth.Contract(compiled.abi).deploy({data : compiled.bin, arguments}).send(blockchainConnection.getSendingOptions());
+    var response = await dfo.proxy.methods.newProposal(
         codeName,
         false,
         utilities.voidEthereumAddress,
@@ -96,6 +96,7 @@ async function createProposal(dfo, codeName, submitable, code, methodSignature, 
         needsSender || false,
         replaces || ""
     ).send(blockchainConnection.getSendingOptions());
+    response = await web3.eth.getTransactionReceipt(response.transactionHash);
     var proposalAddress = web3.eth.abi.decodeParameter("address", response.logs.filter(it => it.topics[0] === web3.utils.sha3("Proposal(address)"))[0].data);
     var proposal = new web3.eth.Contract(context.dfoProposalABI, proposalAddress);
     return proposal;

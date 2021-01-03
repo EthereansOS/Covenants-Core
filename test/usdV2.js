@@ -6,12 +6,15 @@ var blockchainConnection = require("../util/blockchainConnection");
 var dfoManager = require("../util/dfo");
 var ethers = require('ethers');
 var abi = new ethers.utils.AbiCoder();
+var path = require('path');
+var fs = require('fs');
 
 describe("USDV2", () => {
 
     global.formatMoneyDecPlaces = 4;
 
     var USDExtensionController;
+    var USDExtension;
     var UniswapV2AMMV1;
 
     var ethItemOrchestrator;
@@ -37,6 +40,7 @@ describe("USDV2", () => {
     before(async() => {
         await blockchainConnection.init;
 
+        USDExtension = await compile('usd-v2/USDExtension');
         USDExtensionController = await compile('usd-v2/USDExtensionController');
         UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
 
@@ -112,6 +116,9 @@ describe("USDV2", () => {
         usdObjectId = data[1];
         data = await usdController.methods.usdCreditInfo().call();
         usdCreditObjectId = data[1];
+        uSDExtension = new web3.eth.Contract(USDExtension.abi, await usdController.methods.extension().call());
+
+        assert.strictEqual(await uSDExtension.methods.controller().call(), usdController.options.address);
     });
     it("Cannot initialize it again", async() => {
         try {
@@ -331,5 +338,37 @@ describe("USDV2", () => {
 
             assert.strictEqual(otherBalanceOfAfter, input.otherBalanceOfExpected);
         }
+    });
+
+    it("Nobody but DFO can change Controller", async () => {
+        var arguments = [
+            dfo.doubleProxyAddress,
+            ["15", "1000"],
+            [accounts[0]],
+            await encodeAMMV2Params()
+        ];
+        var newUsdController = await new web3.eth.Contract(USDExtensionController.abi).deploy({ data: USDExtensionController.bin, arguments }).send(blockchainConnection.getSendingOptions());
+        await newUsdController.methods.init(uSDExtension.options.address, usdObjectId, usdCreditObjectId).send(blockchainConnection.getSendingOptions());
+        var usdInfo = await newUsdController.methods.usdInfo().call();
+        assert.strictEqual(usdInfo[0], usdCollection.options.address);
+        assert.strictEqual(usdInfo[1], usdObjectId);
+
+        var usdCreditInfo = await newUsdController.methods.usdCreditInfo().call();
+        assert.strictEqual(usdCreditInfo[0], usdCollection.options.address);
+        assert.strictEqual(usdCreditInfo[1], usdCreditObjectId);
+
+        try {
+            await usdController.methods.setController(newUsdController.options.address).send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert((e.message || e).toLowerCase().indexOf("unauthorized action") !== -1);
+        }
+
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/USDV2SetControllerProposal.sol'), 'UTF-8').format(usdController.options.address, newUsdController.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        assert.strictEqual(await uSDExtension.methods.controller().call(), newUsdController.options.address);
+
+        usdController = newUsdController;
     });
 });
