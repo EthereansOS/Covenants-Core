@@ -274,7 +274,7 @@ contract USDExtensionController is ERC1155Receiver {
             uint256 numerator = _rebalanceByCreditMultipliers[2 + (2 * i)];
             uint256 denominator = _rebalanceByCreditMultipliers[3 + (2 * i)];
             uint256 value = (credit * numerator) / denominator;
-            INativeV1(_collection).safeTransferFrom(address(this), _creditReceivers[i], _usdObjectId, value, "");
+            IERC20(_usdInteroperableInterfaceAddress).transfer(_creditReceivers[i], value);
         }
     }
 
