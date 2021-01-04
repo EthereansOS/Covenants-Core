@@ -210,7 +210,7 @@ describe("LiquidityMining", () => {
                 free: false,
                 renewable: false,
             }];
-            await liquidityMiningContract.methods.setFarmingSetups(setups).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
+            await liquidityMiningContract.methods.setFarmingSetups(setups, false, 0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
             throw "Farming Setup done";
         } catch (error) {
             assert(error, "Only the owner can set the farming setups.");

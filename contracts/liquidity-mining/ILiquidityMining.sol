@@ -7,5 +7,5 @@ import "./FarmingSetup.sol";
 interface ILiquidityMining {
 
     function getRewardTokenData() external view returns(address, bool);
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups) external;
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, bool setPinned, uint256 pinnedIndex) external;
 }

@@ -25,7 +25,7 @@ contract ProposalCode {
         secondaryTokenAddresses[0] = {0};
         FarmingSetup[] memory farmingSetups = new FarmingSetup[]({1});
         {2}
-        ILiquidityMiningExtension({3}).setFarmingSetups(farmingSetups, {4});
+        ILiquidityMiningExtension({3}).setFarmingSetups(farmingSetups, {4}, false, 0);
     }
 }
 

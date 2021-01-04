@@ -124,10 +124,16 @@ contract LiquidityMining {
 
     /** @dev allows the owner to set the farming setups.
       * @param farmingSetups farming setups to set.
+      * @param setPinned if we're updating the pinned setup or not.
+      * @param pinnedIndex new pinned setup index.
       */
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups) public onlyOwner {
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, bool setPinned, uint256 pinnedIndex) public onlyOwner {
+        // update the pinned setup
+        if (setPinned) {
+            setPinnedSetup(pinnedIndex);
+        }
         for (uint256 i = 0; i < farmingSetups.length; i++) {
-            _farmingSetups.push(farmingSetups[i]);
+            _farmingSetups[i] = farmingSetups[i];
             emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
         }
     }
@@ -482,12 +488,18 @@ contract LiquidityMining {
         }
         // rebalance the setup if not free
         if (!_farmingSetups[setupIndex].free && !_finishedLockedSetups[setupIndex]) {
-            _finishedLockedSetups[setupIndex] = !_farmingSetups[setupIndex].renewable;
-            _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
-            if (_farmingSetups[setupIndex].renewable) {
-                _renewSetup(setupIndex);
+            // check if the setup has been updated or not
+            if (position.setup.endBlock == _farmingSetups[setupIndex].endBlock) {
+                // the locked setup must be considered finished only if it's not renewable
+                _finishedLockedSetups[setupIndex] = !_farmingSetups[setupIndex].renewable;
+                _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+                if (_farmingSetups[setupIndex].renewable) {
+                    // renew the setup if renewable
+                    _renewSetup(setupIndex);
+                }
             }
         }
+        // delete the position after the withdraw
         _positions[positionKey] = _positions[0x0];
     }
 
