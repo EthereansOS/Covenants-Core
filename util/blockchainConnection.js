@@ -5,7 +5,7 @@ module.exports = {
         try {
             (require('dotenv')).config();
             var options = {
-                gasLimit: 7900000,
+                gasLimit: 10000000,
                 db: memdown(),
                 total_accounts: 10,
                 default_balance_ether: 999999999999

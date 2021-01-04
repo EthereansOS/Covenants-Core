@@ -70,6 +70,8 @@ contract LiquidityMining {
     mapping(uint256 => uint256[]) public _setupUpdateBlocks;
     // mapping containing whether a position has been redeemed or not
     mapping(bytes32 => bool) public _positionRedeemed;
+    // mapping containing whether a position has been partially reedemed or not
+    mapping(bytes32 => uint256) public _partiallyRedeemed;
     // mapping containing whether a locked setup has ended or not and has been used for the rebalance
     mapping(uint256 => bool) public _finishedLockedSetups;
     // pinned setup index
@@ -244,25 +246,11 @@ contract LiquidityMining {
         if (chosenSetup.free) {
             _rebalanceRewardPerToken(stakeData.setupIndex, liquidityPoolData.liquidityPoolAmount, false);
         } else {
+            chosenSetup.currentRewardPerBlock += lockedRewardPerBlock;
             _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
         emit NewPosition(objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)), uniqueOwner);
         return objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number));
-    }
-
-    /** @dev this function allows any user to rebalance the pinned setup.
-      * @param expiredSetupIndexes array containing the indexes of all the expired locked farming setups.
-     */
-    function rebalancePinnedSetup(uint256[] memory expiredSetupIndexes) public {
-        for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
-            if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number > _farmingSetups[expiredSetupIndexes[i]].endBlock && _finishedLockedSetups[expiredSetupIndexes[i]]) {
-                _finishedLockedSetups[expiredSetupIndexes[i]] = !_farmingSetups[expiredSetupIndexes[i]].renewable;
-                _rebalanceRewardPerBlock(_farmingSetups[expiredSetupIndexes[i]].rewardPerBlock - _farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
-                if (_farmingSetups[expiredSetupIndexes[i]].renewable) {
-                    _renewSetup(expiredSetupIndexes[i]);
-                }
-            }
-        }
     }
 
     /** @dev this function allows a user to withdraw a partial reward.
@@ -299,6 +287,32 @@ contract LiquidityMining {
             // update the position creation block to exclude all the rewarded blocks
             position.creationBlock = block.number;
         }
+    }
+
+
+    /** @dev this function allows a owner to unlock its locked position receiving back its tokens or the lpt amount.
+      * @param positionKey position key.
+      * @param setupIndex index of the farming setup.
+      * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
+      */
+    function unlock(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) public {
+        // retrieve position
+        Position storage position = _positions[positionKey];
+        // check if wallet is withdrawing using a position token
+        bool hasPositionItem = position.objectId != 0;
+        // check if position is valid
+        require(hasPositionItem || position.uniqueOwner == msg.sender, "Invalid caller.");
+        require(position.setup.ammPlugin != address(0), "Invalid position.");
+        require(!position.setup.free && position.setup.endBlock >= block.number, "Invalid unlock!");
+        require(!_positionRedeemed[positionKey], "Position already redeemed!");
+        uint256 amount = _partiallyRedeemed[positionKey];
+        if (amount > 0) {
+            // has partially redeemed, must pay a penalty fee
+            amount += _partiallyRedeemed[positionKey].mul(position.setup.penaltyFee.mul(1e18).div(100)).div(1e18);
+            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
+            ILiquidityMiningExtension(_owner).backToYou(amount);
+        }
+        _exit(positionKey, setupIndex, unwrapPair);
     }
 
     /** @dev this function allows a owner to withdraw its position using its position token or not.
@@ -342,6 +356,21 @@ contract LiquidityMining {
      */
     function getRewardPerToken(uint256 setupIndex, uint256 blockNumber) public view returns(uint256) {
         return _rewardPerTokenPerSetupPerBlock[setupIndex][blockNumber];
+    }
+
+    /** @dev this function allows any user to rebalance the pinned setup.
+      * @param expiredSetupIndexes array containing the indexes of all the expired locked farming setups.
+     */
+    function rebalancePinnedSetup(uint256[] memory expiredSetupIndexes) public {
+        for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
+            if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number > _farmingSetups[expiredSetupIndexes[i]].endBlock && _finishedLockedSetups[expiredSetupIndexes[i]]) {
+                _finishedLockedSetups[expiredSetupIndexes[i]] = !_farmingSetups[expiredSetupIndexes[i]].renewable;
+                _rebalanceRewardPerBlock(_farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
+                if (_farmingSetups[expiredSetupIndexes[i]].renewable) {
+                    _renewSetup(expiredSetupIndexes[i]);
+                }
+            }
+        }
     }
 
     /** Private methods. */
@@ -425,6 +454,43 @@ contract LiquidityMining {
         _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
     }
 
+    /** @dev helper function that performs the exit of the given position for the given setup index and unwraps the pair if the owner has chosen to do so.
+      * @param positionKey bytes32 key of the position.
+      * @param setupIndex setup that we are exiting.
+      * @param unwrapPair if the owner wants to unwrap the pair or not.
+     */
+    function _exit(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) private {
+        Position storage position = _positions[positionKey];
+        uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
+        // pay the fees!
+        if (exitFee > 0) {
+            uint256 fee = position.liquidityPoolData.liquidityPoolAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
+            _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
+            position.liquidityPoolData.liquidityPoolAmount = position.liquidityPoolData.liquidityPoolAmount.sub(fee);
+        }
+        // check if the user wants to unwrap its pair or not
+        if (unwrapPair) {
+            // remove liquidity using AMM
+            position.liquidityPoolData.sender = address(this);
+            position.liquidityPoolData.receiver = position.uniqueOwner;
+            _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
+            uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
+            require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
+        } else {
+            // send back the liquidity pool token amount without the fee
+            _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolData.liquidityPoolAmount);
+        }
+        // rebalance the setup if not free
+        if (!_farmingSetups[setupIndex].free && !_finishedLockedSetups[setupIndex]) {
+            _finishedLockedSetups[setupIndex] = !_farmingSetups[setupIndex].renewable;
+            _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+            if (_farmingSetups[setupIndex].renewable) {
+                _renewSetup(setupIndex);
+            }
+        }
+        _positions[positionKey] = _positions[0x0];
+    }
+
     /** @dev Renews the setup with the given index.
       * @param setupIndex index of the setup to renew.
      */
@@ -432,7 +498,7 @@ contract LiquidityMining {
         uint256 duration = _farmingSetups[setupIndex].endBlock - _farmingSetups[setupIndex].startBlock;
         _farmingSetups[setupIndex].startBlock = block.number + 1;
         _farmingSetups[setupIndex].endBlock = block.number + 1 + duration;
-        _farmingSetups[setupIndex].currentRewardPerBlock = _farmingSetups[setupIndex].rewardPerBlock;
+        _farmingSetups[setupIndex].currentRewardPerBlock = 0;
     }
 
     /** @dev allows the wallet to withdraw its position.
@@ -469,34 +535,9 @@ contract LiquidityMining {
             }
         }
         if (!isPartial) {
-            uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
-            // pay the fees!
-            if (exitFee > 0) {
-                uint256 fee = position.liquidityPoolData.liquidityPoolAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
-                _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
-                position.liquidityPoolData.liquidityPoolAmount = position.liquidityPoolData.liquidityPoolAmount.sub(fee);
-            }
-            // check if the user wants to unwrap its pair or not
-            if (unwrapPair) {
-                // remove liquidity using AMM
-                position.liquidityPoolData.sender = address(this);
-                position.liquidityPoolData.receiver = position.uniqueOwner;
-                _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
-                uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
-                require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
-            } else {
-                // send back the liquidity pool token amount without the fee
-                _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolData.liquidityPoolAmount);
-            }
-            // rebalance the setup if not free
-            if (!_farmingSetups[setupIndex].free) {
-                _finishedLockedSetups[setupIndex] = true;
-                _rebalanceRewardPerBlock(_farmingSetups[setupIndex].rewardPerBlock - _farmingSetups[setupIndex].currentRewardPerBlock, true);
-                if (_farmingSetups[setupIndex].renewable) {
-                    _renewSetup(setupIndex);
-                }
-            }
-            _positions[positionKey] = _positions[0x0];
+            _exit(positionKey, setupIndex, unwrapPair);
+        } else {
+            _partiallyRedeemed[positionKey] = reward;
         }
     }
 

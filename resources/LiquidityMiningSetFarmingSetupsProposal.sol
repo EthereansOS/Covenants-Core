@@ -48,4 +48,5 @@ struct FarmingSetup {
     address[] secondaryTokenAddresses; // eg. [address(0), dai address].
     bool free; // if the setup is a free farming setup or a locked one.
     bool renewable; // if the locked setup is renewable or if it's one time (used only if free is false.)
+    uint256 penaltyFee; // fee paid when the user exits a still active locked farming setup (used only if free is false).
 }

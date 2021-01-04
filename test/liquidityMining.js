@@ -235,7 +235,7 @@ describe("LiquidityMining", () => {
             startBlock: longTerm1SetupStartBlock,
             endBlock: longTerm1SetupEndBlock,
             rewardPerBlock: longTerm1SetupRewardPerBlock,
-            currentRewardPerBlock: longTerm1SetupRewardPerBlock,
+            currentRewardPerBlock: 0,
             maximumLiquidity: utilities.toDecimals(longTerm1SetupRewardPerBlockPlain * longTerm1SetupDuration, await rewardToken.methods.decimals().call()),
             totalSupply: 0,
             lastBlockUpdate: 0,
@@ -243,6 +243,7 @@ describe("LiquidityMining", () => {
             secondaryTokenAddresses: [secondaryToken.options.address],
             free: false,
             renewable: false,
+            penaltyFee: 1,
         };
 
         var longTerm2SetupStartBlock = zeroBlock + 5;
@@ -256,7 +257,7 @@ describe("LiquidityMining", () => {
             startBlock: longTerm2SetupStartBlock,
             endBlock: longTerm2SetupEndBlock,
             rewardPerBlock: longTerm2SetupRewardPerBlock,
-            currentRewardPerBlock: longTerm2SetupRewardPerBlock,
+            currentRewardPerBlock: 0,
             maximumLiquidity: utilities.toDecimals(longTerm2SetupRewardPerBlockPlain * longTerm2SetupDuration, await rewardToken.methods.decimals().call()),
             totalSupply: 0,
             lastBlockUpdate: 0,
@@ -264,6 +265,7 @@ describe("LiquidityMining", () => {
             secondaryTokenAddresses: [secondaryToken.options.address],
             free: false,
             renewable: false,
+            penaltyFee: 1,
         };
 
         var freeRewardPerBlockPlain = 0.25;
@@ -274,7 +276,7 @@ describe("LiquidityMining", () => {
             startBlock: 0,
             endBlock: 0,
             rewardPerBlock: freeRewardPerBlock,
-            currentRewardPerBlock: freeRewardPerBlock,
+            currentRewardPerBlock: 0,
             maximumLiquidity: 0,
             totalSupply: 0,
             lastBlockUpdate: 0,
@@ -282,10 +284,11 @@ describe("LiquidityMining", () => {
             secondaryTokenAddresses: [secondaryToken.options.address],
             free: true,
             renewable: false,
+            penaltyFee: 0,
         };
 
         var farmingSetups = [pinnedFreeSetup, longTerm1Setup, longTerm2Setup];
-        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable});`).join('\n        ');
+        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable}, ${it.penaltyFee});`).join('\n        ');
 
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
@@ -464,7 +467,9 @@ describe("LiquidityMining", () => {
     it("orbulo should set a new staking position with a position token", async () => {
         await createNewStakingPosition(actors.Orbulo);
     });
+    /*
     it("should allow orbulo to withdraw its position unwrapping the pair", async () => {
         return await withdrawStakingPosition(actors.Orbulo);
     });
+    */
 });
