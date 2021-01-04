@@ -18,7 +18,6 @@ module.exports = {
             global.accounts = await (global.web3 = new Web3(global.blockchainProvider = require("ganache-cli").provider(options), null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
             return ok(global.web3);
         } catch (e) {
-            console.log(e);
             return ko(e);
         }
     }),
