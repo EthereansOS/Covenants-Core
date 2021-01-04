@@ -18,10 +18,14 @@ contract LiquidityMining {
     // SafeMath library
     using SafeMath for uint256;
 
+    // event that tracks setup indexes and their main tooen and secondary tokens
+    event NewFarmingSetup(uint256 setupIndex, address indexed mainToken, address[] indexed secondaryTokens);
     // new position event
-    event NewPosition(bytes32 positionKey);
+    event NewPosition(bytes32 positionKey, address indexed owner);
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningInitialized(address indexed contractAddress, address indexed rewardTokenAddress);
+    // event that tracks ownership changes
+    event OwnerChanged(bytes32 positionKey, address indexed oldOwner, address indexed newOwner);
 
     // position struct
     struct Position {
@@ -66,6 +70,8 @@ contract LiquidityMining {
     mapping(uint256 => uint256[]) public _setupUpdateBlocks;
     // mapping containing whether a position has been redeemed or not
     mapping(bytes32 => bool) public _positionRedeemed;
+    // mapping containing whether a locked setup has ended or not and has been used for the rebalance
+    mapping(uint256 => bool) public _finishedLockedSetups;
     // pinned setup index
     uint256 public _pinnedSetupIndex;
 
@@ -104,7 +110,7 @@ contract LiquidityMining {
         _factory = msg.sender;
         _owner = owner;
         _rewardTokenAddress = rewardTokenAddress;
-        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, collectionUri, address(this), ""), "");
+        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, false, collectionUri, address(this), ""), "");
         _byMint = byMint;
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _owner.call(ownerInitData);
@@ -120,6 +126,7 @@ contract LiquidityMining {
     function setFarmingSetups(FarmingSetup[] memory farmingSetups) public onlyOwner {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
             _farmingSetups.push(farmingSetups[i]);
+            emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
         }
     }
 
@@ -137,10 +144,28 @@ contract LiquidityMining {
 
     /** Public methods. */
 
+    /** @dev this function allows a wallet to update the owner of the given position.
+      * @param setupIndex index of the setup of the position.
+      * @param creationBlockNumber block number when the position was created.
+      * @param newOwner address of the new owner.
+     */
+    function changePositionOwner(uint256 setupIndex, uint256 creationBlockNumber, address newOwner) public {
+        bytes32 positionKey = keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
+        // retrieve position
+        Position storage position = _positions[positionKey];
+        require(position.objectId == 0 && position.setup.ammPlugin != address(0) && newOwner != address(0), "Invalid position.");
+        bytes32 newPositionKey = keccak256(abi.encode(newOwner, setupIndex, creationBlockNumber));
+        position.uniqueOwner = newOwner;
+        _positions[newPositionKey] = position;
+        _positions[positionKey] = _positions[0x0];
+        // emit owner changed event
+        emit OwnerChanged(positionKey, msg.sender, newOwner);
+    }
+
     /** @dev function called by external users to open a new position.
       * @param stakeData staking input data.
     */
-    function stake(StakeData memory stakeData) public  {
+    function stake(StakeData memory stakeData) public returns(bytes32) {
         require(stakeData.setupIndex < _farmingSetups.length, "Invalid setup index.");
         // retrieve the setup
         FarmingSetup storage chosenSetup = _farmingSetups[stakeData.setupIndex];
@@ -197,12 +222,13 @@ contract LiquidityMining {
             (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(chosenSetup, stakeData.mainTokenAmount);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
             ILiquidityMiningExtension(_owner).transferTo(reward, address(this));
+            chosenSetup.currentRewardPerBlock -= lockedRewardPerBlock;
         }
         // retrieve position for the key
-        Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
+        Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
         if (stakeData.mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
             // creating a new position
-            _positions[objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))] = Position(
+            _positions[objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))] = Position(
                 {
                     objectId: objectId,
                     uniqueOwner: objectId == 0 ? uniqueOwner : address(0),
@@ -220,25 +246,40 @@ contract LiquidityMining {
         } else {
             _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
-        emit NewPosition(objectId != 0 ? keccak256(abi.encode(uniqueOwner, objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)));
+        emit NewPosition(objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)), uniqueOwner);
+        return objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number));
+    }
+
+    /** @dev this function allows any user to rebalance the pinned setup.
+      * @param expiredSetupIndexes array containing the indexes of all the expired locked farming setups.
+     */
+    function rebalancePinnedSetup(uint256[] memory expiredSetupIndexes) public {
+        for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
+            if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number > _farmingSetups[expiredSetupIndexes[i]].endBlock && _finishedLockedSetups[expiredSetupIndexes[i]]) {
+                _finishedLockedSetups[expiredSetupIndexes[i]] = !_farmingSetups[expiredSetupIndexes[i]].renewable;
+                _rebalanceRewardPerBlock(_farmingSetups[expiredSetupIndexes[i]].rewardPerBlock - _farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
+                if (_farmingSetups[expiredSetupIndexes[i]].renewable) {
+                    _renewSetup(expiredSetupIndexes[i]);
+                }
+            }
+        }
     }
 
     /** @dev this function allows a user to withdraw a partial reward.
-      * @param objectId owner position token object id.
+      * @param positionKey position key.
       * @param setupIndex index of the farming setup.
-      * @param creationBlockNumber number of the block when the position was created.
      */
-    function partialReward(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber) public {
-        // check if wallet is withdrawing using a position token
-        bool hasPositionItem = objectId != 0;
-        // create position key
-        bytes32 positionKey = hasPositionItem ? keccak256(abi.encode(msg.sender, objectId, creationBlockNumber)) : keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
+    function partialReward(bytes32 positionKey, uint256 setupIndex) public {
         // retrieve position
         Position storage position = _positions[positionKey];
+        // check if wallet is withdrawing using a position token
+        bool hasPositionItem = position.objectId != 0;
         // check if position is valid
-        require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
+        require(hasPositionItem || position.uniqueOwner == msg.sender, "Invalid caller.");
+        require(position.setup.free || position.setup.endBlock >= block.number, "Invalid partial reward!");
+        require(position.setup.ammPlugin != address(0), "Invalid position.");
         if (hasPositionItem) {
-            require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(position.uniqueOwner, position.objectId) == 1, "Invalid position!");
+            require(INativeV1(_positionTokenCollection).balanceOf(position.uniqueOwner, position.objectId) == 1, "Invalid position!");
             // burn the position token
             INativeV1(_positionTokenCollection).burn(position.objectId, 1);
         }
@@ -260,22 +301,20 @@ contract LiquidityMining {
         }
     }
 
-    /** @dev this function allows a owner to unlock its position using its position token or not.
-      * @param objectId owner position token object id.
+    /** @dev this function allows a owner to withdraw its position using its position token or not.
+      * @param positionKey position key.
       * @param setupIndex index of the farming setup.
-      * @param creationBlockNumber number of the block when the position was created.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
-    function unlock(uint256 objectId, uint256 setupIndex, uint256 creationBlockNumber, bool unwrapPair) public {
-        // check if wallet is withdrawing using a position token
-        bool hasPositionItem = objectId != 0;
-        // create position key
-        bytes32 positionKey = hasPositionItem ? keccak256(abi.encode(msg.sender, objectId, creationBlockNumber)) : keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
+    function withdraw(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) public {
         // retrieve position
-        Position memory position = _positions[positionKey];
+        Position storage position = _positions[positionKey];
+        // check if wallet is withdrawing using a position token
+        bool hasPositionItem = position.objectId != 0;
         // check if position is valid
-        require(position.objectId == objectId && position.setup.ammPlugin != address(0), "Invalid position.");
-        require(position.setup.free || position.setup.endBlock <= block.number, "Invalid unlock!");
+        require(hasPositionItem || position.uniqueOwner == msg.sender, "Invalid caller.");
+        require(position.setup.ammPlugin != address(0), "Invalid position.");
+        require(position.setup.free || position.setup.endBlock <= block.number, "Invalid withdraw!");
         require(!_positionRedeemed[positionKey], "Position already redeemed!");
         hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair, false) : _withdraw(positionKey, position, setupIndex, unwrapPair, false);
         _positionRedeemed[positionKey] = true;
@@ -336,7 +375,7 @@ contract LiquidityMining {
     function _calculateFreeFarmingSetupReward(uint256 setupIndex, bytes32 positionKey) public view returns(uint256 reward) {
         Position memory position = _positions[positionKey];
         for (uint256 i = 0; i < _setupUpdateBlocks[setupIndex].length; i++) {
-            if (position.creationBlock <= _setupUpdateBlocks[setupIndex][i]) {
+            if (position.creationBlock < _setupUpdateBlocks[setupIndex][i]) {
                 reward += _rewardPerTokenPerSetupPerBlock[setupIndex][_setupUpdateBlocks[setupIndex][i]].div(1e18).mul(position.liquidityPoolTokenAmount);
             }
         }
@@ -362,8 +401,9 @@ contract LiquidityMining {
       * @return objectId new position token object id.
      */
     function _mintPosition(address uniqueOwner) private returns(uint256 objectId) {
-        //TODO: metadata
-        (objectId,) = INativeV1(_positionTokenCollection).mint(1, "UNIFI PositionToken", "UPT", "google.com", false);
+        // TODO: metadata
+        uint256 decimals = INativeV1(_positionTokenCollection).decimals();
+        (objectId,) = INativeV1(_positionTokenCollection).mint(decimals == 1 ? 1 : 1 * (10 ** decimals), "UNIFI PositionToken", "UPT", "google.com", false);
         INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, objectId, INativeV1(_positionTokenCollection).balanceOf(address(this), objectId), "");
     }
 
@@ -376,11 +416,23 @@ contract LiquidityMining {
       * @param isPartial if it's a partial withdraw or not.
       */
     function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
-        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
+        uint256 decimals = INativeV1(_positionTokenCollection).decimals();
+        uint256 amount = decimals == 1 ? 1 : 1 * (10 ** decimals);
+        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == amount, "Invalid position!");
         // burn the position token
-        INativeV1(_positionTokenCollection).burn(position.objectId, 1);
+        INativeV1(_positionTokenCollection).burn(position.objectId, amount);
         // withdraw the position
         _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
+    }
+
+    /** @dev Renews the setup with the given index.
+      * @param setupIndex index of the setup to renew.
+     */
+    function _renewSetup(uint256 setupIndex) private {
+        uint256 duration = _farmingSetups[setupIndex].endBlock - _farmingSetups[setupIndex].startBlock;
+        _farmingSetups[setupIndex].startBlock = block.number + 1;
+        _farmingSetups[setupIndex].endBlock = block.number + 1 + duration;
+        _farmingSetups[setupIndex].currentRewardPerBlock = _farmingSetups[setupIndex].rewardPerBlock;
     }
 
     /** @dev allows the wallet to withdraw its position.
@@ -404,7 +456,7 @@ contract LiquidityMining {
      */
     function _withdrawHelper(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {
         // rebalance setup, if free
-        if (_farmingSetups[setupIndex].free) {
+        if (_farmingSetups[setupIndex].free && !isPartial) {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
             reward = (reward == 0) ? _calculateFreeFarmingSetupReward(setupIndex, positionKey) : reward;
         }
@@ -438,8 +490,13 @@ contract LiquidityMining {
             }
             // rebalance the setup if not free
             if (!_farmingSetups[setupIndex].free) {
-                _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+                _finishedLockedSetups[setupIndex] = true;
+                _rebalanceRewardPerBlock(_farmingSetups[setupIndex].rewardPerBlock - _farmingSetups[setupIndex].currentRewardPerBlock, true);
+                if (_farmingSetups[setupIndex].renewable) {
+                    _renewSetup(setupIndex);
+                }
             }
+            _positions[positionKey] = _positions[0x0];
         }
     }
 
