@@ -11,7 +11,8 @@ contract USDCreditController is ERC1155Receiver {
     uint256 private _usdObjectId;
     uint256 private _usdCreditObjectId;
 
-    constructor(address usdCollection, uint256 usdObjectId, uint256 usdCreditObjectId) {
+    function init(address usdCollection, uint256 usdObjectId, uint256 usdCreditObjectId) public {
+        require(_usdCollection == address(0), "Init already called!");
         _usdCollection = usdCollection;
         _usdObjectId = usdObjectId;
         _usdCreditObjectId = usdCreditObjectId;

@@ -228,6 +228,9 @@ contract USDExtensionController is ERC1155Receiver {
         uint256 value,
         bytes memory data) private {
             require(id == _usdObjectId, "Only uSD id allowed here");
+            if(from == _extension) {
+                return;
+            }
             (uint256 action, bytes memory payload) = abi.decode(data, (uint256, bytes));
             if(action == 1) {
                 _rebalanceByDebt(from, value);

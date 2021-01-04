@@ -31,6 +31,7 @@ contract ProposalCode {
         if(transfer) {
             if(byMint) {
                 token.mint(value);
+                proxy.flushToWallet(erc20TokenAddress, false, 0);
             }
             proxy.transfer(to, value, erc20TokenAddress);
         } else {
