@@ -380,7 +380,7 @@ contract LiquidityMining {
      */
     function rebalancePinnedSetup(uint256[] memory expiredSetupIndexes) public {
         for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
-            if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number > _farmingSetups[expiredSetupIndexes[i]].endBlock && _finishedLockedSetups[expiredSetupIndexes[i]]) {
+            if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number >= _farmingSetups[expiredSetupIndexes[i]].endBlock && !_finishedLockedSetups[expiredSetupIndexes[i]]) {
                 _finishedLockedSetups[expiredSetupIndexes[i]] = !_farmingSetups[expiredSetupIndexes[i]].renewable;
                 _rebalanceRewardPerBlock(_farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
                 if (_farmingSetups[expiredSetupIndexes[i]].renewable) {
