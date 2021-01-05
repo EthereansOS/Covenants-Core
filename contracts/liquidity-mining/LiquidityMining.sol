@@ -130,41 +130,50 @@ contract LiquidityMining {
     function setFarmingSetups(FarmingSetup[] memory farmingSetups, bool setPinned, uint256 pinnedIndex) public onlyOwner {
         // update the pinned setup
         if (setPinned) {
-            setPinnedSetup(pinnedIndex);
+            // update reward per token of old pinned setup
+            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+            // update pinned setup index
+            _pinnedSetupIndex = pinnedIndex;
+            // update reward per token of new pinned setup
+            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
         }
         for (uint256 i = 0; i < farmingSetups.length; i++) {
-            _farmingSetups[i] = farmingSetups[i];
+            _farmingSetups.push(farmingSetups[i]);
             emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
         }
     }
 
-    /** @dev updates the pinned setup index and updates the relative reward per block.
-      * @param newPinnedSetupIndex new pinned setup index.
-     */
-    function setPinnedSetup(uint256 newPinnedSetupIndex) public onlyOwner {
-        // update reward per token of old pinned setup
-        _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-        // update pinned setup index
-        _pinnedSetupIndex = newPinnedSetupIndex;
-        // update reward per token of new pinned setup
-        _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-    }
-
     /** Public methods. */
 
+    /** @dev returns the position token balance of the given position.
+      * @param positionKey bytes32 position key.
+      * @return balance position token balance.
+     */
+    function balanceOf(bytes32 positionKey) public view returns(uint256 balance) {
+        balance = INativeV1(_positionTokenCollection).balanceOf(msg.sender, _positions[positionKey].objectId);
+    }
+
     /** @dev this function allows a wallet to update the owner of the given position.
+      * @param positionKey key of the position.
       * @param setupIndex index of the setup of the position.
-      * @param creationBlockNumber block number when the position was created.
       * @param newOwner address of the new owner.
      */
-    function changePositionOwner(uint256 setupIndex, uint256 creationBlockNumber, address newOwner) public {
-        bytes32 positionKey = keccak256(abi.encode(msg.sender, setupIndex, creationBlockNumber));
+    function changePositionOwner(bytes32 positionKey, uint256 setupIndex, address newOwner) public {
         // retrieve position
         Position storage position = _positions[positionKey];
-        require(position.objectId == 0 && position.setup.ammPlugin != address(0) && newOwner != address(0), "Invalid position.");
-        bytes32 newPositionKey = keccak256(abi.encode(newOwner, setupIndex, creationBlockNumber));
+        require(
+            position.objectId == 0 && 
+            position.setup.ammPlugin != address(0) && 
+            newOwner != address(0) && 
+            position.setup.startBlock == _farmingSetups[setupIndex].startBlock &&
+            position.setup.endBlock == _farmingSetups[setupIndex].endBlock,
+        "Invalid position.");
+        bytes32 newPositionKey = keccak256(abi.encode(newOwner, setupIndex, position.creationBlock));
+        // copy the position to the new key
         position.uniqueOwner = newOwner;
         _positions[newPositionKey] = position;
+        _positionRedeemed[newPositionKey] = _positionRedeemed[positionKey];
+        _partiallyRedeemed[newPositionKey] = _partiallyRedeemed[positionKey];
         _positions[positionKey] = _positions[0x0];
         // emit owner changed event
         emit OwnerChanged(positionKey, msg.sender, newOwner);
@@ -178,6 +187,9 @@ contract LiquidityMining {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _farmingSetups[stakeData.setupIndex];
         require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, stakeData.secondaryTokenAddress), "Invalid secondary token.");
+        if (!chosenSetup.free && chosenSetup.endBlock <= block.number) {
+            revert("Setup no longer available.");
+        }
         // retrieve the unique owner
         address uniqueOwner = (stakeData.positionOwner != address(0)) ? stakeData.positionOwner : msg.sender;
         LiquidityPoolData memory liquidityPoolData;
@@ -230,7 +242,7 @@ contract LiquidityMining {
             (reward, lockedRewardPerBlock) = _calculateLockedFarmingSetupReward(chosenSetup, stakeData.mainTokenAmount);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
             ILiquidityMiningExtension(_owner).transferTo(reward, address(this));
-            chosenSetup.currentRewardPerBlock -= lockedRewardPerBlock;
+            chosenSetup.currentRewardPerBlock += lockedRewardPerBlock;
         }
         // retrieve position for the key
         Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
@@ -252,7 +264,6 @@ contract LiquidityMining {
         if (chosenSetup.free) {
             _rebalanceRewardPerToken(stakeData.setupIndex, liquidityPoolData.liquidityPoolAmount, false);
         } else {
-            chosenSetup.currentRewardPerBlock += lockedRewardPerBlock;
             _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
         }
         emit NewPosition(objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)), uniqueOwner);
@@ -437,9 +448,8 @@ contract LiquidityMining {
      */
     function _mintPosition(address uniqueOwner) private returns(uint256 objectId) {
         // TODO: metadata
-        uint256 decimals = INativeV1(_positionTokenCollection).decimals();
-        (objectId,) = INativeV1(_positionTokenCollection).mint(decimals == 1 ? 1 : 1 * (10 ** decimals), "UNIFI PositionToken", "UPT", "google.com", false);
-        INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, objectId, INativeV1(_positionTokenCollection).balanceOf(address(this), objectId), "");
+        (objectId,) = INativeV1(_positionTokenCollection).mint(1, "UNIFI PositionToken", "UPT", "google.com", false);
+        INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, objectId, 1, "");
     }
 
     /** @dev burns a PositionToken from the collection.
@@ -451,11 +461,11 @@ contract LiquidityMining {
       * @param isPartial if it's a partial withdraw or not.
       */
     function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
-        uint256 decimals = INativeV1(_positionTokenCollection).decimals();
-        uint256 amount = decimals == 1 ? 1 : 1 * (10 ** decimals);
-        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == amount, "Invalid position!");
+        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
+        // transfer the position token to this contract
+        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).transferFrom(msg.sender, address(this), 1);
         // burn the position token
-        INativeV1(_positionTokenCollection).burn(position.objectId, amount);
+        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).burn(address(this), 1);
         // withdraw the position
         _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
     }
@@ -492,7 +502,8 @@ contract LiquidityMining {
             if (position.setup.endBlock == _farmingSetups[setupIndex].endBlock) {
                 // the locked setup must be considered finished only if it's not renewable
                 _finishedLockedSetups[setupIndex] = !_farmingSetups[setupIndex].renewable;
-                _rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+                //_rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
+                _rebalanceRewardPerBlock(_farmingSetups[setupIndex].currentRewardPerBlock, true);
                 if (_farmingSetups[setupIndex].renewable) {
                     // renew the setup if renewable
                     _renewSetup(setupIndex);

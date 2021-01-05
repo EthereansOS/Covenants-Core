@@ -30,7 +30,7 @@ contract ProposalCode {
 }
 
 interface ILiquidityMiningExtension {
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContractAddress) external;
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
 }
 
 // farming setup struct

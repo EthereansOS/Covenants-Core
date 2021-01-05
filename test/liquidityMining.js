@@ -28,6 +28,7 @@ var liquidityMiningContract;
 var liquidityPool;
 var uniswapAMM;
 var ethToSpend = 600;
+var positionTokenCollection;
 
 var actors = {};
 
@@ -115,6 +116,19 @@ describe("LiquidityMining", () => {
         console.log(`reward per token at block ${blockNumber} is ${rewardPerToken}`);
     }
 
+    async function logSetups() {
+        const setups = [];
+        for (let i = 0; i < 10000; i++) {
+            try {
+                const setup = await liquidityMiningContract.methods._farmingSetups(i).call();
+                setups.push(setup);
+            } catch (e) {
+                break
+            }
+        }
+        console.log('setups:', setups);
+    }
+
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
         dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
@@ -171,8 +185,9 @@ describe("LiquidityMining", () => {
         assert.strictEqual(factoryAddress, liquidityMiningFactory.options.address);
     });
     it("should retrieve the position token collection", async() => {
-        var positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
+        positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
         assert.notStrictEqual(positionTokenCollection, utilities.voidEthereumAddress);
+        positionTokenCollection = new web3.eth.Contract(context.ethItemNativeABI, positionTokenCollection);
     });
     it("Exit fee is 0", async() => {
         var exitFee = await liquidityMiningFactory.methods._exitFee().call();
@@ -208,7 +223,7 @@ describe("LiquidityMining", () => {
                 mainTokenAddress: utilities.voidEthereumAddress,
                 secondaryTokenAddresses: [utilities.voidEthereumAddress],
                 free: false,
-                renewable: false,
+                renewable: true,
             }];
             await liquidityMiningContract.methods.setFarmingSetups(setups, false, 0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
             throw "Farming Setup done";
@@ -242,7 +257,7 @@ describe("LiquidityMining", () => {
             mainTokenAddress: mainToken.options.address,
             secondaryTokenAddresses: [secondaryToken.options.address],
             free: false,
-            renewable: false,
+            renewable: true,
             penaltyFee: 1,
         };
 
@@ -347,9 +362,11 @@ describe("LiquidityMining", () => {
         var { positionKey } = result.events.NewPosition.returnValues;
         var position = await liquidityMiningContract.methods.getPosition(positionKey).call();
         actor.positionKey = positionKey;
-
+        var balance = 0;
         if (stake.mintPositionToken) {
             actor.objectId = position.objectId;
+            balance = await liquidityMiningContract.methods.balanceOf(positionKey).call(actor.from);
+            assert.strictEqual(parseInt(balance), 1);
         }
 
         !position.setup.free && assert.strictEqual(utilities.fromDecimals(position.lockedRewardPerBlock, await rewardToken.methods.decimals().call()), utilities.formatMoney(expectedRewardPerBlock));
@@ -363,7 +380,7 @@ describe("LiquidityMining", () => {
         var pinnedFreeRewardPerBlock = utilities.fromDecimals(pinnedFreeSetup.rewardPerBlock, await rewardToken.methods.decimals().call());
         assert.strictEqual(pinnedFreeRewardPerBlock, expectedPinnedFreeRewardPerBlock);
 
-        console.log(actor.name, actor.enterBlock - zeroBlock, "stake - ", pinnedFreeRewardPerBlock, "free rpb - ", position.liquidityPoolTokenAmount, " lpt amount - ", position.objectId, " objectId");
+        console.log(actor.name, actor.enterBlock - zeroBlock, "stake - ", pinnedFreeRewardPerBlock, "free rpb - ", position.liquidityPoolTokenAmount, " lpt amount - ", balance, " token balance");
 
         return position;
     }
@@ -432,6 +449,7 @@ describe("LiquidityMining", () => {
         var secondaryBalance = utilities.fromDecimals(await secondaryToken.methods.balanceOf(actor.address).call(), await secondaryToken.methods.decimals().call());
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
         await logData(actor.exitBlock);
+        await logSetups();
         console.log(actor.name, rewardBalance, expectedRewardBalance);
         assert.strictEqual(rewardBalance, expectedRewardBalance);
 
@@ -467,9 +485,8 @@ describe("LiquidityMining", () => {
     it("orbulo should set a new staking position with a position token", async () => {
         await createNewStakingPosition(actors.Orbulo);
     });
-    /*
     it("should allow orbulo to withdraw its position unwrapping the pair", async () => {
+        await positionTokenCollection.methods.setApprovalForAll(liquidityMiningContract.options.address, true).send(actors.Orbulo.from);
         return await withdrawStakingPosition(actors.Orbulo);
     });
-    */
 });
