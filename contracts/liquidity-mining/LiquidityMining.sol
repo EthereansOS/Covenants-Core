@@ -463,9 +463,9 @@ contract LiquidityMining {
     function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
         require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // transfer the position token to this contract
-        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).transferFrom(msg.sender, address(this), 1);
+        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).transferFrom(uniqueOwner, address(this), 1);
         // burn the position token
-        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).burn(address(this), 1);
+        INativeV1(_positionTokenCollection).burn(position.objectId, 1);
         // withdraw the position
         _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
     }

@@ -486,7 +486,9 @@ describe("LiquidityMining", () => {
         await createNewStakingPosition(actors.Orbulo);
     });
     it("should allow orbulo to withdraw its position unwrapping the pair", async () => {
-        await positionTokenCollection.methods.setApprovalForAll(liquidityMiningContract.options.address, true).send(actors.Orbulo.from);
+        const interoperableInterfaceAddress = await positionTokenCollection.methods.asInteroperable(actors.Orbulo.objectId).call(actors.Orbulo.from);
+        const erc20interoperable = new web3.eth.Contract(context.IERC20ABI, interoperableInterfaceAddress);
+        await erc20interoperable.methods.approve(liquidityMiningContract.options.address, 100000).send(actors.Orbulo.from);
         return await withdrawStakingPosition(actors.Orbulo);
     });
 });
