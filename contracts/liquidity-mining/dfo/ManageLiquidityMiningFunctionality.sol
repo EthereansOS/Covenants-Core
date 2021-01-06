@@ -73,6 +73,7 @@ interface IMVDProxy {
     function getStateHolderAddress() external view returns(address);
     function getMVDWalletAddress() external view returns(address);
     function transfer(address receiver, uint256 value, address token) external;
+    function flushToWallet(address tokenAddress, bool is721, uint256 tokenId) external;
 }
 
 interface IStateHolder {
