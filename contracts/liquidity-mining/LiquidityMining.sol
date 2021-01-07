@@ -297,10 +297,10 @@ contract LiquidityMining {
             // remove the partial reward from the position total reward
             position.reward = position.reward.sub(reward);
             // withdraw the values using the helper
-            _withdrawHelper(positionKey, position, setupIndex, false, reward, true);
+            _withdrawHelper(positionKey, setupIndex, false, reward, true);
         } else {
             // withdraw the values
-            _withdrawHelper(positionKey, position, setupIndex, false, _calculateFreeFarmingSetupReward(setupIndex, positionKey), true);
+            _withdrawHelper(positionKey, setupIndex, false, _calculateFreeFarmingSetupReward(setupIndex, positionKey), true);
             // update the position creation block to exclude all the rewarded blocks
             position.creationBlock = block.number;
         }
@@ -347,7 +347,7 @@ contract LiquidityMining {
         require(position.setup.ammPlugin != address(0), "Invalid position.");
         require(position.setup.free || position.setup.endBlock <= block.number, "Invalid withdraw!");
         require(!_positionRedeemed[positionKey], "Position already redeemed!");
-        hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair, false) : _withdraw(positionKey, position, setupIndex, unwrapPair, false);
+        hasPositionItem ? _burnPosition(positionKey, msg.sender, position, setupIndex, unwrapPair, false) : _withdraw(positionKey, position.reward, setupIndex, unwrapPair, false);
         _positionRedeemed[positionKey] = true;
     }
 
@@ -461,13 +461,15 @@ contract LiquidityMining {
       * @param isPartial if it's a partial withdraw or not.
       */
     function _burnPosition(bytes32 positionKey, address uniqueOwner, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
-        require(position.objectId != 0 && INativeV1(_positionTokenCollection).balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
+        INativeV1 positionCollection = INativeV1(_positionTokenCollection);
+        require(position.objectId != 0 && positionCollection.balanceOf(uniqueOwner, position.objectId) == 1, "Invalid position!");
         // transfer the position token to this contract
-        INativeV1(_positionTokenCollection).asInteroperable(position.objectId).transferFrom(uniqueOwner, address(this), 1);
+        positionCollection.asInteroperable(position.objectId).transferFrom(uniqueOwner, address(this), positionCollection.toInteroperableInterfaceAmount(position.objectId, 1));
         // burn the position token
-        INativeV1(_positionTokenCollection).burn(position.objectId, 1);
+        positionCollection.burn(position.objectId, 1);
         // withdraw the position
-        _withdraw(positionKey, position, setupIndex, unwrapPair, isPartial);
+        _positions[positionKey].uniqueOwner = uniqueOwner;
+        _withdraw(positionKey, position.reward, setupIndex, unwrapPair, isPartial);
     }
 
     /** @dev helper function that performs the exit of the given position for the given setup index and unwraps the pair if the owner has chosen to do so.
@@ -526,28 +528,29 @@ contract LiquidityMining {
 
     /** @dev allows the wallet to withdraw its position.
       * @param positionKey staking position key.
-      * @param position staking position.
+      * @param reward staking position reward.
       * @param setupIndex index of the farming setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       * @param isPartial if it's a partial withdraw or not.
       */
-    function _withdraw(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
-        _withdrawHelper(positionKey, position, setupIndex, unwrapPair, position.reward, isPartial);
+    function _withdraw(bytes32 positionKey, uint256 reward, uint256 setupIndex, bool unwrapPair, bool isPartial) private {
+        _withdrawHelper(positionKey, setupIndex, unwrapPair, reward, isPartial);
     }
 
     /** @dev withdraw helper method.
       * @param positionKey staking position key.
-      * @param position staking position.
       * @param setupIndex index of the farming setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       * @param reward amount to withdraw.
       * @param isPartial if it's a partial withdraw or not.
      */
-    function _withdrawHelper(bytes32 positionKey, Position memory position, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {
+    function _withdrawHelper(bytes32 positionKey, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {
+        Position memory position = _positions[positionKey];
         // rebalance setup, if free
         if (_farmingSetups[setupIndex].free && !isPartial) {
             _rebalanceRewardPerToken(setupIndex, position.liquidityPoolTokenAmount, true);
             reward = (reward == 0) ? _calculateFreeFarmingSetupReward(setupIndex, positionKey) : reward;
+            require(reward > 0, "Reward cannot be 0.");
         }
         // transfer the reward
         if (reward > 0) {
