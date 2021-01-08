@@ -350,6 +350,7 @@ contract LiquidityMining {
             // has partially redeemed, must pay a penalty fee
             amount += _partiallyRedeemed[positionKey].mul(position.setup.penaltyFee.mul(1e18).div(100)).div(1e18);
             _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
+            IERC20(_rewardTokenAddress).approve(_owner, amount);
             ILiquidityMiningExtension(_owner).backToYou(amount);
         }
         _exit(positionKey, setupIndex, unwrapPair);

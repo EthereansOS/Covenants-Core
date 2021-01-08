@@ -452,8 +452,8 @@ describe("LiquidityMining", () => {
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
 
         if(actor.partialReward) {
-            expectedRewardBalance = 0.01393;
-            assert.strictEqual(rewardBalance, expectedRewardBalance);
+            expectedRewardBalance = 0;
+            assert.strictEqual(parseInt(rewardBalance), expectedRewardBalance);
         }
 
         if(actor.unwrap) {
@@ -524,6 +524,45 @@ describe("LiquidityMining", () => {
         } catch (e) {
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("transferfrom_failed"), -1);
         }
+    });
+    it("should update farming setup at index 1", async () => {
+        var zeroBlock = (await web3.eth.getBlockNumber()) + 4;
+        var longTerm1SetupStartBlock = zeroBlock;
+        var longTerm1SetupDuration = 30;
+        var longTerm1SetupEndBlock = longTerm1SetupStartBlock + longTerm1SetupDuration;
+        var longTerm1SetupRewardPerBlockPlain = 0.06;
+        var longTerm1SetupRewardPerBlock = utilities.toDecimals(longTerm1SetupRewardPerBlockPlain, await rewardToken.methods.decimals().call());
+        var longTerm1Setup = {
+            ammPlugin: uniswapAMM.options.address,
+            liquidityPoolTokenAddress: liquidityPool.options.address,
+            startBlock: longTerm1SetupStartBlock,
+            endBlock: longTerm1SetupEndBlock,
+            rewardPerBlock: longTerm1SetupRewardPerBlock,
+            currentRewardPerBlock: 0,
+            maximumLiquidity: utilities.toDecimals(longTerm1SetupRewardPerBlockPlain * longTerm1SetupDuration, await rewardToken.methods.decimals().call()),
+            totalSupply: 0,
+            lastBlockUpdate: 0,
+            mainTokenAddress: mainToken.options.address,
+            secondaryTokenAddresses: [secondaryToken.options.address],
+            free: false,
+            renewable: false,
+            penaltyFee: 10,
+        };
+
+
+        var farmingSetups = [longTerm1Setup];
+        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable}, ${it.penaltyFee});`).join('\n        ');
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningUpdateFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
+
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        await logSetups();
+        const setup = await liquidityMiningContract.methods._farmingSetups(1).call();
+        assert.strictEqual(setup.renewable, longTerm1Setup.renewable);
+        assert.strictEqual(parseInt(setup.penaltyFee), longTerm1Setup.penaltyFee);
+        assert.strictEqual(setup.rewardPerBlock, longTerm1Setup.rewardPerBlock);
+        assert.notStrictEqual(parseInt(setup.endBlock), longTerm1Setup.endBlock);
+        assert.notStrictEqual(parseInt(setup.startBlock), longTerm1Setup.startBlock);
     });
     it("should allow alice to withdraw without unwrapping the pair", async () => {
         return await withdrawStakingPosition(actors.Alice);
@@ -618,11 +657,9 @@ describe("LiquidityMining", () => {
     });
     it("frank should unlock without unwrapping the pair", async () => {
         var balanceOf = await rewardToken.methods.balanceOf(actors.Frank.address).call();
-        console.log(`frank balance before transfer: ${balanceOf}`);
-        await rewardToken.methods.transfer(actors.Frank.address, 6999999999999999).send(blockchainConnection.getSendingOptions());
+        await rewardToken.methods.transfer(actors.Frank.address, 69999999999999).send(actors.Bob.from);
         balanceOf = await rewardToken.methods.balanceOf(actors.Frank.address).call();
         balanceOf = utilities.fromDecimals(balanceOf, await rewardToken.methods.decimals().call());
-        console.log(`frank balance after transfer: ${balanceOf}`);
         await rewardToken.methods.approve(liquidityMiningContract.options.address, await rewardToken.methods.totalSupply().call()).send(actors.Frank.from);
         return await unlockStakingPosition(actors.Frank);
     });
