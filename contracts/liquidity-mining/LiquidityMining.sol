@@ -25,7 +25,7 @@ contract LiquidityMining {
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningInitialized(address indexed contractAddress, address indexed rewardTokenAddress);
     // event that tracks ownership changes
-    event OwnerChanged(bytes32 positionKey, address indexed oldOwner, address indexed newOwner);
+    event OwnerChanged(bytes32 positionKey, address indexed oldOwner, bytes32 newPositionKey, address indexed newOwner);
 
     // position struct
     struct Position {
@@ -177,8 +177,9 @@ contract LiquidityMining {
       * @param positionKey key of the position.
       * @param setupIndex index of the setup of the position.
       * @param newOwner address of the new owner.
+      * @return newPositionKey new position key.
      */
-    function changePositionOwner(bytes32 positionKey, uint256 setupIndex, address newOwner) public {
+    function changePositionOwner(bytes32 positionKey, uint256 setupIndex, address newOwner) public returns (bytes32 newPositionKey) {
         // retrieve position
         Position storage position = _positions[positionKey];
         require(
@@ -188,7 +189,7 @@ contract LiquidityMining {
             position.setup.startBlock == _farmingSetups[setupIndex].startBlock &&
             position.setup.endBlock == _farmingSetups[setupIndex].endBlock,
         "Invalid position.");
-        bytes32 newPositionKey = keccak256(abi.encode(newOwner, setupIndex, position.creationBlock));
+        newPositionKey = keccak256(abi.encode(newOwner, setupIndex, position.creationBlock));
         // copy the position to the new key
         position.uniqueOwner = newOwner;
         _positions[newPositionKey] = position;
@@ -196,7 +197,7 @@ contract LiquidityMining {
         _partiallyRedeemed[newPositionKey] = _partiallyRedeemed[positionKey];
         _positions[positionKey] = _positions[0x0];
         // emit owner changed event
-        emit OwnerChanged(positionKey, msg.sender, newOwner);
+        emit OwnerChanged(positionKey, msg.sender, newPositionKey, newOwner);
     }
 
     /** @dev function called by external users to open a new position.

@@ -66,8 +66,11 @@ describe("LiquidityMining", () => {
         await initActor("Charlie", accounts[3], 20, 200, 0, false, 30, 0.177, 18.3075);
         await initActor("Donald", accounts[4], 40, 201, 0, true, 50, 0.180, 24.8125);
         await initActor("Orbulo", accounts[5], 210, 250, 0, true, 0.0001, 0.250, 10, 0, true);
-        await initActor("Frank", accounts[6], 259, 304, 3, false, 0.315, 0.243, 0.245, 0.007, true);
-        // await initActor("Vasapower", accounts[7], 253, 0, 3, false, 0.315, 0.236, 0.245, 0.007, true);
+        await initActor("Frank", accounts[6], 259, 304, 3, false, 0.315, 0.243, 0.315, 0.007, true);
+        await initActor("Vasapower", accounts[7], 259, 304, 3, false, 0.315, 0.243, 0.315, 0.007, true);
+        await initActor("Dino", accounts[8], 260, 304, 3, false, 0.315, 0.236, 0.308, 0.007, false);
+        await initActor("Ale", accounts[9], 260, 304, 3, false, 0.315, 0.236, 0.308, 0.007, false);
+        await initActor("Cavicchioli", accounts[10], 310, 320, 4, false, 0.0001, 0.250, 4.25);
 
     });
 
@@ -552,7 +555,7 @@ describe("LiquidityMining", () => {
 
         var farmingSetups = [longTerm1Setup];
         var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable}, ${it.penaltyFee});`).join('\n        ');
-        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningUpdateFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningUpdateFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, 1, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
 
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
         await dfoManager.finalizeProposal(dfo, proposal);
@@ -638,8 +641,31 @@ describe("LiquidityMining", () => {
     it("frank should set a new staking position with a position token", async () => {
         await createNewStakingPosition(actors.Frank);
     });
-    it("frank should partial reward without unwrapping the pair", async () => {
-        var actor = actors.Frank;
+    it("dino should set a new staking position without a position token", async () => {
+        await createNewStakingPosition(actors.Dino);
+    });
+    it("frank should transfer its position token to vasapower", async () => {
+        await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, actors.Frank.objectId, 1, 0x0).send(actors.Frank.from);
+
+        actors.Vasapower.positionKey = actors.Frank.positionKey;
+        actors.Vasapower.objectId = actors.Frank.objectId;
+        actors.Vasapower.enterBlock = actors.Frank.enterBlock;
+        actors.Vasapower.expectedRewardPerBlock = actors.Frank.expectedRewardPerBlock;
+        var vasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, actors.Vasapower.objectId).call();
+        assert.strictEqual(parseInt(vasapowerBalance), 1);
+    });
+    it("dino should transfer its position ownership to ale", async () => {
+        var result = await liquidityMiningContract.methods.changePositionOwner(actors.Dino.positionKey, actors.Dino.setupIndex, actors.Ale.address).send(actors.Dino.from);
+        var { newPositionKey } = result.events.OwnerChanged.returnValues;
+        console.log("ale position key,", newPositionKey);
+        actors.Ale.positionKey = newPositionKey;
+        actors.Ale.enterBlock = actors.Dino.enterBlock;
+        actors.Ale.expectedRewardPerBlock = actors.Dino.expectedRewardPerBlock;
+        var position = await liquidityMiningContract.methods._positions(actors.Ale.positionKey).call();
+        assert.strictEqual(actors.Ale.address, position.uniqueOwner);
+    })
+    it("vasapower should partial reward without unwrapping the pair", async () => {
+        var actor = actors.Vasapower;
         var balanceOf = await rewardToken.methods.balanceOf(actor.address).call();
         var blockNumber = ((await web3.eth.getBlockNumber()) + 1) - actor.enterBlock;
         var expectedReward = utilities.toDecimals(actor.expectedRewardPerBlock, await rewardToken.methods.decimals().call());
@@ -653,14 +679,98 @@ describe("LiquidityMining", () => {
         assert.strictEqual(balanceOf, expectedBalanceOf);
 
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, await rewardToken.methods.decimals().call(), true));
-        actors.Frank.partialReward = true;
+        actors.Vasapower.partialReward = true;
     });
-    it("frank should unlock without unwrapping the pair", async () => {
-        var balanceOf = await rewardToken.methods.balanceOf(actors.Frank.address).call();
-        await rewardToken.methods.transfer(actors.Frank.address, 69999999999999).send(actors.Bob.from);
-        balanceOf = await rewardToken.methods.balanceOf(actors.Frank.address).call();
+    it("vasapower should unlock without unwrapping the pair", async () => {
+        var balanceOf = await rewardToken.methods.balanceOf(actors.Vasapower.address).call();
+        await rewardToken.methods.transfer(actors.Vasapower.address, 281000000000000).send(actors.Bob.from);
+        balanceOf = await rewardToken.methods.balanceOf(actors.Vasapower.address).call();
         balanceOf = utilities.fromDecimals(balanceOf, await rewardToken.methods.decimals().call());
-        await rewardToken.methods.approve(liquidityMiningContract.options.address, await rewardToken.methods.totalSupply().call()).send(actors.Frank.from);
-        return await unlockStakingPosition(actors.Frank);
+        console.log(`vasapower balance: ${balanceOf}`);
+        await rewardToken.methods.approve(liquidityMiningContract.options.address, await rewardToken.methods.totalSupply().call()).send(actors.Vasapower.from);
+        return await unlockStakingPosition(actors.Vasapower);
+    });
+    it("should not allow dino to withdraw unwrapping the pair", async () => {
+        try {
+            await withdrawStakingPosition(actors.Dino);
+            assert(false);
+        } catch (e) {
+            assert.notStrictEqual((e.message || e).toLowerCase().indexOf("invalid"), -1);
+        }
+    });
+    it("should not allow bob to withdraw again", async () => {
+        try {
+            await withdrawStakingPosition(actors.Bob);
+            assert(false);
+        } catch (e) {
+            assert.notStrictEqual((e.message || e).toLowerCase().indexOf("invalid"), -1);
+        }
+    });
+    it("should allow ale to withdraw unwrapping the pair", async () => {
+        return await withdrawStakingPosition(actors.Ale);
+    });
+    it("should set a new free farming setup", async () => {
+        
+        var newFreeRewardPerBlockPlain = 0.25;
+        var newFreeRewardPerBlock = utilities.toDecimals(newFreeRewardPerBlockPlain, await rewardToken.methods.decimals().call());
+        var newFreeSetup = {
+            ammPlugin: uniswapAMM.options.address,
+            liquidityPoolTokenAddress : liquidityPool.options.address,
+            startBlock: 0,
+            endBlock: 0,
+            rewardPerBlock: newFreeRewardPerBlock,
+            currentRewardPerBlock: newFreeRewardPerBlock,
+            maximumLiquidity: 0,
+            totalSupply: 0,
+            lastBlockUpdate: 0,
+            mainTokenAddress: mainToken.options.address,
+            secondaryTokenAddresses: [secondaryToken.options.address],
+            free: true,
+            renewable: false,
+            penaltyFee: 0,
+        };
+
+
+        var farmingSetups = [newFreeSetup];
+        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable}, ${it.penaltyFee});`).join('\n        ');
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+    });
+    it("cavicchioli should set a new staking position without a position token", async () => {
+        await createNewStakingPosition(actors.Cavicchioli);
+    });
+    it("should update farming setup at index 4", async () => {
+        var newFreeRewardPerBlockPlain = 0.5;
+        var newFreeRewardPerBlock = utilities.toDecimals(newFreeRewardPerBlockPlain, await rewardToken.methods.decimals().call());
+        var newFreeSetup = {
+            ammPlugin: uniswapAMM.options.address,
+            liquidityPoolTokenAddress : liquidityPool.options.address,
+            startBlock: 0,
+            endBlock: 0,
+            rewardPerBlock: newFreeRewardPerBlock,
+            currentRewardPerBlock: newFreeRewardPerBlock,
+            maximumLiquidity: 0,
+            totalSupply: 0,
+            lastBlockUpdate: 0,
+            mainTokenAddress: mainToken.options.address,
+            secondaryTokenAddresses: [secondaryToken.options.address],
+            free: true,
+            renewable: false,
+            penaltyFee: 0,
+        };
+
+        var farmingSetups = [newFreeSetup];
+        var farmingSetupsCode = farmingSetups.map((it, i) => `farmingSetups[${i}] = FarmingSetup(${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.mainTokenAddress}, secondaryTokenAddresses, ${it.free}, ${it.renewable}, ${it.penaltyFee});`).join('\n        ');
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningUpdateFarmingSetupsProposal.sol'), 'UTF-8').format(secondaryToken.options.address, farmingSetups.length, farmingSetupsCode, 4, liquidityMiningExtension.options.address, liquidityMiningContract.options.address);
+
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        await logSetups();
+        const setup = await liquidityMiningContract.methods._farmingSetups(4).call()
+        assert.strictEqual(setup.rewardPerBlock, newFreeSetup.rewardPerBlock);
+    });
+    it("should allow cavicchioli to withdraw without unwrapping the pair", async () => {
+        return await withdrawStakingPosition(actors.Cavicchioli);
     });
 });

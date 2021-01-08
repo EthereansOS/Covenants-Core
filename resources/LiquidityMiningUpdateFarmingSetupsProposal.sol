@@ -26,8 +26,8 @@ contract ProposalCode {
         FarmingSetup[] memory farmingSetups = new FarmingSetup[]({1});
         {2}
         uint256[] memory indexes = new uint256[](1);
-        indexes[0] = 1;
-        ILiquidityMiningExtension({3}).setFarmingSetups(farmingSetups, indexes, {4}, false, 0);
+        indexes[0] = {3};
+        ILiquidityMiningExtension({4}).setFarmingSetups(farmingSetups, indexes, {5}, false, 0);
     }
 }
 

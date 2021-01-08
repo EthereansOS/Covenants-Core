@@ -7,7 +7,7 @@ module.exports = {
             var options = {
                 gasLimit: 10000000,
                 db: memdown(),
-                total_accounts: 10,
+                total_accounts: 15,
                 default_balance_ether: 999999999999
             };
             if (process.env.blockchain_connection_string) {
