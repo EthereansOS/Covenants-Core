@@ -126,29 +126,6 @@ contract LiquidityMining {
       * @param farmingSetups farming setups to set.
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, bool setPinned, uint256 pinnedIndex) public onlyOwner {
-        // update the pinned setup
-        if (setPinned) {
-            // update reward per token of old pinned setup
-            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-            // update pinned setup index
-            _pinnedSetupIndex = pinnedIndex;
-            // update reward per token of new pinned setup
-            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-        }
-        for (uint256 i = 0; i < farmingSetups.length; i++) {
-            _farmingSetups.push(farmingSetups[i]);
-            emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
-        }
-    }
-      */
-
-    /**
-
-    /** @dev allows the owner to set the farming setups.
-      * @param farmingSetups farming setups to set.
-      * @param setPinned if we're updating the pinned setup or not.
-      * @param pinnedIndex new pinned setup index.
       */
     function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, bool setPinned, uint256 pinnedIndex) public onlyOwner {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
