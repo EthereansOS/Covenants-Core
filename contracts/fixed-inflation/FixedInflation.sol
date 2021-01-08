@@ -8,25 +8,42 @@ import "./util/IERC20.sol";
 
 contract FixedInflation {
 
+    mapping(address => uint256) internal _tokenIndex;
+    mapping(address => uint256) internal _tokenTotalSupply;
+    uint256[][] private _tokensToTransfer;
+    uint256 private _tokensLength = 1;
+
     struct FixedInflationEntry {
         uint256 lastBlock;
         uint256 blockInterval;
 
-        address inputTokenAddress;
-        uint256 inputTokenAmount;
-        bool inputTokenByMint;
+        FixedInflationOperationSet[] operationSets;
+    }
 
+    struct FixedInflationOperationSet {
         address ammPlugin;
-        address[] liquidityPools;
-        address[][] swapPaths;
+        FixedInflationOperation[] operations;
+    }
 
-        address[] receivers;
+    struct TokenData {
+        address tokenAddress;
+        uint256 amount;
+        bool amountIsPercentage;
+        bool amountByMint;
+    }
+
+    struct FixedInflationOperation {
+
+        TokenData inputToken;
+
+        address liquidityPoolAddress;
+        address[] swapPath;
+
+        address receiver;
 
         uint256 byEarnPercentage;
 
-        uint256 rewardTokenAddress;
-        uint256 rewardAmount;
-        bool rewardByMint;
+        TokenData rewardToken;
     }
 
     address public extension;
@@ -44,6 +61,9 @@ contract FixedInflation {
         }
         require(_entries.length > 0, "Empty entries");
         _setEntries(_entries);
+    }
+
+    receive() external payable {
     }
 
     modifier extensionOnly() {
@@ -68,24 +88,84 @@ contract FixedInflation {
         for(uint256 i = 0; i < indexes.length; i++) {
             require(entries.length > indexes[i], "Invalid index");
             require(nextBlock(indexes[i]) >= block.number, "Too early to call index");
-            _call(indexes[i], byEarn[i], msg.sender);
+            FixedInflationEntry storage fixedInflationEntry = entries[indexes[i]];
+            fixedInflationEntry.lastBlock = block.number;
+            for(uint256 j = 0; j < fixedInflationEntry.operationSets.length; j++) {
+                _collectFixedInflationOperationSetTokens(fixedInflationEntry.operationSets[j], byEarn[i]);
+            }
+        }
+        IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer);
+        for(uint256 i = 0; i < indexes.length; i++) {
+             _call(entries[indexes[i]], byEarn[i], msg.sender);
+        }
+        _clearVars();
+    }
+
+    function _collectTokenData(TokenData memory tokenData) private {
+        if(tokenData.amount == 0) {
+            return;
+        }
+        uint256 position = _tokenIndex[tokenData.tokenAddress];
+        if(position == 0) {
+            _tokenIndex[tokenData.tokenAddress] = position = (_tokensLength++) - 1;
+            _tokensToTransfer.push(new uint256[](3));
+            _tokensToTransfer[position][0] = uint256(tokenData.tokenAddress);
+        }
+        uint256 sourceType = tokenData.amountByMint ? 1 : 2;
+        _tokensToTransfer[position][sourceType] = _tokensToTransfer[position][sourceType] + _calculateTokenAmount(tokenData);
+    }
+
+    function _calculateTokenAmount(TokenData memory tokenData) private returns(uint256) {
+        return _calculateTokenAmount(tokenData.tokenAddress, tokenData.amount, tokenData.amountIsPercentage);
+    }
+
+    function _calculateTokenAmount(address tokenAddress, uint256 tokenAmount, bool tokenAmountIsPercentage) private returns(uint256) {
+        if(!tokenAmountIsPercentage) {
+            return tokenAmount;
+        }
+        _tokenTotalSupply[tokenAddress] = _tokenTotalSupply[tokenAddress] != 0 ? _tokenTotalSupply[tokenAddress] : IERC20(tokenAddress).totalSupply();
+        return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / 100)) / 1e18;
+    }
+
+    function _collectFixedInflationOperationSetTokens(FixedInflationOperationSet memory operationSet, bool byEarn) private {
+        for(uint256 i = 0; i < operationSet.operations.length; i++) {
+            FixedInflationOperation memory operation = operationSet.operations[i];
+            _collectTokenData(operation.inputToken);
+            if(!byEarn) {
+                _collectTokenData(operation.rewardToken);
+            }
         }
     }
 
-    function _call(uint256 i, bool byEarn, address rewardReceiver) private {
-        FixedInflationEntry storage inflationEntry = entries[i];
-        inflationEntry.lastBlock = block.number;
-        require(!byEarn || inflationEntry.byEarnPercentage > 0, "Invalid byEarn");
-        IFixedInflationExtension(extension).transfer
+    function _call(FixedInflationEntry memory fixedInflationEntry, bool byEarn, address rewardReceiver) private {
+        for(uint256 i = 0; i < fixedInflationEntry.operationSets.length; i++) {
+            FixedInflationOperationSet memory operationSet = fixedInflationEntry.operationSets[i];
+            for(uint256 j = 0 ; j < operationSet.operations.length; j++) {
+                FixedInflationOperation memory operation = operationSet.operations[j];
+                if(operationSet.ammPlugin == address(0)) {
+                    _transfer(operation, byEarn, rewardReceiver);
+                } else {
+                    _swap(operation, operationSet.ammPlugin, fixedInflationEntry, byEarn, rewardReceiver);
+                }
+            }
+        }
+    }
+
+    function _transfer(FixedInflationOperation memory operation, bool byEarn, address rewardReceiver) private {
+        require(operation.receiver != address(0), "Blank receiver");
+        if(operation.inputToken.tokenAddress != address(0)) {
+            _safeTransfer(operation.inputToken.tokenAddress, operation.receiver, _calculateTokenAmount(operation.inputToken));
+        } else {
+            payable(operation.receiver).transfer(_calculateTokenAmount(operation.inputToken));
+        }
+    }
+
+    function _swap(FixedInflationOperation memory operation, address ammPlugin, FixedInflationEntry memory fixedInflationEntry, bool byEarn, address rewardReceiver) private {
+
     }
 
     function _setEntries(FixedInflationEntry[] memory _entries) private {
 
-    }
-
-    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
@@ -93,8 +173,15 @@ contract FixedInflation {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
     }
 
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
+    function _clearVars() internal virtual {
+        _tokensLength = 1;
+        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
+            if(_tokensToTransfer[i][0] == 0 && _tokensToTransfer[i][1] == 0 && _tokensToTransfer[i][2] == 0) {
+                break;
+            }
+            delete _tokenIndex[address(_tokensToTransfer[i][0])];
+            delete _tokenTotalSupply[address(_tokensToTransfer[i][0])];
+        }
+        delete _tokensToTransfer;
     }
 }
