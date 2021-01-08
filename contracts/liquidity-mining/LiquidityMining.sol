@@ -292,6 +292,11 @@ contract LiquidityMining {
         return objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number));
     }
 
+    /** @dev adds liquidity to the position at the given positionKey using the given lpData.
+      * @param positionKey bytes32 key of the position.
+      * @param setupIndex setup where we want to add the liquidity.
+      * @param lpData array of LiquidityPoolData.
+     */
     function addLiquidity(bytes32 positionKey, uint256 setupIndex, LiquidityPoolData[] memory lpData) public {
         // retrieve position
         Position storage position = _positions[positionKey];
