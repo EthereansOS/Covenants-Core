@@ -32,7 +32,7 @@ contract LiquidityMining {
         uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
         address uniqueOwner; // address representing the owner address, address(0) if objectId is populated.
         FarmingSetup setup; // chosen setup when the position was created.
-        LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
+        LiquidityPoolData[] liquidityPoolData; // amm liquidity pool data.
         uint256 liquidityPoolTokenAmount; // amount of liquidity pool token provided.
         uint256 reward; // position reward.
         uint256 lockedRewardPerBlock; // position locked reward per block.
@@ -267,13 +267,15 @@ contract LiquidityMining {
         // retrieve position for the key
         Position storage position = _positions[objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))];
         if (stakeData.mintPositionToken || (position.objectId == 0 && position.uniqueOwner == address(0))) {
+            LiquidityPoolData[] memory liquidityPoolDataArray = new LiquidityPoolData[](1);
+            liquidityPoolDataArray[0] = liquidityPoolData;
             // creating a new position
             _positions[objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number))] = Position(
                 {
                     objectId: objectId,
                     uniqueOwner: objectId == 0 ? uniqueOwner : address(0),
                     setup: chosenSetup,
-                    liquidityPoolData: liquidityPoolData,
+                    liquidityPoolData: liquidityPoolDataArray,
                     liquidityPoolTokenAmount: liquidityPoolData.liquidityPoolAmount,
                     reward: reward,
                     lockedRewardPerBlock: lockedRewardPerBlock,
@@ -288,6 +290,30 @@ contract LiquidityMining {
         }
         emit NewPosition(objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)), uniqueOwner);
         return objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number));
+    }
+
+    /** @dev adds liquidity to the position at the given positionKey using the given lpData.
+      * @param positionKey bytes32 key of the position.
+      * @param setupIndex setup where we want to add the liquidity.
+      * @param lpData array of LiquidityPoolData.
+     */
+    function addLiquidity(bytes32 positionKey, uint256 setupIndex, LiquidityPoolData[] memory lpData) public {
+        // retrieve position
+        Position storage position = _positions[positionKey];
+        // check if position is valid
+        require(position.objectId != 0 || position.uniqueOwner == msg.sender, "Invalid caller.");
+        require(position.setup.free || position.setup.endBlock >= block.number, "Invalid add liquidity!");
+        require(position.setup.ammPlugin != address(0), "Invalid position.");
+        uint256 totalAmount;
+        (uint256[] memory amounts,) = IAMM(position.setup.ammPlugin).addLiquidityBatch(lpData);
+        for (uint256 i = 0; i < lpData.length; i++) {
+            totalAmount += amounts[i];
+            position.liquidityPoolTokenAmount += amounts[i];
+            position.liquidityPoolData[position.liquidityPoolData.length + i] = lpData[i];
+        }
+        if (position.setup.free) {
+            _rebalanceRewardPerToken(setupIndex, totalAmount, false);
+        }
     }
 
     /** @dev this function allows a user to withdraw a partial reward.
@@ -506,21 +532,22 @@ contract LiquidityMining {
         uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
         // pay the fees!
         if (exitFee > 0) {
-            uint256 fee = position.liquidityPoolData.liquidityPoolAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
+            uint256 fee = position.liquidityPoolTokenAmount.mul(exitFee.mul(1e18).div(100)).div(1e18);
             _safeTransfer(position.setup.liquidityPoolTokenAddress, _owner, fee);
-            position.liquidityPoolData.liquidityPoolAmount = position.liquidityPoolData.liquidityPoolAmount.sub(fee);
+            position.liquidityPoolTokenAmount = position.liquidityPoolTokenAmount.sub(fee);
         }
         // check if the user wants to unwrap its pair or not
         if (unwrapPair) {
             // remove liquidity using AMM
-            position.liquidityPoolData.sender = address(this);
-            position.liquidityPoolData.receiver = position.uniqueOwner;
-            _safeApprove(position.liquidityPoolData.liquidityPoolAddress, position.setup.ammPlugin, position.liquidityPoolData.liquidityPoolAmount);
-            uint256[] memory amounts = IAMM(position.setup.ammPlugin).removeLiquidity(position.liquidityPoolData);
-            require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount.");
+            for (uint256 i = 0; i < position.liquidityPoolData.length; i++) {
+                position.liquidityPoolData[i].sender = address(this);
+                position.liquidityPoolData[i].receiver = position.uniqueOwner;
+            }
+            _safeApprove(position.setup.ammPlugin, position.setup.ammPlugin, position.liquidityPoolTokenAmount);
+            IAMM(position.setup.ammPlugin).removeLiquidityBatch(position.liquidityPoolData);
         } else {
             // send back the liquidity pool token amount without the fee
-            _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolData.liquidityPoolAmount);
+            _safeTransfer(position.setup.liquidityPoolTokenAddress, position.uniqueOwner, position.liquidityPoolTokenAmount);
         }
         // rebalance the setup if not free
         if (!_farmingSetups[setupIndex].free && !_finishedLockedSetups[setupIndex]) {
