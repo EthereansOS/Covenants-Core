@@ -126,7 +126,6 @@ contract LiquidityMining {
       * @param farmingSetups farming setups to set.
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
-      */
     function setFarmingSetups(FarmingSetup[] memory farmingSetups, bool setPinned, uint256 pinnedIndex) public onlyOwner {
         // update the pinned setup
         if (setPinned) {
@@ -140,6 +139,50 @@ contract LiquidityMining {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
             _farmingSetups.push(farmingSetups[i]);
             emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
+        }
+    }
+      */
+
+    /**
+
+    /** @dev allows the owner to set the farming setups.
+      * @param farmingSetups farming setups to set.
+      * @param setPinned if we're updating the pinned setup or not.
+      * @param pinnedIndex new pinned setup index.
+      */
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, bool setPinned, uint256 pinnedIndex) public onlyOwner {
+        for (uint256 i = 0; i < farmingSetups.length; i++) {
+            if (_farmingSetups.length == 0 || farmingSetupIndexes.length == 0 || farmingSetupIndexes[i] > _farmingSetups.length) {
+                // adding new farming setup
+                _farmingSetups.push(farmingSetups[i]);
+            } else {
+                FarmingSetup storage farmingSetup = _farmingSetups[farmingSetupIndexes[i]];
+                if (farmingSetup.free) {
+                    // update free farming setup reward per block
+                    if (farmingSetups[i].rewardPerBlock - farmingSetup.rewardPerBlock < 0) {
+                        _rebalanceRewardPerBlock(farmingSetupIndexes[i], farmingSetup.rewardPerBlock - farmingSetups[i].rewardPerBlock, false);
+                    } else {
+                        _rebalanceRewardPerBlock(farmingSetupIndexes[i], farmingSetups[i].rewardPerBlock - farmingSetup.rewardPerBlock, true);
+                    }
+                } else {
+                    // update locked farming setup
+                    farmingSetup.rewardPerBlock = farmingSetups[i].rewardPerBlock;
+                    farmingSetup.maximumLiquidity = farmingSetups[i].maximumLiquidity != 0 ? farmingSetups[i].maximumLiquidity : farmingSetup.maximumLiquidity;
+                    farmingSetup.secondaryTokenAddresses = farmingSetups[i].secondaryTokenAddresses.length > 0 ? farmingSetups[i].secondaryTokenAddresses : farmingSetup.secondaryTokenAddresses;
+                    farmingSetup.renewable = farmingSetups[i].renewable;
+                    farmingSetup.penaltyFee = farmingSetups[i].penaltyFee;
+                }
+            }
+            emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
+        }
+        // update the pinned setup
+        if (setPinned) {
+            // update reward per token of old pinned setup
+            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+            // update pinned setup index
+            _pinnedSetupIndex = pinnedIndex;
+            // update reward per token of new pinned setup
+            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
         }
     }
 
@@ -187,8 +230,8 @@ contract LiquidityMining {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _farmingSetups[stakeData.setupIndex];
         require(_isAcceptedToken(chosenSetup.secondaryTokenAddresses, stakeData.secondaryTokenAddress), "Invalid secondary token.");
-        if (!chosenSetup.free && chosenSetup.endBlock <= block.number) {
-            revert("Setup no longer available.");
+        if (!chosenSetup.free && (chosenSetup.endBlock <= block.number || chosenSetup.startBlock > block.number)) {
+            revert("Setup not available.");
         }
         // retrieve the unique owner
         address uniqueOwner = (stakeData.positionOwner != address(0)) ? stakeData.positionOwner : msg.sender;
@@ -264,7 +307,7 @@ contract LiquidityMining {
         if (chosenSetup.free) {
             _rebalanceRewardPerToken(stakeData.setupIndex, liquidityPoolData.liquidityPoolAmount, false);
         } else {
-            _rebalanceRewardPerBlock(lockedRewardPerBlock, false);
+            _rebalanceRewardPerBlock(_pinnedSetupIndex, lockedRewardPerBlock, false);
         }
         emit NewPosition(objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number)), uniqueOwner);
         return objectId != 0 ? keccak256(abi.encode(objectId, block.number)) : keccak256(abi.encode(uniqueOwner, stakeData.setupIndex, block.number));
@@ -283,11 +326,11 @@ contract LiquidityMining {
         require(hasPositionItem || position.uniqueOwner == msg.sender, "Invalid caller.");
         require(position.setup.free || position.setup.endBlock >= block.number, "Invalid partial reward!");
         require(position.setup.ammPlugin != address(0), "Invalid position.");
-        if (hasPositionItem) {
-            require(INativeV1(_positionTokenCollection).balanceOf(position.uniqueOwner, position.objectId) == 1, "Invalid position!");
-            // burn the position token
-            INativeV1(_positionTokenCollection).burn(position.objectId, 1);
+        if (hasPositionItem && !(INativeV1(_positionTokenCollection).balanceOf(msg.sender, position.objectId) == 1)) {
+            revert("Invalid caller.");
         }
+        // update owner if has position item
+        hasPositionItem ? position.uniqueOwner = msg.sender : position.uniqueOwner = position.uniqueOwner;
         if (!position.setup.free) {
             // check if reward is available
             require(position.reward > 0, "No reward!");
@@ -304,6 +347,8 @@ contract LiquidityMining {
             // update the position creation block to exclude all the rewarded blocks
             position.creationBlock = block.number;
         }
+        // remove owner if has position item
+        hasPositionItem ? position.uniqueOwner = address(0) : position.uniqueOwner = position.uniqueOwner;
     }
 
 
@@ -313,6 +358,7 @@ contract LiquidityMining {
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
     function unlock(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) public {
+        require(positionKey != 0x0 && setupIndex <= _farmingSetups.length, "Invalid key");
         // retrieve position
         Position storage position = _positions[positionKey];
         // check if wallet is withdrawing using a position token
@@ -382,7 +428,7 @@ contract LiquidityMining {
         for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
             if (!_farmingSetups[expiredSetupIndexes[i]].free && block.number >= _farmingSetups[expiredSetupIndexes[i]].endBlock && !_finishedLockedSetups[expiredSetupIndexes[i]]) {
                 _finishedLockedSetups[expiredSetupIndexes[i]] = !_farmingSetups[expiredSetupIndexes[i]].renewable;
-                _rebalanceRewardPerBlock(_farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, _farmingSetups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
                 if (_farmingSetups[expiredSetupIndexes[i]].renewable) {
                     _renewSetup(expiredSetupIndexes[i]);
                 }
@@ -505,7 +551,7 @@ contract LiquidityMining {
                 // the locked setup must be considered finished only if it's not renewable
                 _finishedLockedSetups[setupIndex] = !_farmingSetups[setupIndex].renewable;
                 //_rebalanceRewardPerBlock(position.lockedRewardPerBlock, true);
-                _rebalanceRewardPerBlock(_farmingSetups[setupIndex].currentRewardPerBlock, true);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, _farmingSetups[setupIndex].currentRewardPerBlock, true);
                 if (_farmingSetups[setupIndex].renewable) {
                     // renew the setup if renewable
                     _renewSetup(setupIndex);
@@ -567,13 +613,14 @@ contract LiquidityMining {
         }
     }
 
-    /** @dev function used to rebalance the reward per block in the pinned free farming setup.
-      * @param lockedRewardPerBlock new position locked reward per block that must be subtracted from the pinned free farming setup reward per block.
+    /** @dev function used to rebalance the reward per block in the given free farming setup.
+      * @param setupIndex setup to rebalance.
+      * @param lockedRewardPerBlock new position locked reward per block that must be subtracted from the given free farming setup reward per block.
       * @param fromExit if the rebalance is caused by an exit from the locked position or not.
       */
-    function _rebalanceRewardPerBlock(uint256 lockedRewardPerBlock, bool fromExit) private {
-        FarmingSetup storage setup = _farmingSetups[_pinnedSetupIndex];
-        _rebalanceRewardPerToken(_pinnedSetupIndex, 0, fromExit);
+    function _rebalanceRewardPerBlock(uint256 setupIndex, uint256 lockedRewardPerBlock, bool fromExit) private {
+        FarmingSetup storage setup = _farmingSetups[setupIndex];
+        _rebalanceRewardPerToken(setupIndex, 0, fromExit);
         fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
     }
 

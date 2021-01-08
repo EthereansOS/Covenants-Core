@@ -25,12 +25,13 @@ contract ProposalCode {
         secondaryTokenAddresses[0] = {0};
         FarmingSetup[] memory farmingSetups = new FarmingSetup[]({1});
         {2}
-        ILiquidityMiningExtension({3}).setFarmingSetups(farmingSetups, {4}, false, 0);
+        uint256[] memory indexes = new uint256[](0);
+        ILiquidityMiningExtension({3}).setFarmingSetups(farmingSetups, indexes, {4}, false, 0);
     }
 }
 
 interface ILiquidityMiningExtension {
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupsIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
 }
 
 // farming setup struct

@@ -58,13 +58,14 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given farming setups.
       * @param farmingSetups array containing all the farming setups.
+      * @param farmingSetupIndexes array containing all the farming setups indexes.
       * @param liquidityMiningContract address of the liquidity mining contract.
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
      */
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, address liquidityMiningContract, bool setPinned, uint256 pinnedIndex) public override onlyDFO {
+    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, address liquidityMiningContract, bool setPinned, uint256 pinnedIndex) public override onlyDFO {
         require(_liquidityMiningContracts[liquidityMiningContract], "Invalid liquidity mining contract.");
-        ILiquidityMining(liquidityMiningContract).setFarmingSetups(farmingSetups, setPinned, pinnedIndex);
+        ILiquidityMining(liquidityMiningContract).setFarmingSetups(farmingSetups, farmingSetupIndexes, setPinned, pinnedIndex);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.
