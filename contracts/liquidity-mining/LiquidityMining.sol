@@ -415,6 +415,30 @@ contract LiquidityMining {
         }
     }
 
+    /** @dev adds liquidity to the position at the given positionKey using the given lpData.
+      * @param positionKey bytes32 key of the position.
+      * @param setupIndex setup where we want to add the liquidity.
+      * @param lpData array of LiquidityPoolData.
+    function addLiquidity(bytes32 positionKey, uint256 setupIndex, LiquidityPoolData[] memory lpData) public {
+        // retrieve position
+        Position storage position = _positions[positionKey];
+        // check if position is valid
+        require(position.objectId != 0 || position.uniqueOwner == msg.sender, "Invalid caller.");
+        require(position.setup.free || position.setup.endBlock >= block.number, "Invalid add liquidity!");
+        require(position.setup.ammPlugin != address(0), "Invalid position.");
+        uint256 totalAmount;
+        (uint256[] memory amounts,) = IAMM(position.setup.ammPlugin).addLiquidityBatch(lpData);
+        for (uint256 i = 0; i < lpData.length; i++) {
+            totalAmount += amounts[i];
+            position.liquidityPoolTokenAmount += amounts[i];
+            position.liquidityPoolData[position.liquidityPoolData.length + i] = lpData[i];
+        }
+        if (position.setup.free) {
+            _rebalanceRewardPerToken(setupIndex, totalAmount, false);
+        }
+    }
+     */
+
     /** Private methods. */
 
     /** @dev function used to calculate the reward in a locked farming setup.
