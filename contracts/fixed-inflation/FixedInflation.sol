@@ -5,6 +5,7 @@ pragma abicoder v2;
 import "./FixedInflationData.sol";
 import "./IFixedInflationExtension.sol";
 import "./util/IERC20.sol";
+import "../amm-aggregator/common/IAMM.sol";
 
 contract FixedInflation {
 
@@ -12,39 +13,6 @@ contract FixedInflation {
     mapping(address => uint256) internal _tokenTotalSupply;
     uint256[][] private _tokensToTransfer;
     uint256 private _tokensLength = 1;
-
-    struct FixedInflationEntry {
-        uint256 lastBlock;
-        uint256 blockInterval;
-
-        FixedInflationOperationSet[] operationSets;
-    }
-
-    struct FixedInflationOperationSet {
-        address ammPlugin;
-        FixedInflationOperation[] operations;
-    }
-
-    struct TokenData {
-        address tokenAddress;
-        uint256 amount;
-        bool amountIsPercentage;
-        bool amountByMint;
-    }
-
-    struct FixedInflationOperation {
-
-        TokenData inputToken;
-
-        address liquidityPoolAddress;
-        address[] swapPath;
-
-        address receiver;
-
-        uint256 byEarnPercentage;
-
-        TokenData rewardToken;
-    }
 
     address public extension;
 
@@ -161,7 +129,17 @@ contract FixedInflation {
     }
 
     function _swap(FixedInflationOperation memory operation, address ammPlugin, FixedInflationEntry memory fixedInflationEntry, bool byEarn, address rewardReceiver) private {
-
+        LiquidityToSwap memory liquidityToSwap = LiquidityToSwap(
+            operation.liquidityPoolAddress,
+            0,
+            true,
+            false,
+            new address[](0),
+            _calculateTokenAmount(operation.inputToken),
+            address(this),
+            byEarn ? address(this) : operation.receiver
+        );
+        IAMM(ammPlugin).swapLiquidity(liquidityToSwap);
     }
 
     function _setEntries(FixedInflationEntry[] memory _entries) private {
