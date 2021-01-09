@@ -288,7 +288,7 @@ describe("LiquidityMining", () => {
             penaltyFee: 1,
         };
 
-        var freeRewardPerBlockPlain = 0.25;
+        var freeRewardPerBlockPlain = 0.15;
         var freeRewardPerBlock = utilities.toDecimals(freeRewardPerBlockPlain, await rewardToken.methods.decimals().call());
         var pinnedFreeSetup = {
             ammPlugin: uniswapAMM.options.address,

@@ -128,10 +128,13 @@ contract LiquidityMining {
       * @param pinnedIndex new pinned setup index.
       */
     function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, bool setPinned, uint256 pinnedIndex) public onlyOwner {
+        uint256 newLockedRewardPerBlock;
         for (uint256 i = 0; i < farmingSetups.length; i++) {
             if (_farmingSetups.length == 0 || farmingSetupIndexes.length == 0 || farmingSetupIndexes[i] > _farmingSetups.length) {
                 // adding new farming setup
                 _farmingSetups.push(farmingSetups[i]);
+                // if it's locked we add its reward per block to the pinned free
+                newLockedRewardPerBlock += farmingSetups[i].free ? 0 : farmingSetups[i].rewardPerBlock;
             } else {
                 FarmingSetup storage farmingSetup = _farmingSetups[farmingSetupIndexes[i]];
                 if (farmingSetup.free) {
@@ -152,14 +155,29 @@ contract LiquidityMining {
             }
             emit NewFarmingSetup(i, farmingSetups[i].mainTokenAddress, farmingSetups[i].secondaryTokenAddresses);
         }
-        // update the pinned setup
+        // check if we have new locked farming setups
+        if (newLockedRewardPerBlock > 0) {
+            // new locked setups are here, we must update the pinned setup if there's one
+            if (_farmingSetups[_pinnedSetupIndex].free) {
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, newLockedRewardPerBlock, true);
+            }
+        }
+        // check if we're updating the pinned setup
         if (setPinned) {
-            // update reward per token of old pinned setup
-            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+            uint256 oldBalancedRewardPerBlock;
+            // check if we already have a free pinned setup
+            if (_farmingSetups[_pinnedSetupIndex].free) {
+                // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block (aka currentRewardPerBlock)
+                oldBalancedRewardPerBlock = _farmingSetups[_pinnedSetupIndex].rewardPerBlock - _farmingSetups[_pinnedSetupIndex].currentRewardPerBlock;
+                // remove it from the current pinned setup
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, false);
+            }
             // update pinned setup index
             _pinnedSetupIndex = pinnedIndex;
-            // update reward per token of new pinned setup
-            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+            if (_farmingSetups[_pinnedSetupIndex].free) {
+                // update reward per token of new pinned setup by adding the old balanced reward per block, if there's some.
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, true);
+            }
         }
     }
 
