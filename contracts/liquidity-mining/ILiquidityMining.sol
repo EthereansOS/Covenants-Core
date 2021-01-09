@@ -1,13 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
-pragma experimental ABIEncoderV2;
+pragma abicoder v2;
 
-import "./FarmingSetup.sol";
+import "./LiquidityMiningData.sol";
 
 interface ILiquidityMining {
 
     function getRewardTokenData() external view returns(address, bool);
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, bool setPinned, uint256 pinnedIndex) external;
-    function balanceOf(bytes32 positionKey) external view returns(uint256 balance);
-    
+    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetup, uint256[] memory farmingSetupIndexes, bool setPinned, uint256 pinnedIndex) external;
+
 }

@@ -1,8 +1,40 @@
-//SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
+pragma abicoder v2;
 
-// farming setup struct
-struct FarmingSetup {
+contract ProposalCode {
+
+    string private _metadataLink;
+
+    constructor(string memory metadataLink) {
+        _metadataLink = metadataLink;
+    }
+
+    function getMetadataLink() public view returns(string memory) {
+        return _metadataLink;
+    }
+
+    function onStart(address, address) public {
+    }
+
+    function onStop(address) public {
+    }
+
+    function callOneTime(address) public {
+        address[] memory secondaryTokenAddresses = new address[](1);
+        secondaryTokenAddresses[0] = {0};
+        LiquidityMiningSetup[] memory liquidityMiningSetups = new LiquidityMiningSetup[]({1});
+        {2}
+        uint256[] memory indexes = new uint256[](0);
+        ILiquidityMiningExtension({3}).setLiquidityMiningSetups(liquidityMiningSetups, indexes, {4}, false, 0);
+    }
+}
+
+interface ILiquidityMiningExtension {
+    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, uint256[] memory liquidityMiningSetupIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
+}
+
+struct LiquidityMiningSetup {
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
     address liquidityPoolTokenAddress; // address of the liquidity pool token
     uint256 startBlock; // farming setup start block (used only if free is false).

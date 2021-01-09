@@ -23,20 +23,19 @@ contract ProposalCode {
     function callOneTime(address) public {
         address[] memory secondaryTokenAddresses = new address[](1);
         secondaryTokenAddresses[0] = {0};
-        FarmingSetup[] memory farmingSetups = new FarmingSetup[]({1});
+        LiquidityMiningSetup[] memory liquidityMiningSetups = new LiquidityMiningSetup[]({1});
         {2}
         uint256[] memory indexes = new uint256[](1);
         indexes[0] = {3};
-        ILiquidityMiningExtension({4}).setFarmingSetups(farmingSetups, indexes, {5}, false, 0);
+        ILiquidityMiningExtension({4}).setLiquidityMiningSetups(liquidityMiningSetups, indexes, {5}, false, 0);
     }
 }
 
 interface ILiquidityMiningExtension {
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupsIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
+    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, uint256[] memory liquidityMiningSetupIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
 }
 
-// farming setup struct
-struct FarmingSetup {
+struct LiquidityMiningSetup {
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
     address liquidityPoolTokenAddress; // address of the liquidity pool token
     uint256 startBlock; // farming setup start block (used only if free is false).
@@ -49,6 +48,6 @@ struct FarmingSetup {
     address mainTokenAddress; // eg. buidl address.
     address[] secondaryTokenAddresses; // eg. [address(0), dai address].
     bool free; // if the setup is a free farming setup or a locked one.
-    bool renewable; // if the locked setup is renewable or if it's one time (used only if free is false.)
+    bool renewable; // if the locked setup is renewable or if it's one time (used only if free is false).
     uint256 penaltyFee; // fee paid when the user exits a still active locked farming setup (used only if free is false).
 }

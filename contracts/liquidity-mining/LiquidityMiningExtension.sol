@@ -1,12 +1,12 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.0;
-pragma experimental ABIEncoderV2;
+pragma abicoder v2;
 
 import "./ILiquidityMiningExtension.sol";
 import "./ILiquidityMining.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
-import "./FarmingSetup.sol";
+import "./LiquidityMiningData.sol";
 
 contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
@@ -57,15 +57,15 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     }
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given farming setups.
-      * @param farmingSetups array containing all the farming setups.
-      * @param farmingSetupIndexes array containing all the farming setups indexes.
-      * @param liquidityMiningContract address of the liquidity mining contract.
+      * @param liquidityMiningSetups array containing all the farming setups.
+      * @param liquidityMiningSetupIndexes array containing all the farming setups indexes.
+      * @param liquidityMiningContractAddress address of the liquidity mining contract.
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
      */
-    function setFarmingSetups(FarmingSetup[] memory farmingSetups, uint256[] memory farmingSetupIndexes, address liquidityMiningContract, bool setPinned, uint256 pinnedIndex) public override onlyDFO {
-        require(_liquidityMiningContracts[liquidityMiningContract], "Invalid liquidity mining contract.");
-        ILiquidityMining(liquidityMiningContract).setFarmingSetups(farmingSetups, farmingSetupIndexes, setPinned, pinnedIndex);
+    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, uint256[] memory liquidityMiningSetupIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) public override {
+        require(_liquidityMiningContracts[liquidityMiningContractAddress], "Invalid liquidity mining contract.");
+        ILiquidityMining(liquidityMiningContractAddress).setLiquidityMiningSetups(liquidityMiningSetups, liquidityMiningSetupIndexes, setPinned, pinnedIndex);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.
