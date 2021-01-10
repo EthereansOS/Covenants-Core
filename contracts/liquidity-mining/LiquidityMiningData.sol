@@ -28,7 +28,6 @@ struct LiquidityMiningSetup {
 
 // position struct
 struct LiquidityMiningPosition {
-    uint256 objectId; // object id representing the position token if minted, 0 if uniqueOwner is populated.
     address uniqueOwner; // address representing the extension address, address(0) if objectId is populated.
     uint256 setupIndex; // the setup index.
     LiquidityMiningSetup setup; // chosen setup when the position was created.

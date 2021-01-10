@@ -43,7 +43,7 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param amount amount of erc20 to transfer back or burn.
      */
     function backToYou(uint256 amount) override payable public onlyLiquidityMining {
-        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
+        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).rewardTokenData();
         if(rewardTokenAddress != address(0)) {
             _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
             _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
@@ -75,7 +75,7 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param amount amount of erc20 to transfer or mint.
      */
     function transferTo(uint256 amount, address recipient) override public onlyLiquidityMining {
-        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
+        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).rewardTokenData();
         IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, rewardTokenAddress, recipient, amount, byMint));
     }
 
