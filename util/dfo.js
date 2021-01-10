@@ -103,7 +103,17 @@ async function createProposal(dfo, codeName, submitable, code, methodSignature, 
 }
 
 async function finalizeProposal(dfo, proposal) {
-    await proposal.methods.accept(dfo.hardCap).send(blockchainConnection.getSendingOptions());
+    var result = await proposal.methods.accept(dfo.hardCap).send(blockchainConnection.getSendingOptions());
+    result = await web3.eth.getTransactionReceipt(result.transactionHash);
+    var log = result.logs.filter(it => it.topics[0] === web3.utils.sha3("ProposalSet(address,bool)"));
+    if(log.length === 0) {
+        throw Error("Error while running proposal");
+    }
+    log = log[0];
+    var result = web3.eth.abi.decodeParameter("bool", log.data);
+    if(!result) {
+        throw new Error("Proposal set fail");
+    }
 }
 
 function formatDFOLogs(logVar, event) {

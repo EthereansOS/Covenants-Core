@@ -8,6 +8,8 @@ interface IAMM {
 
     function info() external pure returns(string memory name, uint256 version);
 
+    function ethereumAddress() external view returns(address);
+
     function addLiquidity(LiquidityPoolData calldata data) external payable returns(uint256, uint256[] memory);
     function addLiquidityBatch(LiquidityPoolData[] calldata data) external payable returns(uint256[] memory, uint256[][] memory);
 

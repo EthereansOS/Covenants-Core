@@ -21,32 +21,37 @@ contract ProposalCode {
     }
 
     function callOneTime(address) public {
-        address[] memory secondaryTokenAddresses = new address[](1);
-        secondaryTokenAddresses[0] = {0};
-        LiquidityMiningSetup[] memory liquidityMiningSetups = new LiquidityMiningSetup[]({1});
+        address[] memory liquidityPoolTokenAddresses = new address[](1);
+        liquidityPoolTokenAddresses[0] = {0};
+        LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[]({1});
         {2}
-        uint256[] memory indexes = new uint256[](0);
-        ILiquidityMiningExtension({3}).setLiquidityMiningSetups(liquidityMiningSetups, indexes, {4}, false, 0);
+        ILiquidityMiningExtension({3}).setLiquidityMiningSetups({4}, liquidityMiningSetups, false, false, 0);
     }
 }
 
 interface ILiquidityMiningExtension {
-    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, uint256[] memory liquidityMiningSetupIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) external;
+    function setLiquidityMiningSetups(address liquidityMiningContractAddress, LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
 }
 
+struct LiquidityMiningSetupConfiguration {
+    bool add;
+    uint256 index;
+    LiquidityMiningSetup data;
+}
+
+// liquidity mining setup struct
 struct LiquidityMiningSetup {
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-    address liquidityPoolTokenAddress; // address of the liquidity pool token
-    uint256 startBlock; // farming setup start block (used only if free is false).
-    uint256 endBlock; // farming setup end block (used only if free is false).
-    uint256 rewardPerBlock; // farming setup reward per single block.
-    uint256 currentRewardPerBlock; // farming setup current reward per single block (used only if free is false).
+    address[] liquidityPoolTokenAddresses; // address of the liquidity pool token
+    address mainTokenAddress; // eg. buidl address.
+    uint256 startBlock; // liquidity mining setup start block (used only if free is false).
+    uint256 endBlock; // liquidity mining setup end block (used only if free is false).
+    uint256 rewardPerBlock; // liquidity mining setup reward per single block.
+    uint256 currentRewardPerBlock; // liquidity mining setup current reward per single block (used only if free is false).
     uint256 maximumLiquidity; // maximum total liquidity (used only if free is false).
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
     uint256 lastBlockUpdate; // number of the block where an update was triggered.
-    address mainTokenAddress; // eg. buidl address.
-    address[] secondaryTokenAddresses; // eg. [address(0), dai address].
-    bool free; // if the setup is a free farming setup or a locked one.
+    bool free; // if the setup is a free liquidity mining setup or a locked one.
     bool renewable; // if the locked setup is renewable or if it's one time (used only if free is false).
-    uint256 penaltyFee; // fee paid when the user exits a still active locked farming setup (used only if free is false).
+    uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
 }

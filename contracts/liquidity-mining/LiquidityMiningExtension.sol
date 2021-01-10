@@ -42,11 +42,15 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
      */
-    function backToYou(uint256 amount) override public onlyLiquidityMining {
+    function backToYou(uint256 amount) override payable public onlyLiquidityMining {
         (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).getRewardTokenData();
-        _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
-        _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
-        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
+        if(rewardTokenAddress != address(0)) {
+            _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
+            _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
+        } else {
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
+        }
     }
 
     /** @dev allows the DFO to update the double proxy address.
@@ -56,16 +60,15 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         _doubleProxy = newDoubleProxy;
     }
 
-    /** @dev this function calls the liquidity mining contract with the given address and sets the given farming setups.
-      * @param liquidityMiningSetups array containing all the farming setups.
-      * @param liquidityMiningSetupIndexes array containing all the farming setups indexes.
+    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
+      * @param liquidityMiningSetups array containing all the liquidity mining setups.
       * @param liquidityMiningContractAddress address of the liquidity mining contract.
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
      */
-    function setLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, uint256[] memory liquidityMiningSetupIndexes, address liquidityMiningContractAddress, bool setPinned, uint256 pinnedIndex) public override {
+    function setLiquidityMiningSetups(address liquidityMiningContractAddress, LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override {
         require(_liquidityMiningContracts[liquidityMiningContractAddress], "Invalid liquidity mining contract.");
-        ILiquidityMining(liquidityMiningContractAddress).setLiquidityMiningSetups(liquidityMiningSetups, liquidityMiningSetupIndexes, setPinned, pinnedIndex);
+        ILiquidityMining(liquidityMiningContractAddress).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.

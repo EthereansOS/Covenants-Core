@@ -12,6 +12,10 @@ abstract contract AMM is IAMM {
     receive() external virtual payable {
     }
 
+    function ethereumAddress() public override virtual view returns(address) {
+        return address(0);
+    }
+
     function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) public override view returns (uint256, uint256[] memory) {
         return this.inPercentage(liquidityPoolAddress, numerator, denominator, 0);
     }
@@ -45,16 +49,8 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function _sender(LiquidityPoolData memory liquidityPoolData) internal virtual returns(address payable) {
-        return payable(liquidityPoolData.sender != address(0) ? liquidityPoolData.sender : msg.sender);
-    }
-
     function _receiver(LiquidityPoolData memory liquidityPoolData) internal virtual returns(address payable) {
         return payable(liquidityPoolData.receiver != address(0) ? liquidityPoolData.receiver : msg.sender);
-    }
-
-    function _sender(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
-        return payable(liquidityToSwap.sender != address(0) ? liquidityToSwap.sender : msg.sender);
     }
 
     function _receiver(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
@@ -97,9 +93,9 @@ abstract contract AMM is IAMM {
 
     function _transferToMeAndCheckAllowance(LiquidityPoolData memory data, address operator, bool add) internal virtual {
         if(!add) {
-            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, _sender(data), operator);
+            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, msg.sender, operator);
         }
-        _transferToMeAndCheckAllowance(data.tokens, data.amounts, _sender(data), operator);
+        _transferToMeAndCheckAllowance(data.tokens, data.amounts, msg.sender, operator);
     }
 
     function _transferToMeAndCheckAllowance(LiquidityPoolData[] memory data, address operator, bool add) internal virtual returns (address[] memory tokens, uint256 length) {
@@ -121,7 +117,7 @@ abstract contract AMM is IAMM {
                 _tokenValuesToTransfer[tokensInput[j]] += amounts[j];
             }
         }
-        _transferToMeCheckAllowanceAndClear(tokens, length, _sender(data[0]), operator);
+        _transferToMeCheckAllowanceAndClear(tokens, length, msg.sender, operator);
     }
 
     function _transferToMeAndCheckAllowance(LiquidityToSwap[] memory data, address operator) internal virtual returns (address[] memory tokens, uint256 length) {
@@ -132,7 +128,7 @@ abstract contract AMM is IAMM {
             }
             _tokenValuesToTransfer[data[i].tokens[0]] += data[i].amount;
         }
-        _transferToMeCheckAllowanceAndClear(tokens, length, _sender(data[0]), operator);
+        _transferToMeCheckAllowanceAndClear(tokens, length, msg.sender, operator);
     }
 
     function _transferToMeCheckAllowanceAndClear(address[] memory tokens, uint256 length, address from, address operator) internal virtual {

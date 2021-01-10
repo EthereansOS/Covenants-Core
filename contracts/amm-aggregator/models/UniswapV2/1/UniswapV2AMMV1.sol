@@ -26,6 +26,10 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         return _wethAddress;
     }
 
+    function ethereumAddress() public view override(IAMM, AMM) returns(address) {
+        return _wethAddress;
+    }
+
     function info() public virtual override pure returns(string memory name, uint256 version) {
         return ("UniswapV2AMM", 1);
     }
@@ -33,7 +37,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     function addLiquidity(LiquidityPoolData memory data) public payable virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
         _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, true);
         (liquidityPoolAmount, tokenAmounts) = _addLiquidityWork(data);
-        _flushBack(_sender(data), data.tokens, data.tokens.length);
+        _flushBack(msg.sender, data.tokens, data.tokens.length);
     }
 
     function addLiquidityBatch(LiquidityPoolData[] memory data) public payable virtual override returns(uint256[] memory amounts, uint256[][] memory tokenAmounts) {
@@ -43,7 +47,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             (amounts[i], tokenAmounts[i]) = _addLiquidityWork(data[i]);
         }
-        _flushBack(_sender(data[0]), tokens, tokensLength);
+        _flushBack(msg.sender, tokens, tokensLength);
     }
 
     function _addLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
@@ -82,7 +86,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     function removeLiquidity(LiquidityPoolData memory data) public virtual override returns(uint256[] memory amounts) {
         _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress, false);
         amounts = _removeLiquidityWork(data);
-        _flushBack(_sender(data), data.liquidityPoolAddress);
+        _flushBack(msg.sender, data.liquidityPoolAddress);
     }
 
     function removeLiquidityBatch(LiquidityPoolData[] memory data) public virtual override returns(uint256[][] memory amounts) {
@@ -91,7 +95,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             amounts[i] = _removeLiquidityWork(data[i]);
         }
-        _flushBack(_sender(data[0]), tokens, tokensLength);
+        _flushBack(msg.sender, tokens, tokensLength);
     }
 
     function _removeLiquidityWork(LiquidityPoolData memory data) internal virtual returns(uint256[] memory amounts) {
@@ -111,9 +115,9 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     }
 
     function swapLiquidity(LiquidityToSwap memory data) public payable virtual override {
-        _transferToMeAndCheckAllowance(data.tokens[0], data.amount, _sender(data), _uniswapV2RouterAddress);
+        _transferToMeAndCheckAllowance(data.tokens[0], data.amount, msg.sender, _uniswapV2RouterAddress);
         _swapLiquidityWork(data);
-        _flushBack(_sender(data), data.tokens, data.tokens.length);
+        _flushBack(msg.sender, data.tokens, data.tokens.length);
     }
 
     function swapLiquidityBatch(LiquidityToSwap[] memory data) public payable virtual override {
@@ -121,7 +125,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         for(uint256 i = 0; i < data.length; i++) {
             _swapLiquidityWork(data[i]);
         }
-        _flushBack(_sender(data[0]), tokens, tokensLength);
+        _flushBack(msg.sender, tokens, tokensLength);
     }
 
     function _swapLiquidityWork(LiquidityToSwap memory data) internal virtual {
