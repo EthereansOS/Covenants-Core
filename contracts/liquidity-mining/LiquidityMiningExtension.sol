@@ -17,6 +17,9 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     // mapping that contains all the liquidity mining contracts linked to this extension
     mapping(address => bool) private _liquidityMiningContracts;
 
+    // whether the token is by mint or by reserve
+    bool public _byMint;
+
     /** MODIFIERS */
 
     /** @dev onlyLiquidityMining modifier used to check for unauthorized transfers. */
@@ -33,9 +36,10 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** PUBLIC METHODS */
 
-    function init(address doubleProxyAddress) override public {
+    function init(address doubleProxyAddress, bool byMint) override public {
         require(_doubleProxy == address(0), "Init already called!");
         _doubleProxy = doubleProxyAddress;
+        _byMint = byMint;
         _liquidityMiningContracts[msg.sender] = true;
     }
 
@@ -43,13 +47,13 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param amount amount of erc20 to transfer back or burn.
      */
     function backToYou(uint256 amount) override payable public onlyLiquidityMining {
-        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).rewardTokenData();
+        address rewardTokenAddress = ILiquidityMining(msg.sender)._rewardTokenAddress();
         if(rewardTokenAddress != address(0)) {
             _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
             _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
-            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
         } else {
-            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, byMint));
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
         }
     }
 
@@ -75,8 +79,7 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param amount amount of erc20 to transfer or mint.
      */
     function transferTo(uint256 amount, address recipient) override public onlyLiquidityMining {
-        (address rewardTokenAddress, bool byMint) = ILiquidityMining(msg.sender).rewardTokenData();
-        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, rewardTokenAddress, recipient, amount, byMint));
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, ILiquidityMining(msg.sender)._rewardTokenAddress(), recipient, amount, _byMint));
     }
 
     /** PRIVATE METHODS */

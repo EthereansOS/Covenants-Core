@@ -26,11 +26,9 @@ contract LiquidityMining is ILiquidityMining {
     // address of the extension of this contract
     address public _extension;
     // address of the reward token
-    address private _rewardTokenAddress;
+    address public override _rewardTokenAddress;
     // liquidityMiningPosition token collection
     address public _positionTokenCollection;
-    // whether the token is by mint or by reserve
-    bool public _byMint;
     // array containing all the currently available liquidity mining setups
     LiquidityMiningSetup[] private _setups;
     // mapping containing all the positions
@@ -78,9 +76,8 @@ contract LiquidityMining is ILiquidityMining {
       * @param symbol ethitem liquidity mining position token symbol.
       * @param collectionUri ethItem liquidity mining position token uri.
       * @param rewardTokenAddress the address of the reward token.
-      * @param byMint whether the rewardToken must be rewarded by minting or by reserve.
      */
-    function initialize(address extension, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bool byMint) public {
+    function initialize(address extension, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress) public {
         require(
             _factory == address(0),
             "Already initialized."
@@ -89,7 +86,6 @@ contract LiquidityMining is ILiquidityMining {
         _extension = extension;
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, false, collectionUri, address(this), ""), "");
-        _byMint = byMint;
         if (keccak256(ownerInitData) != keccak256("")) {
             (bool result,) = _extension.call(ownerInitData);
             require(result, "Error while initializing extension.");
@@ -103,13 +99,6 @@ contract LiquidityMining is ILiquidityMining {
 
     function setups() public view returns (LiquidityMiningSetup[] memory) {
         return _setups;
-    }
-
-    /** @dev returns the reward token address and if it's rewarded by mint or not
-      * @return reward token address, byMint tuple.
-     */
-    function rewardTokenData() public override view returns(address, bool) {
-        return (_rewardTokenAddress, _byMint);
     }
 
     /** @dev returns the liquidity mining position associated with the input id.
@@ -304,11 +293,9 @@ contract LiquidityMining is ILiquidityMining {
 
     /** @dev this function allows a extension to unlock its locked liquidity mining position receiving back its tokens or the lpt amount.
       * @param positionId liquidity mining position id.
-      * @param setupIndex index of the liquidity mining setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
-    function unlock(uint256 positionId, uint256 setupIndex, bool unwrapPair) public payable byPositionOwner(positionId) {
-        require(positionId != 0x0 && setupIndex <= _setups.length, "Invalid id");
+    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if wallet is withdrawing using a liquidity mining position token
@@ -374,10 +361,9 @@ contract LiquidityMining is ILiquidityMining {
 
     /** @dev adds liquidity to the liquidity mining position at the given positionId using the given lpData.
       * @param positionId id of the liquidity mining position.
-      * @param setupIndex setup where we want to add the liquidity.
       * @param lpData array of LiquidityPoolData.
       */
-    function addLiquidity(uint256 positionId, uint256 setupIndex, LiquidityPoolData[] memory lpData) public byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, LiquidityPoolData[] memory lpData) public byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
@@ -391,7 +377,7 @@ contract LiquidityMining is ILiquidityMining {
             //liquidityMiningPosition.liquidityPoolData[liquidityMiningPosition.liquidityPoolData.length + i] = lpData[i];
         }
         if (liquidityMiningPosition.setup.free) {
-            _rebalanceRewardPerToken(setupIndex, totalAmount, false);
+            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, totalAmount, false);
         }
     }
 

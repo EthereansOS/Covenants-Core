@@ -6,6 +6,6 @@ import "./LiquidityMiningData.sol";
 
 interface ILiquidityMining {
 
-    function rewardTokenData() external view returns(address, bool);
+    function _rewardTokenAddress() external view returns(address);
     function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
 }

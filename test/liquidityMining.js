@@ -146,18 +146,16 @@ describe("LiquidityMining", () => {
             "string",
             "string",
             "string",
-            "address",
-            "bool"
+            "address"
         ];
         var values = [
             liquidityMiningExtension.options.address,
-            liquidityMiningExtension.methods.init(dfo.doubleProxyAddress).encodeABI(),
+            liquidityMiningExtension.methods.init(dfo.doubleProxyAddress, false).encodeABI(),
             ethItemOrchestrator.options.address,
             "LiquidityMiningToken",
             "LMT",
             "google.com",
-            rewardToken.options.address,
-            false
+            rewardToken.options.address
         ];
         var payload = web3.utils.sha3(`initialize(${params.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(params, values).substring(2));
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
@@ -175,7 +173,7 @@ describe("LiquidityMining", () => {
     });
     it("Previously created LiquidityMining Contract cannot be initialized more than a time", async() => {
         try {
-            await liquidityMiningContract.methods.initialize(accounts[0], "0x", ethItemOrchestrator.options.address, "TestCollection1", "TSTC", "test", ethItemOrchestrator.options.address, false).send(blockchainConnection.getSendingOptions());
+            await liquidityMiningContract.methods.initialize(accounts[0], "0x", ethItemOrchestrator.options.address, "TestCollection1", "TSTC", "test", ethItemOrchestrator.options.address).send(blockchainConnection.getSendingOptions());
         } catch (e) {
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("already initialized"), -1);
         }
@@ -441,7 +439,7 @@ describe("LiquidityMining", () => {
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), await secondaryToken.methods.decimals().call());
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
-        await liquidityMiningContract.methods.unlock(actor.positionId, actor.setupIndex, actor.unwrap).send(actor.from);
+        await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap).send(actor.from);
 
         var rewardBalance = utilities.fromDecimals(await rewardToken.methods.balanceOf(actor.address).call(), await rewardToken.methods.decimals().call());
         var mainBalance = utilities.fromDecimals(await mainToken.methods.balanceOf(actor.address).call(), await mainToken.methods.decimals().call());
