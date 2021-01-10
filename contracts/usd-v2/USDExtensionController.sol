@@ -294,8 +294,6 @@ contract USDExtensionController is ERC1155Receiver {
     }
 
     function addLiquidity(
-        address[] memory tokens,
-        uint256[] memory amounts,
         uint256 ammPosition,
         uint256 liquidityPoolPosition,
         uint256 liquidityPoolAmount
@@ -304,28 +302,29 @@ contract USDExtensionController is ERC1155Receiver {
         _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
         returns(uint256 toMint)
     {
-        LiquidityPoolData memory data = LiquidityPoolData(
+        IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
+        address liquidityPoolAddress = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
+        uint256[] memory amounts = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
+        address[] memory tokens = amm.tokens(liquidityPoolAddress);
+        for(uint256 i = 0; i < tokens.length; i++) {
+            _safeTransferFrom(tokens[i], msg.sender, address(this), amounts[i]);
+            _safeApprove(tokens[i], address(amm), amounts[i]);
+        }
+        uint256[] memory spent;
+        (toMint, spent) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(LiquidityPoolData(
             _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
             liquidityPoolAmount,
             tokens,
             amounts,
-            msg.sender,
             _extension
-        );
-        bool ethInvolved = false;
-        uint256 ethValue = 0;
-        for(uint256 i = 0 ; i < tokens.length; i++) {
-            if(tokens[i] == address(0)) {
-                ethInvolved = true;
-                ethValue += amounts[i];
+        ));
+        USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
+        for(uint256 i = 0; i < spent.length; i++) {
+            uint256 difference = amounts[i] - spent[i];
+            if(difference > 0) {
+                _safeTransfer(tokens[i], msg.sender, difference);
             }
         }
-        if(ethInvolved) {
-            (toMint,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity{value : ethValue}(data);
-        } else {
-            (toMint,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(data);
-        }
-        USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
     }
 
     function _removeLiquidity(
@@ -345,16 +344,14 @@ contract USDExtensionController is ERC1155Receiver {
         receivers[0] = address(this);
         USDExtension(_extension).send(tokenAddresses, amounts, receivers);
         IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-        LiquidityPoolData memory data = LiquidityPoolData(
+        _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
+        amm.removeLiquidity(LiquidityPoolData(
             _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
             liquidityPoolAmount,
             amm.tokens(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]),
             new uint256[](0),
-            address(this),
             owner
-        );
-        _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
-        amm.removeLiquidity(data);
+        ));
     }
 
     function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount)

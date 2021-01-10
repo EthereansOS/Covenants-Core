@@ -136,7 +136,6 @@ contract FixedInflation {
             false,
             new address[](0),
             _calculateTokenAmount(operation.inputToken),
-            address(this),
             byEarn ? address(this) : operation.receiver
         );
         IAMM(ammPlugin).swapLiquidity(liquidityToSwap);

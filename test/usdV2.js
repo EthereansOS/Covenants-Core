@@ -205,15 +205,16 @@ describe("USDV2", () => {
             var otherBalanceOfExpected = otherBalanceOfBefore - amountsPlain[otherAmountIndex];
             otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected);
 
-            var values = [
-                utilities.toDecimals(maxAmountPerToken, await tokens[0].methods.decimals().call()),
-                utilities.toDecimals(maxAmountPerToken, await tokens[1].methods.decimals().call())
-            ];
+            try {
+                await tokens[0].methods.approve(usdController.options.address, await tokens[0].methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+            } catch(e) {
+            }
+            try {
+                await tokens[1].methods.approve(usdController.options.address, await tokens[1].methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+            } catch(e) {
+            }
 
-            await tokens[0].methods.approve(uniswapAMM.options.address, await tokens[0].methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
-            await tokens[1].methods.approve(uniswapAMM.options.address, await tokens[1].methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
-
-            await usdController.methods.addLiquidity(tokens.map(it => it.options.address), values, 0, liquidityPoolPosition, liquidityPoolAmount).send(blockchainConnection.getSendingOptions());
+            await usdController.methods.addLiquidity(0, liquidityPoolPosition, liquidityPoolAmount).send(blockchainConnection.getSendingOptions());
 
             var usdBalanceAfter = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
             usdBalanceAfter = utilities.formatMoney(parseFloat(utilities.fromDecimals(usdBalanceAfter, "18", true)));
@@ -236,7 +237,7 @@ describe("USDV2", () => {
         };
         await consume(0, 70);
         await consume(1, 90);
-        //await consume(2, 65);
+        await consume(2, 65);
     });
     it("Burn a uSD amount not greather than 350. Difference will be sent back", async() => {
 
@@ -316,7 +317,7 @@ describe("USDV2", () => {
         var inputs = [
             await consume(0, USDT, USDTItemObjectId, USDCItemObjectId, 11),
             await consume(1, DAI, DAIItemObjectId, USDCItemObjectId, 5),
-            //await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30),
+            await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30),
         ];
 
         var tokens = {};
@@ -455,10 +456,11 @@ describe("USDV2", () => {
             liquidityPoolAmount : 0,
             tokens : [USDT.options.address, USDC.options.address],
             amounts,
-            sender : accounts[0],
             receiver : uSDExtension.options.address
         };
 
+        await tokenA.methods.approve(uniswapAMM.options.address, await tokenA.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
+        await tokenB.methods.approve(uniswapAMM.options.address, await tokenB.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
         await uniswapAMM.methods.addLiquidity(liquidityPoolData).send(blockchainConnection.getSendingOptions());
 
         await usdController.methods.rebalanceByCredit().send(blockchainConnection.getSendingOptions());

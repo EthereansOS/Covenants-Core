@@ -9,8 +9,8 @@ struct FixedInflationEntry {
 }
 
 struct FixedInflationOperationSet {
-        address ammPlugin;
-        FixedInflationOperation[] operations;
+    address ammPlugin;
+    FixedInflationOperation[] operations;
 }
 
 struct TokenData {
