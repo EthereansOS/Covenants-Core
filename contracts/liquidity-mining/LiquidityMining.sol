@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 import "./ILiquidityMiningFactory.sol";
@@ -55,6 +55,7 @@ contract LiquidityMining is ILiquidityMining {
         _;
     }
 
+    /** @dev byPositionOwner modifier used to check for unauthorized accesses. */
     modifier byPositionOwner(uint256 positionId) {
         if(_positions[positionId].uniqueOwner != msg.sender) {
             try INativeV1(_positionTokenCollection).balanceOf(msg.sender, positionId) returns (uint256 balanceOf) {

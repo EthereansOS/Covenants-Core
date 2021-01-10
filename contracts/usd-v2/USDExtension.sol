@@ -1,6 +1,6 @@
 //SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.0;
+pragma solidity ^0.7.6;
 
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
