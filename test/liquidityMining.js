@@ -406,7 +406,7 @@ describe("LiquidityMining", () => {
         expectedReward = web3.utils.toBN(expectedReward).mul(web3.utils.toBN(blockNumber.toString())).toString();
         var expectedBalanceOf = utilities.fromDecimals(web3.utils.toBN(expectedReward).add(web3.utils.toBN(balanceOf)).toString(), await rewardToken.methods.decimals().call());
 
-        await liquidityMiningContract.methods.partialReward(actor.positionKey, 1).send(actor.from);
+        await liquidityMiningContract.methods.partialReward(actor.positionKey).send(actor.from);
         balanceOf = await rewardToken.methods.balanceOf(actor.address).call();
         balanceOf = utilities.fromDecimals(balanceOf, await rewardToken.methods.decimals().call());
 
@@ -496,9 +496,8 @@ describe("LiquidityMining", () => {
         var expectedMainBalance = utilities.fromDecimals(web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString(), await mainToken.methods.decimals().call());
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), await secondaryToken.methods.decimals().call());
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
-        
-        // await positionTokenCollection.methods.setApprovalForAll(liquidityMiningContract.options.address, true).send(actor.from);
-        await liquidityMiningContract.methods.withdraw(actor.positionKey, actor.setupIndex, actor.unwrap).send(actor.from);
+
+        await liquidityMiningContract.methods.withdraw(actor.positionKey, actor.unwrap).send(actor.from);
 
         var rewardBalance = utilities.fromDecimals(await rewardToken.methods.balanceOf(actor.address).call(), await rewardToken.methods.decimals().call());
         var mainBalance = utilities.fromDecimals(await mainToken.methods.balanceOf(actor.address).call(), await mainToken.methods.decimals().call());
@@ -640,7 +639,7 @@ describe("LiquidityMining", () => {
         assert.strictEqual(parseInt(vasapowerBalance), 1);
     });
     it("dino should transfer its position ownership to ale", async () => {
-        var result = await liquidityMiningContract.methods.transfer(actors.Dino.positionKey, actors.Dino.setupIndex, actors.Ale.address).send(actors.Dino.from);
+        var result = await liquidityMiningContract.methods.transfer(actors.Ale.address, actors.Dino.positionKey).send(actors.Dino.from);
         var { positionKey } = result.events.Transfer.returnValues;
         console.log("ale position key,", positionKey);
         actors.Ale.positionKey = positionKey;
@@ -657,7 +656,7 @@ describe("LiquidityMining", () => {
         expectedReward = web3.utils.toBN(expectedReward).mul(web3.utils.toBN(blockNumber.toString())).toString();
         var expectedBalanceOf = utilities.fromDecimals(web3.utils.toBN(expectedReward).add(web3.utils.toBN(balanceOf)).toString(), await rewardToken.methods.decimals().call());
 
-        await liquidityMiningContract.methods.partialReward(actor.positionKey, 3).send(actor.from);
+        await liquidityMiningContract.methods.partialReward(actor.positionKey).send(actor.from);
         balanceOf = await rewardToken.methods.balanceOf(actor.address).call();
         balanceOf = utilities.fromDecimals(balanceOf, await rewardToken.methods.decimals().call());
 

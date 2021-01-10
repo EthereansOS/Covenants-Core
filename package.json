@@ -6,7 +6,7 @@
   "scripts": {
     "postinstall": "cross-var solc-vm install $npm_package_config_solidityVersion",
     "build": "node util/build-contracts.js",
-    "test": "mocha test/liquidityMining.js"
+    "test": "mocha"
   },
   "config": {
     "solidityVersion": "0.7.6"

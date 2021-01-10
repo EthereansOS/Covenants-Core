@@ -142,30 +142,22 @@ contract LiquidityMining {
     /** Public methods. */
 
     /** @dev this function allows a wallet to update the extension of the given liquidity mining position.
+      * @param to address of the new extension.
       * @param positionKey key of the liquidity mining position.
-      * @param setupIndex index of the setup of the liquidity mining position.
-      * @param newOwner address of the new extension.
      */
-    function transfer(bytes32 positionKey, uint256 setupIndex, address newOwner) public {
+    function transfer(address to, bytes32 positionKey) public {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionKey];
         require(
             liquidityMiningPosition.objectId == 0 && 
             liquidityMiningPosition.setup.ammPlugin != address(0) && 
-            newOwner != address(0) &&
+            to != address(0) &&
             liquidityMiningPosition.uniqueOwner == msg.sender &&
-            liquidityMiningPosition.setup.startBlock == _setups[setupIndex].startBlock &&
-            liquidityMiningPosition.setup.endBlock == _setups[setupIndex].endBlock,
+            liquidityMiningPosition.setup.startBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
+            liquidityMiningPosition.setup.endBlock == _setups[liquidityMiningPosition.setupIndex].endBlock,
         "Invalid liquidity mining position.");
-        liquidityMiningPosition.uniqueOwner = newOwner;
-        /*// copy the liquidity mining position to the new key
-        newPositionKey = keccak256(abi.encode(newOwner, setupIndex, liquidityMiningPosition.creationBlock));
-        _positions[newPositionKey] = liquidityMiningPosition;
-        _positionRedeemed[newPositionKey] = _positionRedeemed[positionKey];
-        _partiallyRedeemed[newPositionKey] = _partiallyRedeemed[positionKey];
-        _positions[positionKey] = _positions[0x0];*/
-        // emit extension changed event
-        emit Transfer(positionKey, msg.sender, newOwner);
+        liquidityMiningPosition.uniqueOwner = to;
+        emit Transfer(positionKey, msg.sender, to);
     }
 
     /** @dev function called by external users to open a new liquidity mining position.
@@ -227,9 +219,8 @@ contract LiquidityMining {
 
     /** @dev this function allows a user to withdraw a partial reward.
       * @param positionKey liquidity mining position key.
-      * @param setupIndex index of the liquidity mining setup.
      */
-    function partialReward(bytes32 positionKey, uint256 setupIndex) public {
+    function partialReward(bytes32 positionKey) public {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionKey];
         // check if wallet is withdrawing using a liquidity mining position token
@@ -252,10 +243,10 @@ contract LiquidityMining {
             // remove the partial reward from the liquidity mining position total reward
             liquidityMiningPosition.reward = liquidityMiningPosition.reward - reward;
             // withdraw the values using the helper
-            _withdraw(positionKey, setupIndex, false, reward, true);
+            _withdraw(positionKey, false, reward, true);
         } else {
             // withdraw the values
-            _withdraw(positionKey, setupIndex, false, _calculateFreeLiquidityMiningSetupReward(setupIndex, positionKey), true);
+            _withdraw(positionKey, false, _calculateFreeLiquidityMiningSetupReward(positionKey), true);
             // update the liquidity mining position creation block to exclude all the rewarded blocks
             liquidityMiningPosition.creationBlock = block.number;
         }
@@ -293,15 +284,14 @@ contract LiquidityMining {
                 ILiquidityMiningExtension(_extension).backToYou{value : amount}(amount);
             }
         }
-        _exit(positionKey, setupIndex, unwrapPair);
+        _exit(positionKey, unwrapPair);
     }
 
     /** @dev this function allows a extension to withdraw its liquidity mining position using its liquidity mining position token or not.
       * @param positionKey liquidity mining position key.
-      * @param setupIndex index of the liquidity mining setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       */
-    function withdraw(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) public {
+    function withdraw(bytes32 positionKey, bool unwrapPair) public {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionKey];
         // check if wallet is withdrawing using a liquidity mining position token
@@ -314,7 +304,7 @@ contract LiquidityMining {
         if(hasPositionItem) {
             _burnPosition(positionKey, msg.sender, liquidityMiningPosition);
         }
-        _withdraw(positionKey, setupIndex, unwrapPair, liquidityMiningPosition.reward, false);
+        _withdraw(positionKey, unwrapPair, liquidityMiningPosition.reward, false);
         _positionRedeemed[positionKey] = true;
     }
 
@@ -406,15 +396,14 @@ contract LiquidityMining {
     }
 
     /** @dev function used to calculate the reward in a free liquidity mining setup.
-      * @param setupIndex index of the liquidity mining setup.
       * @param positionKey wallet liquidity mining position key.
       * @return reward total reward for the liquidity mining position extension.
      */
-    function _calculateFreeLiquidityMiningSetupReward(uint256 setupIndex, bytes32 positionKey) public view returns(uint256 reward) {
+    function _calculateFreeLiquidityMiningSetupReward(bytes32 positionKey) public view returns(uint256 reward) {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionKey];
-        for (uint256 i = 0; i < _setupUpdateBlocks[setupIndex].length; i++) {
-            if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[setupIndex][i]) {
-                reward += (_rewardPerTokenPerSetupPerBlock[setupIndex][_setupUpdateBlocks[setupIndex][i]] / 1e18) * liquidityMiningPosition.liquidityPoolData.liquidityPoolAmount;
+        for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
+            if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
+                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] / 1e18) * liquidityMiningPosition.liquidityPoolData.liquidityPoolAmount;
             }
         }
         require(reward > 0, "No reward!");
@@ -491,10 +480,9 @@ contract LiquidityMining {
 
     /** @dev helper function that performs the exit of the given liquidity mining position for the given setup index and unwraps the pair if the extension has chosen to do so.
       * @param positionKey bytes32 key of the liquidity mining position.
-      * @param setupIndex setup that we are exiting.
       * @param unwrapPair if the extension wants to unwrap the pair or not.
      */
-    function _exit(bytes32 positionKey, uint256 setupIndex, bool unwrapPair) private {
+    function _exit(bytes32 positionKey, bool unwrapPair) private {
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionKey];
         uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
         // pay the fees!
@@ -515,16 +503,16 @@ contract LiquidityMining {
             _safeTransfer(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, liquidityMiningPosition.uniqueOwner, liquidityMiningPosition.liquidityPoolData.liquidityPoolAmount);
         }
         // rebalance the setup if not free
-        if (!_setups[setupIndex].free && !_finishedLockedSetups[setupIndex]) {
+        if (!_setups[liquidityMiningPosition.setupIndex].free && !_finishedLockedSetups[liquidityMiningPosition.setupIndex]) {
             // check if the setup has been updated or not
-            if (liquidityMiningPosition.setup.endBlock == _setups[setupIndex].endBlock) {
+            if (liquidityMiningPosition.setup.endBlock == _setups[liquidityMiningPosition.setupIndex].endBlock) {
                 // the locked setup must be considered finished only if it's not renewable
-                _finishedLockedSetups[setupIndex] = !_setups[setupIndex].renewable;
+                _finishedLockedSetups[liquidityMiningPosition.setupIndex] = !_setups[liquidityMiningPosition.setupIndex].renewable;
                 //_rebalanceRewardPerBlock(liquidityMiningPosition.lockedRewardPerBlock, true);
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[setupIndex].currentRewardPerBlock, true);
-                if (_setups[setupIndex].renewable) {
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock, true);
+                if (_setups[liquidityMiningPosition.setupIndex].renewable) {
                     // renew the setup if renewable
-                    _renewSetup(setupIndex);
+                    _renewSetup(liquidityMiningPosition.setupIndex);
                 }
             }
         }
@@ -544,17 +532,16 @@ contract LiquidityMining {
 
     /** @dev withdraw helper method.
       * @param positionKey staking liquidity mining position key.
-      * @param setupIndex index of the liquidity mining setup.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       * @param reward amount to withdraw.
       * @param isPartial if it's a partial withdraw or not.
      */
-    function _withdraw(bytes32 positionKey, uint256 setupIndex, bool unwrapPair, uint256 reward, bool isPartial) private {
+    function _withdraw(bytes32 positionKey, bool unwrapPair, uint256 reward, bool isPartial) private {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionKey];
         // rebalance setup, if free
-        if (_setups[setupIndex].free && !isPartial) {
-            _rebalanceRewardPerToken(setupIndex, liquidityMiningPosition.liquidityPoolData.liquidityPoolAmount, true);
-            reward = (reward == 0) ? _calculateFreeLiquidityMiningSetupReward(setupIndex, positionKey) : reward;
+        if (_setups[liquidityMiningPosition.setupIndex].free && !isPartial) {
+            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityMiningPosition.liquidityPoolData.liquidityPoolAmount, true);
+            reward = (reward == 0) ? _calculateFreeLiquidityMiningSetupReward(positionKey) : reward;
             require(reward > 0, "Reward cannot be 0.");
         }
         // transfer the reward
@@ -570,7 +557,7 @@ contract LiquidityMining {
             }
         }
         if (!isPartial) {
-            _exit(positionKey, setupIndex, unwrapPair);
+            _exit(positionKey, unwrapPair);
         } else {
             _partiallyRedeemed[positionKey] = reward;
         }
