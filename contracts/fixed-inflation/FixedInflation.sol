@@ -16,9 +16,9 @@ contract FixedInflation {
 
     address public extension;
 
-    FixedInflationEntry[] public entries;
+    FixedInflationEntry[] private _entries;
 
-    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory _entries) public returns(bytes memory extensionInitResult) {
+    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory newEntries) public returns(bytes memory extensionInitResult) {
         require(extension == address(0), "Already init");
         require(_extension != address(0), "Blank extension");
         extension = _extension;
@@ -27,8 +27,8 @@ contract FixedInflation {
             (result, extensionInitResult) = _extension.call(extensionPayload);
             require(result, "Extension fail");
         }
-        require(_entries.length > 0, "Empty entries");
-        _setEntries(_entries);
+        require(newEntries.length > 0, "Empty entries");
+        _setEntries(newEntries);
     }
 
     receive() external payable {
@@ -39,32 +39,32 @@ contract FixedInflation {
         _;
     }
 
-    function setEntries(FixedInflationEntry[] memory _entries) public extensionOnly {
-        _setEntries(_entries);
+    function setEntries(FixedInflationEntry[] memory newEntries) public extensionOnly {
+        _setEntries(newEntries);
     }
 
     function nextBlock(uint256 i) public view returns(uint256) {
-        return entries[i].lastBlock == 0 ? block.number : (entries[i].lastBlock + entries[i].blockInterval);
+        return _entries[i].lastBlock == 0 ? block.number : (_entries[i].lastBlock + _entries[i].blockInterval);
     }
 
-    function entriesLength() public view returns(uint256) {
-        return entries.length;
+    function entries() public view returns(FixedInflationEntry[] memory) {
+        return _entries;
     }
 
-    function call(uint256[] memory indexes, bool[] memory byEarn) public {
-        require(indexes.length > 0 && indexes.length == byEarn.length, "Invalid input data");
+    function call(uint256[][] memory indexes) public {
+        require(indexes.length > 0, "Invalid input data");
         for(uint256 i = 0; i < indexes.length; i++) {
-            require(entries.length > indexes[i], "Invalid index");
-            require(nextBlock(indexes[i]) >= block.number, "Too early to call index");
-            FixedInflationEntry storage fixedInflationEntry = entries[indexes[i]];
+            require(_entries.length > indexes[i][0], "Invalid index");
+            require(nextBlock(indexes[i][0]) >= block.number, "Too early to call index");
+            FixedInflationEntry storage fixedInflationEntry = _entries[indexes[i][0]];
             fixedInflationEntry.lastBlock = block.number;
             for(uint256 j = 0; j < fixedInflationEntry.operationSets.length; j++) {
-                _collectFixedInflationOperationSetTokens(fixedInflationEntry.operationSets[j], byEarn[i]);
+                _collectFixedInflationOperationSetTokens(fixedInflationEntry.operationSets[j], indexes[i][1] == 1);
             }
         }
         IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer);
         for(uint256 i = 0; i < indexes.length; i++) {
-             _call(entries[indexes[i]], byEarn[i], msg.sender);
+             _call(_entries[indexes[i][0]], indexes[i][1] == 1, msg.sender);
         }
         _clearVars();
     }
@@ -141,7 +141,7 @@ contract FixedInflation {
         IAMM(ammPlugin).swapLiquidity(liquidityToSwap);
     }
 
-    function _setEntries(FixedInflationEntry[] memory _entries) private {
+    function _setEntries(FixedInflationEntry[] memory newEntries) private {
 
     }
 
