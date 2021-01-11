@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity ^0.7.4;
 pragma abicoder v2;
 
 import "./ILiquidityMiningFactory.sol";
@@ -129,14 +129,11 @@ contract LiquidityMining is ILiquidityMining {
       * @param pinnedIndex new pinned setup index.
       */
     function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override byExtension {
-        uint256 newLockedRewardPerBlock;
         for (uint256 i = 0; i < liquidityMiningSetups.length; i++) {
             LiquidityMiningSetupConfiguration memory configuration = liquidityMiningSetups[i];
             if (configuration.add) {
                 // adding new liquidity mining setup
                 _setups.push(configuration.data);
-                // if it's locked we add its reward per block to the pinned free
-                newLockedRewardPerBlock += configuration.data.free ? 0 : configuration.data.rewardPerBlock;
             } else {
                 LiquidityMiningSetup storage liquidityMiningSetup = _setups[configuration.index];
                 if (liquidityMiningSetup.free) {
@@ -164,13 +161,6 @@ contract LiquidityMining is ILiquidityMining {
             _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
             _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
         }
-        // check if we have new locked farming setups
-        if (newLockedRewardPerBlock > 0) {
-            // new locked setups are here, we must update the pinned setup if there's one
-            if (_setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, newLockedRewardPerBlock, true);
-            }
-        }
         // check if we're updating the pinned setup
         if (!clearPinned && setPinned) {
             require(_setups[_pinnedSetupIndex].free, "Invalid pinned free setup");
@@ -184,7 +174,7 @@ contract LiquidityMining is ILiquidityMining {
             }
             oldBalancedRewardPerBlock = 0;
             for(uint256 i = 0; i < _setups.length; i++) {
-                if(_setups[i].free || _setups[i].rewardPerBlock == 0/* || block.number < _setups[i].startBlock || block.number > _setups[i].endBlock*/) {
+                if(_setups[i].free || _setups[i].rewardPerBlock == 0 || block.number < _setups[i].startBlock || block.number > _setups[i].endBlock) {
                     continue;
                 }
                 oldBalancedRewardPerBlock += _setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock;
@@ -414,19 +404,31 @@ contract LiquidityMining is ILiquidityMining {
         _positionRedeemed[positionId] = true;
     }
 
-    /** @dev this function allows any user to rebalance the pinned setup.
-      * @param expiredSetupIndexes array containing the indexes of all the expired locked liquidity mining setups.
-     */
-    function rebalancePinnedSetup(uint256[] memory expiredSetupIndexes) public {
-        for (uint256 i = 0; i < expiredSetupIndexes.length; i++) {
-            if (!_setups[expiredSetupIndexes[i]].free && block.number >= _setups[expiredSetupIndexes[i]].endBlock && !_finishedLockedSetups[expiredSetupIndexes[i]]) {
-                _finishedLockedSetups[expiredSetupIndexes[i]] = !_setups[expiredSetupIndexes[i]].renewable;
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[expiredSetupIndexes[i]].currentRewardPerBlock, true);
-                if (_setups[expiredSetupIndexes[i]].renewable) {
-                    _renewSetup(expiredSetupIndexes[i]);
+    /** @dev this function allows any user to rebalance the pinned setup. */
+    function rebalancePinnedSetup() public {
+        if (!_hasPinned || !_setups[_pinnedSetupIndex].free) return;
+        uint256 amount;
+        for (uint256 i = 0; i < _setups.length; i++) {
+            if (_setups[i].free) continue;
+            // this is a locked setup that it's currently active or it's a new one
+            if (block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock) {
+                // the amount to add to the pinned is given by the difference between the reward per block and currently locked one
+                // in the case of a new setup, the currentRewardPerBlock is 0 so the difference is the whole rewardPerBlock
+                amount += (_setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock);
+            // this is a locked setup that has expired
+            } else if (block.number >= _setups[i].endBlock) {
+                // check if the setup is renewable
+                if (_setups[i].renewable) {
+                    // if it is, we renew it and add the reward per block
+                    _renewSetup(i);
+                    amount += _setups[i].rewardPerBlock;
+                } else {
+                    _finishedLockedSetups[i] = true;
                 }
             }
         }
+        _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
+        _rebalanceRewardPerBlock(_pinnedSetupIndex, amount, true);
     }
 
     /** Private methods. */
@@ -587,13 +589,17 @@ contract LiquidityMining is ILiquidityMining {
         if (!_setups[liquidityMiningPosition.setupIndex].free && !_finishedLockedSetups[liquidityMiningPosition.setupIndex]) {
             // check if the setup has been updated or not
             if (liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock) {
-                // the locked setup must be considered finished only if it's not renewable
-                _finishedLockedSetups[liquidityMiningPosition.setupIndex] = !_setups[liquidityMiningPosition.setupIndex].renewable;
-                //_rebalanceRewardPerBlock(liquidityMiningPosition.lockedRewardPerBlock, true);
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock, true);
-                if (_setups[liquidityMiningPosition.setupIndex].renewable) {
-                    // renew the setup if renewable
-                    _renewSetup(liquidityMiningPosition.setupIndex);
+                // check if it's finished (this is a withdraw) or not (a unlock)
+                if (_setups[liquidityMiningPosition.setupIndex].endBlock <= block.number) {
+                    // the locked setup must be considered finished only if it's not renewable
+                    _finishedLockedSetups[liquidityMiningPosition.setupIndex] = !_setups[liquidityMiningPosition.setupIndex].renewable;
+                    _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock, false);
+                    if (_setups[liquidityMiningPosition.setupIndex].renewable) {
+                        // renew the setup if renewable
+                        _renewSetup(liquidityMiningPosition.setupIndex);
+                    }
+                } else {                    
+                    _rebalanceRewardPerBlock(_pinnedSetupIndex, liquidityMiningPosition.lockedRewardPerBlock, true);
                 }
             }
         }

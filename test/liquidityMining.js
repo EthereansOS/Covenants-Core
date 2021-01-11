@@ -50,22 +50,23 @@ describe("LiquidityMining", () => {
         wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
 
         rewardToken = new web3.eth.Contract(context.IERC20ABI, context.daiTokenAddress);
+        // rewardToken = utilities.voidEthereumAddress;
         mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
         secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
-        liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken.options.address, secondaryToken.options.address).call());
+        liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress).call());
 
-        await buyForETH(mainToken, ethToSpend);
-        await buyForETH(secondaryToken, ethToSpend);
-        await buyForETH(rewardToken, ethToSpend);
+        if (mainToken !== utilities.voidEthereumAddress) await buyForETH(mainToken, ethToSpend);
+        if (secondaryToken !== utilities.voidEthereumAddress) await buyForETH(secondaryToken, ethToSpend);
+        if (rewardToken !== utilities.voidEthereumAddress) await buyForETH(rewardToken, ethToSpend);
 
         uniswapAMM = await new web3.eth.Contract(UniswapV2AMMV1.abi).deploy({data : UniswapV2AMMV1.bin, arguments: [uniswapV2Router.options.address]}).send(blockchainConnection.getSendingOptions());
 
         await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);
         await initActor("Bob", accounts[2], 15, 50, 2, 0, false, true, 3.15, 0.177, 2.45, 0.07);
-        await initActor("Charlie", accounts[3], 20, 200, 0, 0, false, false, 30, 0.177, 18.3075);
-        await initActor("Donald", accounts[4], 40, 201, 0, 0, false, true, 50, 0.180, 24.8125);
-        await initActor("Orbulo", accounts[5], 210, 250, 0, 0, false, true, 0.0001, 0.250, 10, 0, true);
+        await initActor("Charlie", accounts[3], 20, 200, 0, 0, false, false, 30, 0.177, 12.2699);
+        await initActor("Donald", accounts[4], 40, 201, 0, 0, false, true, 50, 0.180, 15.1499);
+        await initActor("Orbulo", accounts[5], 210, 250, 0, 0, false, true, 0.0001, 0.150, 6, 0, true);
         await initActor("Frank", accounts[6], 259, 304, 3, 0, false, false, 0.315, 0.243, 0.315, 0.007, true);
         await initActor("Vasapower", accounts[7], 259, 304, 3, 0, false, false, 0.315, 0.243, 0.315, 0.007, true);
         await initActor("Dino", accounts[8], 260, 304, 3, 0, false, false, 0.315, 0.236, 0.308, 0.007, false);
@@ -115,9 +116,10 @@ describe("LiquidityMining", () => {
                 break;
             }
         }
-        console.log('setup update blocks: ', setupUpdateBlocks);
-        const rewardPerToken = await liquidityMiningContract.methods._rewardPerTokenPerSetupPerBlock(0, blockNumber).call();
-        console.log(`reward per token at block ${blockNumber} is ${rewardPerToken}`);
+        for (let i = 0; i < setupUpdateBlocks.length; i++) {
+            setupUpdateBlocks[i] = { rewardPerToken: await liquidityMiningContract.methods._rewardPerTokenPerSetupPerBlock(0, setupUpdateBlocks[i]).call(), block: setupUpdateBlocks[i] };
+        }
+        console.log(`exit block: ${blockNumber} - setup update blocks: `, setupUpdateBlocks);
     }
 
     async function logSetups() {
@@ -174,8 +176,8 @@ describe("LiquidityMining", () => {
         assert.strictEqual(await liquidityMiningContract.methods._extension().call(), liquidityMiningExtension.options.address);
 
         for(var actor of Object.values(actors)) {
-            await mainToken.methods.approve(liquidityMiningContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
-            await secondaryToken.methods.approve(liquidityMiningContract.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);    
+            if (mainToken != utilities.voidEthereumAddress) await mainToken.methods.approve(liquidityMiningContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
+            if (secondaryToken != utilities.voidEthereumAddress) await secondaryToken.methods.approve(liquidityMiningContract.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);    
         }
     });
     it("Previously created LiquidityMining Contract cannot be initialized more than a time", async() => {
@@ -238,7 +240,7 @@ describe("LiquidityMining", () => {
     });
     it("should set the liquidity mining setups", async() => {
 
-        zeroBlock = (await web3.eth.getBlockNumber()) + 4;
+        zeroBlock = (await web3.eth.getBlockNumber()) + 5;
 
         Object.values(actors).forEach(it => {
             it.enterBlock += zeroBlock;
@@ -261,10 +263,10 @@ describe("LiquidityMining", () => {
             maximumLiquidity: utilities.toDecimals(longTerm1SetupRewardPerBlockPlain * longTerm1SetupDuration, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18),
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: false,
-            renewable: true,
+            renewable: false,
             penaltyFee: 1,
         };
 
@@ -284,7 +286,7 @@ describe("LiquidityMining", () => {
             maximumLiquidity: utilities.toDecimals(longTerm2SetupRewardPerBlockPlain * longTerm2SetupDuration, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18),
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: false,
             renewable: false,
@@ -303,7 +305,7 @@ describe("LiquidityMining", () => {
             maximumLiquidity: 0,
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: true,
             renewable: false,
@@ -314,10 +316,10 @@ describe("LiquidityMining", () => {
 
         var currentBlock = await web3.eth.getBlockNumber();
         var expectedPinnedFreeSetupRewardPerBlock = web3.utils.toBN("0");
-        liquidityMiningSetups.filter(it => !it.free && it.rewardPerBlock !== '0'/* && currentBlock >= it.startBlock && currentBlock <= it.endBlock*/).forEach(it => expectedPinnedFreeSetupRewardPerBlock = expectedPinnedFreeSetupRewardPerBlock.add(web3.utils.toBN(it.rewardPerBlock)));
-        expectedPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(expectedPinnedFreeSetupRewardPerBlock.add(web3.utils.toBN(pinnedFreeSetup.rewardPerBlock)).toString(), await rewardToken.methods.decimals().call());
+        liquidityMiningSetups.filter(it => !it.free && it.rewardPerBlock !== '0' && currentBlock >= it.startBlock && currentBlock <= it.endBlock).forEach(it => expectedPinnedFreeSetupRewardPerBlock = expectedPinnedFreeSetupRewardPerBlock.add(web3.utils.toBN(it.rewardPerBlock)));
+        expectedPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(expectedPinnedFreeSetupRewardPerBlock.add(web3.utils.toBN(pinnedFreeSetup.rewardPerBlock)).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
-        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken.options.address}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
+        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address, false, true, 0);
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
         await dfoManager.finalizeProposal(dfo, proposal);
@@ -330,16 +332,19 @@ describe("LiquidityMining", () => {
         assert.strictEqual(pinnedSetupIndex, "0");
 
         var setup = (await liquidityMiningContract.methods.setups().call())[pinnedSetupIndex];
-        var currentPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(setup.rewardPerBlock, await rewardToken.methods.decimals().call());
+        var currentPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(setup.rewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
         console.log(currentPinnedFreeSetupRewardPerBlock, expectedPinnedFreeSetupRewardPerBlock);
         assert.strictEqual(currentPinnedFreeSetupRewardPerBlock, expectedPinnedFreeSetupRewardPerBlock);
+    });
+    it("should rebalance the pinned setup after the setups have been set", async () => {
+        await liquidityMiningContract.methods.rebalancePinnedSetup().send(blockchainConnection.getSendingOptions());
     });
     async function createNewStakingPosition(actor) {
 
         var {from, setupIndex, enterBlock, liquidityPoolAddressIndex, mainTokenAmountPlain, expectedRewardPerBlock, positionItem, ethInvolved} = actor;
 
-        var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, await mainToken.methods.decimals().call());
+        var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
 
         var setup = (await liquidityMiningContract.methods.setups().call())[setupIndex];
         console.log("chosen setup is", setup);
@@ -367,15 +372,15 @@ describe("LiquidityMining", () => {
 
         var tokens = await ammPlugin.methods.tokens(liquidityPoolTokenAddress).call();
 
-        var secondaryTokenIndex = tokens[0] === secondaryToken.options.address ? 0 : 1;
+        var secondaryTokenIndex = tokens[0] === (secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
 
-        var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken.options.address, mainTokenAmount).call();
+        var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, mainTokenAmount).call();
 
         var secondaryTokenAmount = amounts[1][secondaryTokenIndex];
 
         var stake = {
             setupIndex,
-            secondaryTokenAddress: secondaryToken.options.address,
+            secondaryTokenAddress: secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAmount : 0,
             liquidityPoolAddressIndex,
             mainTokenAmount,
@@ -416,9 +421,12 @@ describe("LiquidityMining", () => {
 
         return position;
     }
-    it("alice should set a new staking position", () => createNewStakingPosition(actors.Alice));
-    it("bob should set a new staking position", () => createNewStakingPosition(actors.Bob));
-    it("charlie should set a new staking position", () => createNewStakingPosition(actors.Charlie));
+    it("alice should set a new staking position", async () => await createNewStakingPosition(actors.Alice));
+    it("bob should set a new staking position", async () => await createNewStakingPosition(actors.Bob));
+    it("should rebalance the pinned setup", async () => {
+        await liquidityMiningContract.methods.rebalancePinnedSetup().send(blockchainConnection.getSendingOptions());
+    });
+    it("charlie should set a new staking position", async () => await createNewStakingPosition(actors.Charlie));
     it("should allow alice to partial reward", async () => {
         var actor = actors.Alice;
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
@@ -450,25 +458,25 @@ describe("LiquidityMining", () => {
         liquidityPoolTokenAmount = liquidityPoolTokenAmount.toString();
 
         var rewardBalance = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
-        var mainBalance = await mainToken.methods.balanceOf(actor.address).call();
-        var secondaryBalance = await secondaryToken.methods.balanceOf(actor.address).call();
+        var mainBalance = mainToken != utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
+        var secondaryBalance = secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
         var liquidityPoolBalance = await liquidityPool.methods.balanceOf(actor.address).call();
 
         var tokens = await uniswapAMM.methods.tokens(liquidityPool.options.address).call();
-        var mainTokenIndex = tokens[0] === mainToken.options.address ? 0 : 1;
-        var secondaryTokenIndex = tokens[0] === secondaryToken.options.address ? 0 : 1;
+        var mainTokenIndex = tokens[0] === (mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
+        var secondaryTokenIndex = tokens[0] === (secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
         var amounts = await uniswapAMM.methods.byLiquidityPoolAmount(liquidityPool.options.address, liquidityPoolTokenAmount).call();
 
         var expectedRewardBalance = utilities.fromDecimals(web3.utils.toBN(rewardBalance).add(web3.utils.toBN(await utilities.toDecimals(actor.expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18))).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
-        var expectedMainBalance = utilities.fromDecimals(web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString(), await mainToken.methods.decimals().call());
-        var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), await secondaryToken.methods.decimals().call());
+        var expectedMainBalance = utilities.fromDecimals(web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString(), mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
+        var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
         await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap).send(actor.from);
 
         var rewardBalance = utilities.fromDecimals(rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
-        var mainBalance = utilities.fromDecimals(await mainToken.methods.balanceOf(actor.address).call(), await mainToken.methods.decimals().call());
-        var secondaryBalance = utilities.fromDecimals(await secondaryToken.methods.balanceOf(actor.address).call(), await secondaryToken.methods.decimals().call());
+        var mainBalance = utilities.fromDecimals(mainToken != utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
+        var secondaryBalance = utilities.fromDecimals(secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
 
         if(actor.partialReward) {
@@ -485,7 +493,7 @@ describe("LiquidityMining", () => {
     };
     async function withdrawStakingPosition(actor) {
 
-        if (actor.name !== "Bob") {
+        if (actor.name !== 'Bob') {
             await blockchainConnection.jumpToBlock(actor.exitBlock, true);
         }
 
@@ -504,25 +512,25 @@ describe("LiquidityMining", () => {
         liquidityPoolTokenAmount = liquidityPoolTokenAmount.toString();
 
         var rewardBalance = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
-        var mainBalance = await mainToken.methods.balanceOf(actor.address).call();
-        var secondaryBalance = await secondaryToken.methods.balanceOf(actor.address).call();
+        var mainBalance = mainToken != utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
+        var secondaryBalance = secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
         var liquidityPoolBalance = await liquidityPool.methods.balanceOf(actor.address).call();
 
         var tokens = await uniswapAMM.methods.tokens(liquidityPool.options.address).call();
-        var mainTokenIndex = tokens[0] === mainToken.options.address ? 0 : 1;
-        var secondaryTokenIndex = tokens[0] === secondaryToken.options.address ? 0 : 1;
+        var mainTokenIndex = tokens[0] ===(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
+        var secondaryTokenIndex = tokens[0] === (secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
         var amounts = await uniswapAMM.methods.byLiquidityPoolAmount(liquidityPool.options.address, liquidityPoolTokenAmount).call();
 
         var expectedRewardBalance = utilities.fromDecimals(web3.utils.toBN(rewardBalance).add(web3.utils.toBN(await utilities.toDecimals(actor.expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18))).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
-        var expectedMainBalance = utilities.fromDecimals(web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString(), await mainToken.methods.decimals().call());
-        var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), await secondaryToken.methods.decimals().call());
+        var expectedMainBalance = utilities.fromDecimals(web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString(), mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
+        var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
         await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap).send(actor.from);
 
         var rewardBalance = utilities.fromDecimals(rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
-        var mainBalance = utilities.fromDecimals(await mainToken.methods.balanceOf(actor.address).call(), await mainToken.methods.decimals().call());
-        var secondaryBalance = utilities.fromDecimals(await secondaryToken.methods.balanceOf(actor.address).call(), await secondaryToken.methods.decimals().call());
+        var mainBalance = utilities.fromDecimals(mainToken != utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
+        var secondaryBalance = utilities.fromDecimals(secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
         await logData(actor.exitBlock);
         // await logSetups();
@@ -544,6 +552,7 @@ describe("LiquidityMining", () => {
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("transferfrom_failed"), -1);
         }
     });
+    /*
     it("should update liquidity mining setup at index 1", async () => {
         var setupIndex = 1;
 
@@ -586,8 +595,9 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(parseInt(setup.endBlock), longTerm1Setup.endBlock);
         assert.notStrictEqual(parseInt(setup.startBlock), longTerm1Setup.startBlock);
     });
-    it("should allow alice to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Alice));
-    it("donald should set a new staking position", () => createNewStakingPosition(actors.Donald));
+    */
+    it("should allow alice to withdraw without unwrapping the pair", async () => await withdrawStakingPosition(actors.Alice));
+    it("donald should set a new staking position", async () => await createNewStakingPosition(actors.Donald));
     it("should not allow charlie to withdraw bob position", async () => {
         try {
             await liquidityMiningContract.methods.withdraw(actors.Bob.positionId, actors.Bob.setupIndex, true).send(actors.Charlie.from);
@@ -598,17 +608,16 @@ describe("LiquidityMining", () => {
     });
 
     //it("should allow bob to unlock unwrapping the pair", () => unlockStakingPosition(actors.Bob));
-    it("should rebalance the free position token", async () => {
+    it("should rebalance the free farming setup", async () => {
         await blockchainConnection.jumpToBlock(actors.Bob.exitBlock, true);
-        await liquidityMiningContract.methods.rebalancePinnedSetup([2]).send(actors.Bob.from);
-        await logData(actors.Bob.exitBlock);
+        await liquidityMiningContract.methods.rebalancePinnedSetup().send(actors.Bob.from);
         await logSetups();
     });
-    it("should allow bob to withdraw unwrapping the pair", () => withdrawStakingPosition(actors.Bob));
-    it("should allow charlie to withdraw its position without unwrapping the pair", () => withdrawStakingPosition(actors.Charlie));
-    it("should allow donald to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Donald));
-    it("orbulo should set a new staking position with a position token", () => createNewStakingPosition(actors.Orbulo));
-    it("should allow orbulo to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Orbulo));
+    it("should allow bob to withdraw unwrapping the pair", async () => await withdrawStakingPosition(actors.Bob));
+    it("should allow charlie to withdraw its position without unwrapping the pair", async () => await withdrawStakingPosition(actors.Charlie));
+    it("should allow donald to withdraw its position unwrapping the pair", async () => await withdrawStakingPosition(actors.Donald));
+    it("orbulo should set a new staking position with a position token", async () => await createNewStakingPosition(actors.Orbulo));
+    it("should allow orbulo to withdraw its position unwrapping the pair", async () => await withdrawStakingPosition(actors.Orbulo));
     it("should set a new locked liquidity mining setup", async() => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
@@ -630,7 +639,7 @@ describe("LiquidityMining", () => {
             maximumLiquidity: utilities.toDecimals(longTerm3SetupRewardPerBlockPlain * longTerm3SetupDuration, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18),
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: false,
             renewable: false,
@@ -639,7 +648,7 @@ describe("LiquidityMining", () => {
         };
 
         var liquidityMiningSetups = [longTerm3Setup];
-        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken.options.address}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
+        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address, false, false, 0);
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
         await dfoManager.finalizeProposal(dfo, proposal);
@@ -647,8 +656,8 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("frank should set a new staking position with a position token", () => createNewStakingPosition(actors.Frank));
-    it("dino should set a new staking position without a position token", () => createNewStakingPosition(actors.Dino));
+    it("frank should set a new staking position with a position token", async () => await createNewStakingPosition(actors.Frank));
+    it("dino should set a new staking position without a position token", async () => await createNewStakingPosition(actors.Dino));
     it("frank should transfer its position token to vasapower", async () => {
         await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, actors.Frank.positionId, 1, 0x0).send(actors.Frank.from);
 
@@ -699,7 +708,7 @@ describe("LiquidityMining", () => {
         }
         return await unlockStakingPosition(actors.Vasapower);
     });
-    it("should allow ale to add liquidity to its position", () => addLiquidity(actors.Ale));
+    it("should allow ale to add liquidity to its position", async () => await addLiquidity(actors.Ale));
     it("should not allow dino to withdraw unwrapping the pair", async () => {
         try {
             await withdrawStakingPosition(actors.Dino);
@@ -732,7 +741,7 @@ describe("LiquidityMining", () => {
             maximumLiquidity: 0,
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: true,
             renewable: false,
@@ -741,7 +750,7 @@ describe("LiquidityMining", () => {
         };
 
         var liquidityMiningSetups = [newFreeSetup];
-        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken.options.address}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
+        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address, false, false, 0);
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
         await dfoManager.finalizeProposal(dfo, proposal);
@@ -749,7 +758,7 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("cavicchioli should set a new staking position without a position token", () => createNewStakingPosition(actors.Cavicchioli));
+    it("cavicchioli should set a new staking position without a position token", async () => await createNewStakingPosition(actors.Cavicchioli));
     it("should update liquidity mining setup at index 4", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length;
@@ -767,7 +776,7 @@ describe("LiquidityMining", () => {
             maximumLiquidity: 0,
             totalSupply: 0,
             lastBlockUpdate: 0,
-            mainTokenAddress: mainToken.options.address,
+            mainTokenAddress: mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAddresses: [liquidityPool.options.address],
             free: true,
             renewable: false,
@@ -776,7 +785,7 @@ describe("LiquidityMining", () => {
         };
 
         var liquidityMiningSetups = [newFreeSetup];
-        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken.options.address}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
+        var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.maximumLiquidity}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.free}, ${it.renewable}, ${it.penaltyFee}));`).join('\n        ');
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, liquidityMiningContract.options.address, false, false, 0);
 
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
@@ -792,7 +801,7 @@ describe("LiquidityMining", () => {
 
         var {from, address, setupIndex, enterBlock, liquidityPoolAddressIndex, mainTokenAmountPlain, expectedRewardPerBlock, positionItem, ethInvolved, positionId} = actor;
 
-        var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, await mainToken.methods.decimals().call());
+        var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(address).call() : await web3.eth.getBalance(address);
         console.log(`starting balance ${balanceOf}`);
 
@@ -804,14 +813,14 @@ describe("LiquidityMining", () => {
 
         var tokens = await ammPlugin.methods.tokens(liquidityPoolTokenAddress).call();
 
-        var secondaryTokenIndex = tokens[0] === secondaryToken.options.address ? 0 : 1;
+        var secondaryTokenIndex = tokens[0] === (secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress) ? 0 : 1;
 
-        var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken.options.address, mainTokenAmount).call();
+        var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, mainTokenAmount).call();
         var secondaryTokenAmount = amounts[1][secondaryTokenIndex];
 
         var stake = {
             setupIndex,
-            secondaryTokenAddress: secondaryToken.options.address,
+            secondaryTokenAddress: secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAmount : 0,
             liquidityPoolAddressIndex,
             mainTokenAmount,
@@ -844,6 +853,6 @@ describe("LiquidityMining", () => {
         console.log(position);
         
     };
-    it("should allow cavicchioli to add liquidity to its position", () => addLiquidity(actors.Cavicchioli));
-    it("should allow cavicchioli to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Cavicchioli));
+    it("should allow cavicchioli to add liquidity to its position", async () => await addLiquidity(actors.Cavicchioli));
+    it("should allow cavicchioli to withdraw without unwrapping the pair", async () => await withdrawStakingPosition(actors.Cavicchioli));
 });
