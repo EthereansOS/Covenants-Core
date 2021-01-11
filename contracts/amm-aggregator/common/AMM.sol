@@ -120,17 +120,6 @@ abstract contract AMM is IAMM {
         _transferToMeCheckAllowanceAndClear(tokens, length, msg.sender, operator);
     }
 
-    function _transferToMeAndCheckAllowance(LiquidityToSwap[] memory data, address operator) internal virtual returns (address[] memory tokens, uint256 length) {
-        tokens = new address[](data.length);
-        for(uint256 i = 0; i < data.length; i++) {
-            if(_tokenValuesToTransfer[data[i].tokens[0]] == 0) {
-                tokens[length++] = data[i].tokens[0];
-            }
-            _tokenValuesToTransfer[data[i].tokens[0]] += data[i].amount;
-        }
-        _transferToMeCheckAllowanceAndClear(tokens, length, msg.sender, operator);
-    }
-
     function _transferToMeCheckAllowanceAndClear(address[] memory tokens, uint256 length, address from, address operator) internal virtual {
         for(uint256 i = 0; i < length; i++) {
             if(_tokenValuesToTransfer[tokens[i]] > 0) {

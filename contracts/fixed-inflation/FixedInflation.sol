@@ -11,14 +11,18 @@ contract FixedInflation {
 
     mapping(address => uint256) internal _tokenIndex;
     mapping(address => uint256) internal _tokenTotalSupply;
-    uint256[][] private _tokensToTransfer;
+    address[] private _tokensToTransfer;
+    uint256[] private _tokenAmounts;
+    uint256[] private _tokenMintAmounts;
     uint256 private _tokensLength = 1;
 
     address public extension;
 
-    FixedInflationEntry[] private _entries;
+    mapping(uint256 => FixedInflationEntry) private _entries;
+    mapping(uint256 => FixedInflationOperation[]) private _operations;
+    uint256 private _entriesLength;
 
-    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory newEntries) public returns(bytes memory extensionInitResult) {
+    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory newEntries, FixedInflationOperation[][] memory operationSets) public returns(bytes memory extensionInitResult) {
         require(extension == address(0), "Already init");
         require(_extension != address(0), "Blank extension");
         extension = _extension;
@@ -27,8 +31,10 @@ contract FixedInflation {
             (result, extensionInitResult) = _extension.call(extensionPayload);
             require(result, "Extension fail");
         }
-        require(newEntries.length > 0, "Empty entries");
-        _setEntries(newEntries);
+        require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
+        for(uint256 i = 0; i < newEntries.length; i++) {
+            _add(newEntries[i], operationSets[i]);
+        }
     }
 
     receive() external payable {
@@ -39,32 +45,59 @@ contract FixedInflation {
         _;
     }
 
-    function setEntries(FixedInflationEntry[] memory newEntries) public extensionOnly {
-        _setEntries(newEntries);
+    function entries() public view returns(FixedInflationEntry[] memory entriesArray, FixedInflationOperation[][] memory operationSets) {
+        entriesArray = new FixedInflationEntry[](_entriesLength);
+        operationSets = new FixedInflationOperation[][](_entriesLength);
+        for(uint256 i = 0; i < _entriesLength; i++) {
+            entriesArray[i] = _entries[i];
+            operationSets[i] = new FixedInflationOperation[](_operations[i].length);
+            for(uint256 j = 0; j < operationSets[i].length; j++) {
+                operationSets[i][j] = _operations[i][j];
+            }
+        }
+    }
+
+    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public extensionOnly {
+        require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
+        for(uint256 i = 0; i < newEntries.length; i++) {
+            FixedInflationEntryConfiguration memory entryConfiguration = newEntries[i];
+            if(entryConfiguration.add) {
+                _add(FixedInflationEntry(
+                    0,
+                    entryConfiguration.blockInterval,
+                    entryConfiguration.ammPlugins
+                ), operationSets[i]);
+                continue;
+            }
+            if(entryConfiguration.remove) {
+                _remove(entryConfiguration.index);
+                continue;
+            }
+            _entries[entryConfiguration.index].blockInterval = entryConfiguration.blockInterval;
+            delete _operations[entryConfiguration.index];
+            FixedInflationOperation[] memory operations = operationSets[entryConfiguration.index];
+            for(uint256 j = 0; j < operations.length; j++) {
+                _operations[entryConfiguration.index].push(operations[j]);
+            }
+        }
     }
 
     function nextBlock(uint256 i) public view returns(uint256) {
         return _entries[i].lastBlock == 0 ? block.number : (_entries[i].lastBlock + _entries[i].blockInterval);
     }
 
-    function entries() public view returns(FixedInflationEntry[] memory) {
-        return _entries;
-    }
-
     function call(uint256[][] memory indexes) public {
         require(indexes.length > 0, "Invalid input data");
         for(uint256 i = 0; i < indexes.length; i++) {
-            require(_entries.length > indexes[i][0], "Invalid index");
+            require(_entriesLength > indexes[i][0], "Invalid index");
             require(nextBlock(indexes[i][0]) >= block.number, "Too early to call index");
             FixedInflationEntry storage fixedInflationEntry = _entries[indexes[i][0]];
             fixedInflationEntry.lastBlock = block.number;
-            for(uint256 j = 0; j < fixedInflationEntry.operationSets.length; j++) {
-                _collectFixedInflationOperationSetTokens(fixedInflationEntry.operationSets[j], indexes[i][1] == 1);
-            }
+            _collectFixedInflationOperationSetTokens(_operations[indexes[i][0]], indexes[i][1] == 1);
         }
-        IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer);
+        IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer, _tokenAmounts, _tokenMintAmounts);
         for(uint256 i = 0; i < indexes.length; i++) {
-             _call(_entries[indexes[i][0]], indexes[i][1] == 1, msg.sender);
+            _call(_entries[indexes[i][0]], _operations[indexes[i][0]], indexes[i][1] == 1, msg.sender);
         }
         _clearVars();
     }
@@ -76,11 +109,15 @@ contract FixedInflation {
         uint256 position = _tokenIndex[tokenData.tokenAddress];
         if(position == 0) {
             _tokenIndex[tokenData.tokenAddress] = position = (_tokensLength++) - 1;
-            _tokensToTransfer.push(new uint256[](3));
-            _tokensToTransfer[position][0] = uint256(tokenData.tokenAddress);
+            _tokensToTransfer.push(tokenData.tokenAddress);
+            _tokenAmounts.push(0);
+            _tokenMintAmounts.push(0);
         }
-        uint256 sourceType = tokenData.amountByMint ? 1 : 2;
-        _tokensToTransfer[position][sourceType] = _tokensToTransfer[position][sourceType] + _calculateTokenAmount(tokenData);
+        if(tokenData.amountByMint) {
+            _tokenMintAmounts[position] = _tokenMintAmounts[position] + _calculateTokenAmount(tokenData);
+        } else {
+            _tokenAmounts[position] = _tokenAmounts[position] + _calculateTokenAmount(tokenData);
+        }
     }
 
     function _calculateTokenAmount(TokenData memory tokenData) private returns(uint256) {
@@ -95,9 +132,9 @@ contract FixedInflation {
         return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / 100)) / 1e18;
     }
 
-    function _collectFixedInflationOperationSetTokens(FixedInflationOperationSet memory operationSet, bool byEarn) private {
-        for(uint256 i = 0; i < operationSet.operations.length; i++) {
-            FixedInflationOperation memory operation = operationSet.operations[i];
+    function _collectFixedInflationOperationSetTokens(FixedInflationOperation[] memory operations, bool byEarn) private {
+        for(uint256 i = 0; i < operations.length; i++) {
+            FixedInflationOperation memory operation = operations[i];
             _collectTokenData(operation.inputToken);
             if(!byEarn) {
                 _collectTokenData(operation.rewardToken);
@@ -105,22 +142,20 @@ contract FixedInflation {
         }
     }
 
-    function _call(FixedInflationEntry memory fixedInflationEntry, bool byEarn, address rewardReceiver) private {
-        for(uint256 i = 0; i < fixedInflationEntry.operationSets.length; i++) {
-            FixedInflationOperationSet memory operationSet = fixedInflationEntry.operationSets[i];
-            for(uint256 j = 0 ; j < operationSet.operations.length; j++) {
-                FixedInflationOperation memory operation = operationSet.operations[j];
-                if(operationSet.ammPlugin == address(0)) {
-                    _transfer(operation, byEarn, rewardReceiver);
-                } else {
-                    _swap(operation, operationSet.ammPlugin, fixedInflationEntry, byEarn, rewardReceiver);
-                }
+    function _call(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, bool byEarn, address rewardReceiver) private {
+        for(uint256 i = 0 ; i < operations.length; i++) {
+            FixedInflationOperation memory operation = operations[i];
+            require(operation.receiver != address(0), "Blank receiver");
+            require(!byEarn || operation.byEarnPercentage > 0, "Not byEarn");
+            if(fixedInflationEntry.ammPlugins[i] == address(0)) {
+                _transfer(operation, byEarn, rewardReceiver);
+            } else {
+                _swap(operation, fixedInflationEntry.ammPlugins[i], byEarn, rewardReceiver);
             }
         }
     }
 
     function _transfer(FixedInflationOperation memory operation, bool byEarn, address rewardReceiver) private {
-        require(operation.receiver != address(0), "Blank receiver");
         if(operation.inputToken.tokenAddress != address(0)) {
             _safeTransfer(operation.inputToken.tokenAddress, operation.receiver, _calculateTokenAmount(operation.inputToken));
         } else {
@@ -128,21 +163,39 @@ contract FixedInflation {
         }
     }
 
-    function _swap(FixedInflationOperation memory operation, address ammPlugin, FixedInflationEntry memory fixedInflationEntry, bool byEarn, address rewardReceiver) private {
+    function _swap(FixedInflationOperation memory operation, address ammPlugin, bool byEarn, address rewardReceiver) private {
+        uint256 amountIn = _calculateTokenAmount(operation.inputToken);
         LiquidityToSwap memory liquidityToSwap = LiquidityToSwap(
-            operation.liquidityPoolAddress,
-            0,
-            true,
-            false,
-            new address[](0),
-            _calculateTokenAmount(operation.inputToken),
+            operation.inputToken.tokenAddress == address(0),
+            operation.swapPath[operation.swapPath.length - 1] == address(0),
+            operation.liquidityPoolAddresses,
+            operation.swapPath,
+            operation.inputToken.tokenAddress,
+            amountIn,
             byEarn ? address(this) : operation.receiver
         );
-        IAMM(ammPlugin).swapLiquidity(liquidityToSwap);
+        uint256 amountOut;
+        if(liquidityToSwap.enterInETH) {
+            amountOut = IAMM(ammPlugin).swapLiquidity{value : amountIn}(liquidityToSwap);
+        } else {
+            amountOut = IAMM(ammPlugin).swapLiquidity(liquidityToSwap);
+        }
+        if(byEarn) {
+            uint256 reward = (amountOut * ((operation.byEarnPercentage * 1e18) / 100)) / 1e18;
+            _transferTo(operation.rewardToken.tokenAddress, rewardReceiver, reward);
+            _transferTo(operation.rewardToken.tokenAddress, operation.receiver, amountOut - reward);
+        } else {
+            _transferTo(operation.rewardToken.tokenAddress, rewardReceiver, _calculateTokenAmount(operation.rewardToken));
+            delete _tokenTotalSupply[operation.rewardToken.tokenAddress];
+        }
     }
 
-    function _setEntries(FixedInflationEntry[] memory newEntries) private {
-
+    function _transferTo(address erc20TokenAddress, address to, uint256 value) internal virtual {
+        if(erc20TokenAddress == address(0)) {
+            payable(to).transfer(value);
+            return;
+        }
+        _safeTransfer(erc20TokenAddress, to, value);
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
@@ -153,12 +206,30 @@ contract FixedInflation {
     function _clearVars() internal virtual {
         _tokensLength = 1;
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
-            if(_tokensToTransfer[i][0] == 0 && _tokensToTransfer[i][1] == 0 && _tokensToTransfer[i][2] == 0) {
+            if(_tokensToTransfer[i] == address(0) && _tokenAmounts[i] == 0 && _tokenMintAmounts[i] == 0) {
                 break;
             }
-            delete _tokenIndex[address(_tokensToTransfer[i][0])];
-            delete _tokenTotalSupply[address(_tokensToTransfer[i][0])];
+            delete _tokenIndex[address(_tokensToTransfer[i])];
+            delete _tokenTotalSupply[address(_tokensToTransfer[i])];
         }
         delete _tokensToTransfer;
+        delete _tokenAmounts;
+        delete _tokenMintAmounts;
+    }
+
+    function _add(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations) private {
+        _entries[_entriesLength++] = fixedInflationEntry;
+        delete _operations[_entriesLength - 1];
+        for(uint256 i = 0; i < operations.length; i++) {
+            _operations[_entriesLength - 1].push(operations[i]);
+        }
+    }
+
+    function _remove(uint256 i) private {
+        require(i < _entriesLength, "Invalid length");
+        _entries[i] = _entries[--_entriesLength];
+        _operations[i] = _operations[_entriesLength];
+        delete _entries[_entriesLength + 1];
+        delete _operations[_entriesLength + 1];
     }
 }

@@ -114,34 +114,32 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         }
     }
 
-    function swapLiquidity(LiquidityToSwap memory data) public payable virtual override {
-        _transferToMeAndCheckAllowance(data.tokens[0], data.amount, msg.sender, _uniswapV2RouterAddress);
-        _swapLiquidityWork(data);
-        _flushBack(msg.sender, data.tokens, data.tokens.length);
+    function swapLiquidity(LiquidityToSwap memory data) public payable virtual override returns(uint256 result) {
+        _transferToMeAndCheckAllowance(data.inputToken, data.amount, msg.sender, _uniswapV2RouterAddress);
+        result = _swapLiquidityWork(data);
+        _flushBack(msg.sender, data.enterInETH ? address(0) : data.inputToken);
     }
 
-    function swapLiquidityBatch(LiquidityToSwap[] memory data) public payable virtual override {
-        (address[] memory tokens, uint256 tokensLength) = _transferToMeAndCheckAllowance(data, _uniswapV2RouterAddress);
-        for(uint256 i = 0; i < data.length; i++) {
-            _swapLiquidityWork(data[i]);
-        }
-        _flushBack(msg.sender, tokens, tokensLength);
-    }
-
-    function _swapLiquidityWork(LiquidityToSwap memory data) internal virtual {
+    function _swapLiquidityWork(LiquidityToSwap memory data) internal virtual returns(uint256) {
         require(data.receiver != address(0), "Receiver cannot be void address");
-        if(!data.enterInETH && !data.exitInETH) {
-            IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForTokens(data.amount, 1, data.tokens, data.receiver, block.timestamp + 1000);
-            return;
-        }
-        if(data.enterInETH) {
-            IUniswapV2Router(_uniswapV2RouterAddress).swapExactETHForTokens{value : data.amount}(1, data.tokens, data.receiver, block.timestamp + 1000);
-            return;
+        address[] memory path = new address[](data.paths.length + 1);
+        path[0] = data.enterInETH ? _wethAddress : data.inputToken;
+        for(uint256 i = 0; i < data.paths.length; i++) {
+            path[i + 1] = data.paths[i];
         }
         if(data.exitInETH) {
-            IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForETH(data.amount, 1, data.tokens, data.receiver, block.timestamp + 1000);
-            return;
+            path[path.length - 1] = _wethAddress;
         }
+        if(!data.enterInETH && !data.exitInETH) {
+            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForTokens(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+        }
+        if(data.enterInETH) {
+            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactETHForTokens{value : data.amount}(1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+        }
+        if(data.exitInETH) {
+            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForETH(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+        }
+        return 0;
     }
 
     function tokens(address liquidityPoolAddress) public override view returns(address[] memory tkns) {

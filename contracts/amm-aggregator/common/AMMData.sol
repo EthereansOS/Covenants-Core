@@ -10,11 +10,11 @@ struct LiquidityPoolData {
 }
 
 struct LiquidityToSwap {
-    address liquidityPoolAddress;
-    uint256 liquidityPoolAmount;
     bool enterInETH;
     bool exitInETH;
-    address[] tokens;
+    address[] liquidityPoolAddresses;
+    address[] paths;
+    address inputToken;
     uint256 amount;
     address receiver;
 }

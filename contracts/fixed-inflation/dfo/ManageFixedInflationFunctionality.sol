@@ -17,32 +17,27 @@ contract ProposalCode {
     function onStart(address, address) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        stateHolder.setBool(_toStateHolderKey("liquiditymining.authorized", _toString({0})), true);
+        stateHolder.setBool(_toStateHolderKey("fixedinflation.authorized", _toString({0})), true);
     }
 
     function onStop(address) public {
     }
 
-    function manageLiquidityMining(address sender, uint256, bool transfer, address erc20TokenAddress, address to, uint256 value, bool byMint) public {
+    function manageFixedInflation(address sender, uint256, address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint, address to) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        require(stateHolder.getBool(_toStateHolderKey("liquiditymining.authorized", _toString(sender))), "Unauthorized Action!");
-        IERC20 token = IERC20(erc20TokenAddress);
-        if(transfer) {
-            if(byMint) {
+        require(stateHolder.getBool(_toStateHolderKey("fixedinflation.authorized", _toString(sender))), "Unauthorized Action!");
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            IERC20 token = IERC20(tokenAddresses[i]);
+            if(amountsToMint[i] > 0) {
                 uint256 lastAmount = token.balanceOf(msg.sender);
-                token.mint(value);
-                proxy.flushToWallet(erc20TokenAddress, false, 0);
+                token.mint(amountsToMint[i]);
+                proxy.flushToWallet(address(token), false, 0);
                 if(lastAmount > 0) {
                     proxy.transfer(to, lastAmount, address(token));
                 }
             }
-            proxy.transfer(to, value, erc20TokenAddress);
-        } else {
-            token.transferFrom(sender, byMint ? address(this) : proxy.getMVDWalletAddress(), value);
-            if(byMint) {
-                token.burn(value);
-            }
+            proxy.transfer(to, transferAmounts[i] + amountsToMint[i], address(token));
         }
     }
 
