@@ -90,7 +90,7 @@ contract FixedInflation {
         require(indexes.length > 0, "Invalid input data");
         for(uint256 i = 0; i < indexes.length; i++) {
             require(_entriesLength > indexes[i][0], "Invalid index");
-            require(nextBlock(indexes[i][0]) >= block.number, "Too early to call index");
+            require(block.number >= nextBlock(indexes[i][0]), "Too early to call index");
             FixedInflationEntry storage fixedInflationEntry = _entries[indexes[i][0]];
             fixedInflationEntry.lastBlock = block.number;
             _collectFixedInflationOperationSetTokens(_operations[indexes[i][0]], indexes[i][1] == 1);

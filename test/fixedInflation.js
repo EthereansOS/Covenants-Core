@@ -222,4 +222,31 @@ describe("FixedInflation", () => {
 
         assert.strictEqual(balanceOfAfter, balanceOfExpected);
     });
+    it("Cannot be possible to call an already-called fixedInflation", async () => {
+        try {
+            await fixedInflation.methods.call([[0, 0]]).send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual((e.message || e).toLowerCase().indexOf("too early to call index"), -1);
+        }
+    });
+    it("Recall the same after past time", async () => {
+        var entryIndex = 0;
+        var byEarn = false;
+        var entries = (await fixedInflation.methods.entries().call());
+        var entry = entries[0][entryIndex];
+        var operation = entries[1][entryIndex][0];
+        var receiver = operation.receiver;
+        var balanceOfExpected = await web3.eth.getBalance(receiver);
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(operation.inputToken.amount)).toString();
+        balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
+
+        await blockchainConnection.fastForward(entry.blockInterval);
+        await fixedInflation.methods.call([[entryIndex, byEarn ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+
+        var balanceOfAfter = await web3.eth.getBalance(receiver);
+        balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);
+
+        assert.strictEqual(balanceOfAfter, balanceOfExpected);
+    });
 });
