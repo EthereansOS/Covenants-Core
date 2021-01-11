@@ -421,12 +421,12 @@ describe("LiquidityMining", () => {
 
         return position;
     }
-    it("alice should set a new staking position", async () => await createNewStakingPosition(actors.Alice));
-    it("bob should set a new staking position", async () => await createNewStakingPosition(actors.Bob));
+    it("alice should set a new staking position", () => createNewStakingPosition(actors.Alice));
+    it("bob should set a new staking position", () => createNewStakingPosition(actors.Bob));
     it("should rebalance the pinned setup", async () => {
         await liquidityMiningContract.methods.rebalancePinnedSetup().send(blockchainConnection.getSendingOptions());
     });
-    it("charlie should set a new staking position", async () => await createNewStakingPosition(actors.Charlie));
+    it("charlie should set a new staking position", () => createNewStakingPosition(actors.Charlie));
     it("should allow alice to partial reward", async () => {
         var actor = actors.Alice;
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
@@ -596,8 +596,8 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(parseInt(setup.startBlock), longTerm1Setup.startBlock);
     });
     */
-    it("should allow alice to withdraw without unwrapping the pair", async () => await withdrawStakingPosition(actors.Alice));
-    it("donald should set a new staking position", async () => await createNewStakingPosition(actors.Donald));
+    it("should allow alice to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Alice));
+    it("donald should set a new staking position", () => createNewStakingPosition(actors.Donald));
     it("should not allow charlie to withdraw bob position", async () => {
         try {
             await liquidityMiningContract.methods.withdraw(actors.Bob.positionId, actors.Bob.setupIndex, true).send(actors.Charlie.from);
@@ -613,11 +613,11 @@ describe("LiquidityMining", () => {
         await liquidityMiningContract.methods.rebalancePinnedSetup().send(actors.Bob.from);
         await logSetups();
     });
-    it("should allow bob to withdraw unwrapping the pair", async () => await withdrawStakingPosition(actors.Bob));
-    it("should allow charlie to withdraw its position without unwrapping the pair", async () => await withdrawStakingPosition(actors.Charlie));
-    it("should allow donald to withdraw its position unwrapping the pair", async () => await withdrawStakingPosition(actors.Donald));
-    it("orbulo should set a new staking position with a position token", async () => await createNewStakingPosition(actors.Orbulo));
-    it("should allow orbulo to withdraw its position unwrapping the pair", async () => await withdrawStakingPosition(actors.Orbulo));
+    it("should allow bob to withdraw unwrapping the pair", () => withdrawStakingPosition(actors.Bob));
+    it("should allow charlie to withdraw its position without unwrapping the pair", () => withdrawStakingPosition(actors.Charlie));
+    it("should allow donald to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Donald));
+    it("orbulo should set a new staking position with a position token", () => createNewStakingPosition(actors.Orbulo));
+    it("should allow orbulo to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Orbulo));
     it("should set a new locked liquidity mining setup", async() => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
@@ -656,8 +656,8 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("frank should set a new staking position with a position token", async () => await createNewStakingPosition(actors.Frank));
-    it("dino should set a new staking position without a position token", async () => await createNewStakingPosition(actors.Dino));
+    it("frank should set a new staking position with a position token", () => createNewStakingPosition(actors.Frank));
+    it("dino should set a new staking position without a position token", () => createNewStakingPosition(actors.Dino));
     it("frank should transfer its position token to vasapower", async () => {
         await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, actors.Frank.positionId, 1, 0x0).send(actors.Frank.from);
 
@@ -708,7 +708,7 @@ describe("LiquidityMining", () => {
         }
         return await unlockStakingPosition(actors.Vasapower);
     });
-    it("should allow ale to add liquidity to its position", async () => await addLiquidity(actors.Ale));
+    it("should allow ale to add liquidity to its position", () => addLiquidity(actors.Ale));
     it("should not allow dino to withdraw unwrapping the pair", async () => {
         try {
             await withdrawStakingPosition(actors.Dino);
@@ -758,7 +758,7 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("cavicchioli should set a new staking position without a position token", async () => await createNewStakingPosition(actors.Cavicchioli));
+    it("cavicchioli should set a new staking position without a position token", () => createNewStakingPosition(actors.Cavicchioli));
     it("should update liquidity mining setup at index 4", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length;
@@ -853,6 +853,6 @@ describe("LiquidityMining", () => {
         console.log(position);
         
     };
-    it("should allow cavicchioli to add liquidity to its position", async () => await addLiquidity(actors.Cavicchioli));
-    it("should allow cavicchioli to withdraw without unwrapping the pair", async () => await withdrawStakingPosition(actors.Cavicchioli));
+    it("should allow cavicchioli to add liquidity to its position", () => addLiquidity(actors.Cavicchioli));
+    it("should allow cavicchioli to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Cavicchioli));
 });
