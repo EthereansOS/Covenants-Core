@@ -45,5 +45,5 @@ struct LiquidityMiningPositionRequest {
     uint256 mainTokenAmount; // amount of main token.
     address positionOwner; // position extension or address(0) [msg.sender].
     bool mintPositionToken; // if the position will be represented by a minted item or not.
-    bool ethInvolved;
+    bool ethInvolved; // whether eth is involved in the request or not.
 }
