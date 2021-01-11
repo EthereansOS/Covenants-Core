@@ -30,7 +30,10 @@ struct LiquidityMiningSetup {
 struct LiquidityMiningPosition {
     address uniqueOwner; // address representing the extension address, address(0) if objectId is populated.
     uint256 setupIndex; // the setup index.
-    LiquidityMiningSetup setup; // chosen setup when the position was created.
+    uint256 setupStartBlock; // liquidity mining setup start block (used only if free is false).
+    uint256 setupEndBlock; // liquidity mining setup end block (used only if free is false).
+    bool free; // if the setup is a free liquidity mining setup or a locked one.
+    address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
     LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
     uint256 reward; // position reward.
     uint256 lockedRewardPerBlock; // position locked reward per block.

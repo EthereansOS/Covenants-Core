@@ -25,7 +25,7 @@ contract ProposalCode {
         liquidityPoolTokenAddresses[0] = {0};
         LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[]({1});
         {2}
-        ILiquidityMiningExtension({3}).setLiquidityMiningSetups({4}, liquidityMiningSetups, false, false, 0);
+        ILiquidityMiningExtension({3}).setLiquidityMiningSetups({4}, liquidityMiningSetups, {5}, {6}, {7});
     }
 }
 
