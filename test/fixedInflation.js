@@ -116,14 +116,12 @@ describe("FixedInflation", () => {
         var token = new web3.eth.Contract(context.IERC20ABI, tokenAddress);
         var totalSupply = await token.methods.totalSupply();
         var ONE_HUNDRED = await fixedInflation.methods.ONE_HUNDRED().call();
-        //return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
         var amount = web3.utils.toBN(totalSupply).mul(web3.utils.toBN(tokenAmount).mul(web3.utils.toBN(1e18)).div(web3.utils.toBN(ONE_HUNDRED))).div(web3.utils.toBN(1e18));
         return amount.toString();
     }
 
     async function calculatePercentage(totalAmount, percentage) {
         var ONE_HUNDRED = await fixedInflation.methods.ONE_HUNDRED().call();
-        //return (amount * ((percentage * 1e18) / ONE_HUNDRED)) / 1e18;
         var amount = web3.utils.toBN(totalAmount).mul(web3.utils.toBN(percentage).mul(web3.utils.toBN(1e18)).div(web3.utils.toBN(ONE_HUNDRED))).div(web3.utils.toBN(1e18));
         return amount.toString();
     }
@@ -236,6 +234,7 @@ describe("FixedInflation", () => {
 
         assert.strictEqual(balanceOfAfter, balanceOfExpected);
     });
+
     it("Cannot be possible to call an already-called fixedInflation", async () => {
         try {
             await fixedInflation.methods.call([[0, 0]]).send(blockchainConnection.getSendingOptions());
@@ -244,6 +243,7 @@ describe("FixedInflation", () => {
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("too early to call index"), -1);
         }
     });
+
     it("Recall the same after past time", async () => {
         var entryIndex = 0;
         var earnByInput = false;

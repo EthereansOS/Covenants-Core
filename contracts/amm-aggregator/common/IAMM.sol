@@ -19,7 +19,7 @@ interface IAMM {
     function swapLiquidity(LiquidityToSwap calldata data) external payable returns(uint256);
 
     function tokens(address liquidityPoolAddress) external view returns(address[] memory);
-    function liquidityPool(address[] memory tokens) external view returns(address);
+    function liquidityPool(address[] memory liquidityPoolTokens) external view returns(address);
 
     function amounts(address liquidityPoolAddress) external view returns(uint256, uint256[] memory);
 

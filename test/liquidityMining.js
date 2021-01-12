@@ -126,6 +126,11 @@ describe("LiquidityMining", () => {
         console.log('setups:', await liquidityMiningContract.methods.setups().call());
     }
 
+    it("TODO: INSERT LP TOKEN OR AMOUNTS for Locked", () => {
+        assert(false);
+        throw "Check LiquidityPool token single for free";
+    });
+
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
         dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);

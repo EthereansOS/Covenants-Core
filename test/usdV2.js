@@ -103,6 +103,11 @@ describe("USDV2", () => {
         return encoded;
     };
 
+    it("TODO", () => {
+        throw "1 Credit is for 2 uSD";
+        throw "Balance by Credit is for function caller";
+    });
+
     it("Controller Creation", async() => {
         usdCreditController = await new web3.eth.Contract(USDCreditController.abi).deploy({ data: USDCreditController.bin }).send(blockchainConnection.getSendingOptions());
         var arguments = [
