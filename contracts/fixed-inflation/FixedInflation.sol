@@ -92,7 +92,7 @@ contract FixedInflation {
             require(block.number >= nextBlock(indexes[i][0]), "Too early to call index");
             FixedInflationEntry storage fixedInflationEntry = _entries[indexes[i][0]];
             fixedInflationEntry.lastBlock = block.number;
-            _collectFixedInflationOperationSetTokens(_operations[indexes[i][0]]);
+            _collectFixedInflationOperationsTokens(_operations[indexes[i][0]]);
         }
         IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer, _tokenAmounts, _tokenMintAmounts);
         for(uint256 i = 0; i < indexes.length; i++) {
@@ -101,26 +101,30 @@ contract FixedInflation {
         _clearVars();
     }
 
-    function _collectTokenData(TokenData memory tokenData) private {
-        if(tokenData.amount == 0) {
-            return;
-        }
-        uint256 position = _tokenIndex[tokenData.tokenAddress];
-        if(position == 0) {
-            _tokenIndex[tokenData.tokenAddress] = position = (_tokensLength++) - 1;
-            _tokensToTransfer.push(tokenData.tokenAddress);
-            _tokenAmounts.push(0);
-            _tokenMintAmounts.push(0);
-        }
-        if(tokenData.amountByMint) {
-            _tokenMintAmounts[position] = _tokenMintAmounts[position] + _calculateTokenAmount(tokenData);
-        } else {
-            _tokenAmounts[position] = _tokenAmounts[position] + _calculateTokenAmount(tokenData);
+    function _collectFixedInflationOperationsTokens(FixedInflationOperation[] memory operations) private {
+        for(uint256 i = 0; i < operations.length; i++) {
+            FixedInflationOperation memory operation = operations[i];
+            _collectTokenData(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, operation.inputTokenAmountIsByMint);
         }
     }
 
-    function _calculateTokenAmount(TokenData memory tokenData) private returns(uint256) {
-        return _calculateTokenAmount(tokenData.tokenAddress, tokenData.amount, tokenData.amountIsPercentage);
+    function _collectTokenData(address inputTokenAddress, uint256 inputTokenAmount, bool inputTokenAmountIsPercentage, bool inputTokenAmountIsByMint) private {
+        if(inputTokenAmount == 0) {
+            return;
+        }
+        uint256 position = _tokenIndex[inputTokenAddress];
+        if(position == 0) {
+            _tokenIndex[inputTokenAddress] = position = (_tokensLength++) - 1;
+            _tokensToTransfer.push(inputTokenAddress);
+            _tokenAmounts.push(0);
+            _tokenMintAmounts.push(0);
+        }
+        uint256 amount = _calculateTokenAmount(inputTokenAddress, inputTokenAmount, inputTokenAmountIsPercentage);
+        if(inputTokenAmountIsByMint) {
+            _tokenMintAmounts[position] = _tokenMintAmounts[position] + amount;
+        } else {
+            _tokenAmounts[position] = _tokenAmounts[position] + amount;
+        }
     }
 
     function _calculateTokenAmount(address tokenAddress, uint256 tokenAmount, bool tokenAmountIsPercentage) private returns(uint256) {
@@ -131,37 +135,30 @@ contract FixedInflation {
         return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
     }
 
-    function _collectFixedInflationOperationSetTokens(FixedInflationOperation[] memory operations) private {
-        for(uint256 i = 0; i < operations.length; i++) {
-            FixedInflationOperation memory operation = operations[i];
-            _collectTokenData(operation.inputToken);
-        }
-    }
-
     function _call(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, bool earnByInput, address rewardReceiver) private {
         for(uint256 i = 0 ; i < operations.length; i++) {
             FixedInflationOperation memory operation = operations[i];
+            uint256 amountIn = _calculateTokenAmount(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage);
             if(operation.ammPlugin == address(0)) {
-                _transferTo(operation.inputToken.tokenAddress, _calculateTokenAmount(operation.inputToken), rewardReceiver, fixedInflationEntry.callerRewardPercentage, operation.receivers, operation.receiversPercentages);
+                _transferTo(operation.inputTokenAddress, amountIn, rewardReceiver, fixedInflationEntry.callerRewardPercentage, operation.receivers, operation.receiversPercentages);
             } else {
-                _swap(operation, rewardReceiver, fixedInflationEntry.callerRewardPercentage, earnByInput);
+                _swap(operation, amountIn, rewardReceiver, fixedInflationEntry.callerRewardPercentage, earnByInput);
             }
         }
     }
 
-    function _swap(FixedInflationOperation memory operation, address rewardReceiver, uint256 callerRewardPercentage, bool earnByInput) private {
-        uint256 amountIn = _calculateTokenAmount(operation.inputToken);
+    function _swap(FixedInflationOperation memory operation, uint256 amountIn, address rewardReceiver, uint256 callerRewardPercentage, bool earnByInput) private {
 
         uint256 inputReward = earnByInput ? _calculateRewardPercentage(amountIn, callerRewardPercentage) : 0;
 
         address outputToken = operation.swapPath[operation.swapPath.length - 1];
 
         LiquidityToSwap memory liquidityToSwap = LiquidityToSwap(
-            operation.inputToken.tokenAddress == address(0),
+            operation.inputTokenAddress == address(0),
             outputToken == address(0),
             operation.liquidityPoolAddresses,
             operation.swapPath,
-            operation.inputToken.tokenAddress,
+            operation.inputTokenAddress,
             amountIn - inputReward,
             address(this)
         );
@@ -174,7 +171,7 @@ contract FixedInflation {
         }
 
         if(earnByInput) {
-            _transferTo(operation.inputToken.tokenAddress, rewardReceiver, inputReward);
+            _transferTo(operation.inputTokenAddress, rewardReceiver, inputReward);
         }
         _transferTo(outputToken, amountOut, earnByInput ? address(0) : rewardReceiver, earnByInput ? 0 : callerRewardPercentage, operation.receivers, operation.receiversPercentages);
     }

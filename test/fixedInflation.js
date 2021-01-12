@@ -65,7 +65,7 @@ describe("FixedInflation", () => {
         FixedInflationExtension = await compile('fixed-inflation/FixedInflationExtension');
         FixedInflation = await compile('fixed-inflation/FixedInflation');
 
-        await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);
+        /*await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);
         await initActor("Bob", accounts[2], 15, 50, 2, 0, false, true, 3.15, 0.177, 2.45, 0.07);
         await initActor("Charlie", accounts[3], 20, 200, 0, 0, false, false, 30, 0.177, 18.3075);
         await initActor("Donald", accounts[4], 40, 201, 0, 0, false, true, 50, 0.180, 24.8125);
@@ -74,7 +74,7 @@ describe("FixedInflation", () => {
         await initActor("Vasapower", accounts[7], 259, 304, 3, 0, false, false, 0.315, 0.243, 0.315, 0.007, true);
         await initActor("Dino", accounts[8], 260, 304, 3, 0, false, false, 0.315, 0.236, 0.308, 0.007, false);
         await initActor("Ale", accounts[9], 260, 304, 3, 0, false, false, 0.315, 0.236, 0.308, 0.007, false);
-        await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, false, false, 0.0001, 0.250, 3.75);
+        await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, false, false, 0.0001, 0.250, 3.75);*/
 
     });
 
@@ -109,6 +109,29 @@ describe("FixedInflation", () => {
         await uniswapV2Router.methods.swapExactETHForTokens("1", path, (from && (from.from || from)) || accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({from: (from && (from.from || from)) || accounts[0], value}));
     };
 
+    async function calculateTokenAmount(tokenAddress, tokenAmount, amountIsPercentage) {
+        if(tokenAddress == utilities.voidEthereumAddress || amountIsPercentage) {
+            return tokenAmount;
+        }
+        var token = new web3.eth.Contract(context.IERC20ABI, tokenAddress);
+        var totalSupply = await token.methods.totalSupply();
+        var ONE_HUNDRED = await fixedInflation.methods.ONE_HUNDRED().call();
+        //return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
+        var amount = web3.utils.toBN(totalSupply).mul(web3.utils.toBN(tokenAmount).mul(web3.utils.toBN(1e18)).div(web3.utils.toBN(ONE_HUNDRED))).div(web3.utils.toBN(1e18));
+        return amount.toString();
+    }
+
+    async function calculatePercentage(totalAmount, percentage) {
+        var ONE_HUNDRED = await fixedInflation.methods.ONE_HUNDRED().call();
+        //return (amount * ((percentage * 1e18) / ONE_HUNDRED)) / 1e18;
+        var amount = web3.utils.toBN(totalAmount).mul(web3.utils.toBN(percentage).mul(web3.utils.toBN(1e18)).div(web3.utils.toBN(ONE_HUNDRED))).div(web3.utils.toBN(1e18));
+        return amount.toString();
+    }
+
+    async function calculateTokenPercentage(tokenAddress, tokenAmount, amountIsPercentage, percentage) {
+        return await calculatePercentage(await calculateTokenAmount(tokenAddress, tokenAmount, amountIsPercentage), percentage);
+    }
+
     it("Deploy all occurrency stuff", async () => {
         dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
 
@@ -132,26 +155,19 @@ describe("FixedInflation", () => {
         var newEntries = [{
             lastBlock : 0,
             blockInterval : 10,
-            ammPlugins : [utilities.voidEthereumAddress]
+            callerRewardPercentage : 100
         }];
 
         var operationSets = [[{
-            inputToken : {
-                tokenAddress : utilities.voidEthereumAddress,
-                amount : utilities.toDecimals("0.01", "18"),
-                amountIsPercentage : false,
-                amountByMint : false
-            },
-            receiver : accounts[1],
+            inputTokenAddress : utilities.voidEthereumAddress,
+            inputTokenAmount : utilities.toDecimals("0.01", "18"),
+            inputTokenAmountIsPercentage : false,
+            inputTokenAmountIsByMint : false,
+            ammPlugin : utilities.voidEthereumAddress,
             liquidityPoolAddresses : [],
             swapPath : [],
-            byEarnPercentage : 0,
-            rewardToken : {
-                tokenAddress : utilities.voidEthereumAddress,
-                amount : 0,
-                amountIsPercentage : false,
-                amountByMint : false
-            }
+            receivers : [accounts[1]],
+            receiversPercentages : [],
         }]];
 
         await fixedInflation.methods.init(
@@ -173,26 +189,19 @@ describe("FixedInflation", () => {
             var newEntries = [{
                 lastBlock : 0,
                 blockInterval : 10,
-                ammPlugins : [utilities.voidEthereumAddress]
+                callerRewardPercentage : 100
             }];
 
             var operationSets = [[{
-                inputToken : {
-                    tokenAddress : utilities.voidEthereumAddress,
-                    amount : utilities.toDecimals("0.01", "18"),
-                    amountIsPercentage : false,
-                    amountByMint : false
-                },
-                receiver : accounts[1],
+                inputTokenAddress : utilities.voidEthereumAddress,
+                inputTokenAmount : utilities.toDecimals("0.01", "18"),
+                inputTokenAmountIsPercentage : false,
+                inputTokenAmountIsByMint : false,
+                ammPlugin : utilities.voidEthereumAddress,
                 liquidityPoolAddresses : [],
                 swapPath : [],
-                byEarnPercentage : 0,
-                rewardToken : {
-                    tokenAddress : utilities.voidEthereumAddress,
-                    amount : 0,
-                    amountIsPercentage : false,
-                    amountByMint : false
-                }
+                receivers : [accounts[1]],
+                receiversPercentages : [],
             }]];
             await fixedInflation.methods.init(
                 fixedInflationExtension.options.address,
@@ -208,14 +217,19 @@ describe("FixedInflation", () => {
 
     it("Transfer Eth to a wallet", async () => {
         var entryIndex = 0;
-        var byEarn = false;
+        var earnByInput = false;
+        var entry = (await fixedInflation.methods.entries().call())[0][entryIndex];
         var operation = (await fixedInflation.methods.entries().call())[1][entryIndex][0];
-        var receiver = operation.receiver;
-        var balanceOfExpected = await web3.eth.getBalance(receiver);
-        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(operation.inputToken.amount)).toString();
-        balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
+        var receiver = accounts[0];
 
-        await fixedInflation.methods.call([[entryIndex, byEarn ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+        var balanceOfExpected = await web3.eth.getBalance(receiver);
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
+
+        var transactionResult = await fixedInflation.methods.call([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString();
+
+        balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
 
         var balanceOfAfter = await web3.eth.getBalance(receiver);
         balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);
@@ -232,17 +246,21 @@ describe("FixedInflation", () => {
     });
     it("Recall the same after past time", async () => {
         var entryIndex = 0;
-        var byEarn = false;
-        var entries = (await fixedInflation.methods.entries().call());
-        var entry = entries[0][entryIndex];
-        var operation = entries[1][entryIndex][0];
-        var receiver = operation.receiver;
-        var balanceOfExpected = await web3.eth.getBalance(receiver);
-        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(operation.inputToken.amount)).toString();
-        balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
+        var earnByInput = false;
+        var entry = (await fixedInflation.methods.entries().call())[0][entryIndex];
+        var operation = (await fixedInflation.methods.entries().call())[1][entryIndex][0];
+        var receiver = accounts[0];
 
         await blockchainConnection.fastForward(entry.blockInterval);
-        await fixedInflation.methods.call([[entryIndex, byEarn ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+
+        var balanceOfExpected = await web3.eth.getBalance(receiver);
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
+
+        var transactionResult = await fixedInflation.methods.call([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString();
+
+        balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
 
         var balanceOfAfter = await web3.eth.getBalance(receiver);
         balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);

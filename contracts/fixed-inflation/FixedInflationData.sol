@@ -17,19 +17,15 @@ struct FixedInflationEntry {
 
 struct FixedInflationOperation {
 
-    TokenData inputToken;
+    address inputTokenAddress;
+    uint256 inputTokenAmount;
+    bool inputTokenAmountIsPercentage;
+    bool inputTokenAmountIsByMint;
 
     address ammPlugin;
     address[] liquidityPoolAddresses;
     address[] swapPath;
 
-    uint256[] receiversPercentages;
     address[] receivers;
-}
-
-struct TokenData {
-    address tokenAddress;
-    uint256 amount;
-    bool amountIsPercentage;
-    bool amountByMint;
+    uint256[] receiversPercentages;
 }
