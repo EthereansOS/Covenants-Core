@@ -50,8 +50,9 @@ describe("LiquidityMining", () => {
         wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
 
         rewardToken = new web3.eth.Contract(context.IERC20ABI, context.daiTokenAddress);
-        rewardToken = utilities.voidEthereumAddress;
+        // rewardToken = utilities.voidEthereumAddress;
         mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
+        // mainToken = utilities.voidEthereumAddress;
         secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
         liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress).call());
@@ -62,16 +63,16 @@ describe("LiquidityMining", () => {
 
         uniswapAMM = await new web3.eth.Contract(UniswapV2AMMV1.abi).deploy({data : UniswapV2AMMV1.bin, arguments: [uniswapV2Router.options.address]}).send(blockchainConnection.getSendingOptions());
 
-        await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);
-        await initActor("Bob", accounts[2], 15, 50, 2, 0, false, true, 3.15, 0.177, 2.45, 0.07);
-        await initActor("Charlie", accounts[3], 20, 200, 0, 0, false, false, 30, 0.177, 12.2699);
-        await initActor("Donald", accounts[4], 40, 201, 0, 0, false, true, 50, 0.180, 15.1499);
-        await initActor("Orbulo", accounts[5], 210, 250, 0, 0, false, true, 0.0001, 0.150, 6, 0, true);
-        await initActor("Frank", accounts[6], 259, 304, 3, 0, false, false, 0.315, 0.243, 0.315, 0.007, true);
-        await initActor("Vasapower", accounts[7], 259, 304, 3, 0, false, false, 0.315, 0.243, 0.315, 0.007, true);
-        await initActor("Dino", accounts[8], 260, 304, 3, 0, false, false, 0.315, 0.236, 0.308, 0.007, false);
-        await initActor("Ale", accounts[9], 260, 304, 3, 0, false, false, 0.315, 0.236, 0.308, 0.007, false);
-        await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, false, false, 0.0001, 0.250, 3.75);
+        await initActor("Alice", accounts[1], 0, 30, 1, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.09, 0.247, 0.09, 0.003);
+        await initActor("Bob", accounts[2], 15, 50, 2, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), true, 3.15, 0.177, 2.45, 0.07);
+        await initActor("Charlie", accounts[3], 20, 200, 0, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 30, 0.177, 12.2699);
+        await initActor("Donald", accounts[4], 40, 201, 0, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), true, 50, 0.180, 15.1499);
+        await initActor("Orbulo", accounts[5], 210, 250, 0, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), true, 0.0001, 0.150, 6, 0, true);
+        await initActor("Frank", accounts[6], 259, 304, 3, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.315, 0.243, 0.315, 0.007, true);
+        await initActor("Vasapower", accounts[7], 259, 304, 3, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.315, 0.243, 0.315, 0.007, true);
+        await initActor("Dino", accounts[8], 260, 304, 3, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.315, 0.236, 0.308, 0.007, false);
+        await initActor("Ale", accounts[9], 260, 304, 3, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.315, 0.236, 0.308, 0.007, false);
+        await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, (mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress), false, 0.0001, 0.250, 3.75);
 
     });
 
@@ -93,8 +94,8 @@ describe("LiquidityMining", () => {
             ethInvolved
         };
 
-        await buyForETH(mainToken, ethToSpend, address);
-        await buyForETH(secondaryToken, ethToSpend, address);
+        if (mainToken !== utilities.voidEthereumAddress) await buyForETH(mainToken, ethToSpend, address);
+        if (secondaryToken !== utilities.voidEthereumAddress) await buyForETH(secondaryToken, ethToSpend, address);
     }
 
     async function buyForETH(token, amount, from) {
@@ -398,7 +399,7 @@ describe("LiquidityMining", () => {
             await liquidityMiningContract.methods.rebalancePinnedSetup([setupIndex]).send(blockchainConnection.getSendingOptions());
         }*/
         await blockchainConnection.jumpToBlock(enterBlock, true);
-        var result = await liquidityMiningContract.methods.openPosition(stake).send(blockchainConnection.getSendingOptions(from));
+        var result = await liquidityMiningContract.methods.openPosition(stake).send({ value: ethInvolved ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0, ...blockchainConnection.getSendingOptions(from)});
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
@@ -481,7 +482,7 @@ describe("LiquidityMining", () => {
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
-        await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap).send(actor.from);
+        await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap).send({ value: actor.ethInvolved ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0, ...actor.from });
 
         var rewardBalance = utilities.fromDecimals(rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
         var mainBalance = utilities.fromDecimals(mainToken != utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
