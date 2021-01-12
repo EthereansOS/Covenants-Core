@@ -50,7 +50,7 @@ describe("LiquidityMining", () => {
         wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
 
         rewardToken = new web3.eth.Contract(context.IERC20ABI, context.daiTokenAddress);
-        // rewardToken = utilities.voidEthereumAddress;
+        rewardToken = utilities.voidEthereumAddress;
         mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
         secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
@@ -433,9 +433,13 @@ describe("LiquidityMining", () => {
         var blockNumber = ((await web3.eth.getBlockNumber()) + 1) - actor.enterBlock;
         var expectedReward = utilities.toDecimals(actor.expectedRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
         expectedReward = web3.utils.toBN(expectedReward).mul(web3.utils.toBN(blockNumber.toString())).toString();
+
+        var transactionResult = await liquidityMiningContract.methods.partialReward(actor.positionId).send(actor.from);
+
+        rewardToken === utilities.voidEthereumAddress && (balanceOf = web3.utils.toBN(balanceOf).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString());
+
         var expectedBalanceOf = utilities.fromDecimals(web3.utils.toBN(expectedReward).add(web3.utils.toBN(balanceOf)).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
-        await liquidityMiningContract.methods.partialReward(actor.positionId).send(actor.from);
         balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
         balanceOf = utilities.fromDecimals(balanceOf, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
@@ -549,6 +553,7 @@ describe("LiquidityMining", () => {
             await unlockStakingPosition(actors.Alice);
             assert(false);
         } catch (e) {
+            console.log(e);
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("transferfrom_failed"), -1);
         }
     });

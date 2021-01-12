@@ -96,7 +96,6 @@ contract LiquidityMining is ILiquidityMining {
 
     /** @dev allows this contract to receive eth. */
     receive() external payable {
-        require(_rewardTokenAddress == address(0) && msg.sender == _extension, "Unauthorized");
     }
 
     /** @dev returns the liquidity mining setups.

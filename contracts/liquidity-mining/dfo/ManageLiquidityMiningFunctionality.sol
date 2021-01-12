@@ -39,6 +39,9 @@ contract ProposalCode {
             }
             proxy.transfer(to, value, erc20TokenAddress);
         } else {
+            if(erc20TokenAddress == address(0)) {
+                return;
+            }
             token.transferFrom(sender, byMint ? address(this) : proxy.getMVDWalletAddress(), value);
             if(byMint) {
                 token.burn(value);
