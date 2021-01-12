@@ -6,27 +6,25 @@ struct FixedInflationEntryConfiguration {
     bool remove;
     uint256 index;
     uint256 blockInterval;
-    address[] ammPlugins;
+    uint256 callerRewardPercentage;
 }
 
 struct FixedInflationEntry {
     uint256 lastBlock;
     uint256 blockInterval;
-    address[] ammPlugins;
+    uint256 callerRewardPercentage;
 }
 
 struct FixedInflationOperation {
 
     TokenData inputToken;
 
+    address ammPlugin;
     address[] liquidityPoolAddresses;
     address[] swapPath;
 
-    address receiver;
-
-    uint256 byEarnPercentage;
-
-    TokenData rewardToken;
+    uint256[] receiversPercentages;
+    address[] receivers;
 }
 
 struct TokenData {
