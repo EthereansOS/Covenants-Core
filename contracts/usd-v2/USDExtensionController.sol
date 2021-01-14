@@ -15,6 +15,8 @@ import "../amm-aggregator/common/AMMData.sol";
 
 contract USDExtensionController is ERC1155Receiver {
 
+    uint256 public constant ONE_HUNDRED = 10000;
+
     uint256 private constant DECIMALS = 18;
 
     address private _doubleProxy;
@@ -33,15 +35,16 @@ contract USDExtensionController is ERC1155Receiver {
 
     AllowedAMM[] private _allowedAMMs;
 
-    uint256[] private _rebalanceByCreditMultipliers;
+    uint256[] private _rebalanceByCreditPercentages;
 
-    address[] private _creditReceivers;
+    address[] private _rebalanceByCreditReceivers;
+
+    uint256 private _rebalanceByCreditPercentageForCaller;
 
     constructor(address doubleProxyAddress,
-        uint256[] memory rebalanceByCreditMultipliersInput, address[] memory creditReceiversInput, bytes memory allowedAMMsBytes) {
+        address[] memory rebalanceByCreditReceivers, uint256[] memory rebalanceByCreditPercentages, uint256 rebalanceByCreditPercentageForCaller, bytes memory allowedAMMsBytes) {
         _doubleProxy = doubleProxyAddress;
-        _creditReceivers = creditReceiversInput;
-        _rebalanceByCreditMultipliers = rebalanceByCreditMultipliersInput;
+        _setRebalanceByCreditData(rebalanceByCreditReceivers, rebalanceByCreditPercentages, rebalanceByCreditPercentageForCaller);
         _setAllowedAMMs(allowedAMMsBytes);
     }
 
@@ -75,6 +78,20 @@ contract USDExtensionController is ERC1155Receiver {
         _usdCreditInteroperableInterfaceAddress = address(usdCollection.asInteroperable(_usdCreditObjectId = usdCreditObjectId));
     }
 
+    function _setRebalanceByCreditData(address[] memory rebalanceByCreditReceivers, uint256[] memory rebalanceByCreditPercentages, uint256 rebalanceByCreditPercentageForCaller) private {
+        require(rebalanceByCreditReceivers.length > 0 && rebalanceByCreditReceivers.length == rebalanceByCreditPercentages.length, "Invalid lengths");
+        uint256 percentage = rebalanceByCreditPercentageForCaller;
+        for(uint256 i = 0; i < rebalanceByCreditReceivers.length; i++) {
+            require(rebalanceByCreditReceivers[i] != address(0), "Void address");
+            require(rebalanceByCreditPercentages[i] > 0, "Zero percentage");
+            percentage += rebalanceByCreditPercentages[i];
+        }
+        require(percentage <= ONE_HUNDRED, "More than one hundred");
+        _rebalanceByCreditPercentageForCaller = rebalanceByCreditPercentageForCaller;
+        _rebalanceByCreditPercentages = rebalanceByCreditPercentages;
+        _rebalanceByCreditReceivers = rebalanceByCreditReceivers;
+    }
+
     function _setAllowedAMMs(bytes memory data) private {
         AllowedAMM[] memory amms = abi.decode(data, (AllowedAMM[]));
         delete _allowedAMMs;
@@ -103,8 +120,8 @@ contract USDExtensionController is ERC1155Receiver {
         return (_collection, _usdCreditObjectId, _usdCreditInteroperableInterfaceAddress);
     }
 
-    function creditReceivers() public view returns(address[] memory) {
-        return _creditReceivers;
+    function rebalanceByCreditReceiversInfo() public view returns (address[] memory, uint256[] memory, uint256, address) {
+        return (_rebalanceByCreditReceivers, _rebalanceByCreditPercentages, _rebalanceByCreditPercentageForCaller, IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress());
     }
 
     modifier byDFO virtual {
@@ -120,8 +137,8 @@ contract USDExtensionController is ERC1155Receiver {
         _doubleProxy = newDoubleProxy;
     }
 
-    function setCreditReceivers(address[] memory creditReceiversAddresses) public byDFO {
-        _creditReceivers = creditReceiversAddresses;
+    function setRebalanceByCreditData(address[] memory rebalanceByCreditReceivers, uint256[] memory rebalanceByCreditPercentages, uint256 rebalanceByCreditPercentageForCaller) public byDFO {
+        _setRebalanceByCreditData(rebalanceByCreditReceivers, rebalanceByCreditPercentages, rebalanceByCreditPercentageForCaller);
     }
 
     function changeController(address controller) public byDFO {
@@ -146,10 +163,6 @@ contract USDExtensionController is ERC1155Receiver {
 
     function setAllowedAMMs(AllowedAMM[] memory newAllowedAMMs) public byDFO {
         _setAllowedAMMs(abi.encode(newAllowedAMMs));
-    }
-
-    function rebalanceByCreditMultipliers() public view returns(uint256[] memory) {
-        return _rebalanceByCreditMultipliers;
     }
 
     function differences()
@@ -271,14 +284,23 @@ contract USDExtensionController is ERC1155Receiver {
         _lastRedeemBlock = block.number;
         (uint256 credit, ) = differences();
         USDExtension(_extension).mint(_usdObjectId, credit, address(this));
-        uint256 forDFO = (credit * _rebalanceByCreditMultipliers[0]) / _rebalanceByCreditMultipliers[1];
-        IERC20(_usdInteroperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), forDFO);
-        for(uint256 i = 0; i < _creditReceivers.length; i++) {
-            uint256 numerator = _rebalanceByCreditMultipliers[2 + (2 * i)];
-            uint256 denominator = _rebalanceByCreditMultipliers[3 + (2 * i)];
-            uint256 value = (credit * numerator) / denominator;
-            IERC20(_usdInteroperableInterfaceAddress).transfer(_creditReceivers[i], value);
+        uint256 availableCredit = credit;
+        uint256 reward = 0;
+        if(_rebalanceByCreditPercentageForCaller > 0) {
+            IERC20(_usdInteroperableInterfaceAddress).transfer(msg.sender, reward = _calculatePercentage(credit, _rebalanceByCreditPercentageForCaller));
+            availableCredit -= reward;
         }
+        for(uint256 i = 0; i < _rebalanceByCreditReceivers.length; i++) {
+            IERC20(_usdInteroperableInterfaceAddress).transfer(_rebalanceByCreditReceivers[i], reward = _calculatePercentage(credit, _rebalanceByCreditPercentages[i]));
+            availableCredit -= reward;
+        }
+        if(availableCredit > 0) {
+            IERC20(_usdInteroperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), availableCredit);
+        }
+    }
+
+    function _calculatePercentage(uint256 total, uint256 percentage) private pure returns (uint256) {
+        return (total * ((percentage * 1e18) / ONE_HUNDRED)) / 1e18;
     }
 
     modifier _forAllowedAMMAndLiquidityPool(uint256 ammIndex, uint256 liquidityPoolIndex) {

@@ -91,8 +91,8 @@ describe("USDV2", () => {
         allowedAMMS = [
             [
                 uniswapAMM.options.address, [
-                    await uniswapV2Factory.methods.getPair(USDT.options.address, USDC.options.address).call(),
                     await uniswapV2Factory.methods.getPair(DAI.options.address, USDC.options.address).call(),
+                    await uniswapV2Factory.methods.getPair(USDT.options.address, USDC.options.address).call(),
                     await uniswapV2Factory.methods.getPair(DAI.options.address, USDT.options.address).call()
                 ]
             ]
@@ -103,17 +103,19 @@ describe("USDV2", () => {
         return encoded;
     };
 
-    it("TODO", () => {
-        throw "1 Credit is for 2 uSD";
-        throw "Balance by Credit is for function caller";
-    });
+    async function calculatePercentage(totalAmount, percentage) {
+        var ONE_HUNDRED = await usdController.methods.ONE_HUNDRED().call();
+        var amount = web3.utils.toBN(totalAmount).mul(web3.utils.toBN(percentage).mul(web3.utils.toBN(1e18)).div(web3.utils.toBN(ONE_HUNDRED))).div(web3.utils.toBN(1e18));
+        return amount.toString();
+    }
 
     it("Controller Creation", async() => {
         usdCreditController = await new web3.eth.Contract(USDCreditController.abi).deploy({ data: USDCreditController.bin }).send(blockchainConnection.getSendingOptions());
         var arguments = [
             dfo.doubleProxyAddress,
-            ["15", "1000", "985", "1000"],
             [usdCreditController.options.address],
+            ["1000"],
+            100,
             await encodeAMMV2Params()
         ];
         usdController = await new web3.eth.Contract(USDExtensionController.abi).deploy({ data: USDExtensionController.bin, arguments }).send(blockchainConnection.getSendingOptions());
@@ -320,8 +322,8 @@ describe("USDV2", () => {
         };
 
         var inputs = [
-            await consume(0, USDT, USDTItemObjectId, USDCItemObjectId, 11),
-            await consume(1, DAI, DAIItemObjectId, USDCItemObjectId, 5),
+            await consume(0, DAI, DAIItemObjectId, USDCItemObjectId, 5),
+            await consume(1, USDT, USDTItemObjectId, USDCItemObjectId, 11),
             await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30),
         ];
 
@@ -372,8 +374,9 @@ describe("USDV2", () => {
     it("Nobody but DFO can change Controller", async() => {
         var arguments = [
             dfo.doubleProxyAddress,
-            ["15", "1000", "985", "1000"],
             [usdCreditController.options.address],
+            ["1000"],
+            100,
             await encodeAMMV2Params()
         ];
         var newUsdController = await new web3.eth.Contract(USDExtensionController.abi).deploy({ data: USDExtensionController.bin, arguments }).send(blockchainConnection.getSendingOptions());
@@ -459,7 +462,7 @@ describe("USDV2", () => {
         var liquidityPoolData = {
             liquidityPoolAddress : pair.options.address,
             liquidityPoolAmount : 0,
-            tokens : [USDT.options.address, USDC.options.address],
+            tokens : [tokenA.options.address, tokenB.options.address],
             amounts,
             receiver : uSDExtension.options.address
         };
@@ -468,13 +471,57 @@ describe("USDV2", () => {
         await tokenB.methods.approve(uniswapAMM.options.address, await tokenB.methods.totalSupply().call()).send(blockchainConnection.getSendingOptions());
         await uniswapAMM.methods.addLiquidity(liquidityPoolData).send(blockchainConnection.getSendingOptions());
 
+        var differences = await usdController.methods.differences().call();
+        var credit = differences.credit;
+
+        var rebalanceByCreditReceiversInfo = await usdController.methods.rebalanceByCreditReceiversInfo().call();
+
+        var receivers = rebalanceByCreditReceiversInfo[0].map(it => it);
+        receivers.push(accounts[0]);
+        receivers.push(rebalanceByCreditReceiversInfo[3]);
+
+        var percentages = rebalanceByCreditReceiversInfo[1].map(it => it);
+        percentages.push(rebalanceByCreditReceiversInfo[2]);
+
+        var totalPercentage = '0';
+        percentages.forEach(it => totalPercentage = web3.utils.toBN(totalPercentage).add(web3.utils.toBN(it)).toString());
+        percentages.push(web3.utils.toBN(await usdController.methods.ONE_HUNDRED().call()).sub(web3.utils.toBN(totalPercentage)).toString());
+
+        var adds = [];
+        for(var percentage of percentages) {
+            adds.push(await calculatePercentage(credit, percentage));
+        }
+
+        var sum = '0';
+        adds.forEach(it => sum = web3.utils.toBN(sum).add(web3.utils.toBN(it)).toString());
+
+        credit = await utilities.fromDecimals(credit, 18);
+        sum = await utilities.fromDecimals(sum, 18);
+
+        assert.strictEqual(credit, sum);
+
+        var expecteds = [];
+        for(var i in receivers) {
+            var balance = await usdCollection.methods.balanceOf(receivers[i], usdObjectId).call();
+            balance = web3.utils.toBN(balance).add(web3.utils.toBN(adds[i])).toString();
+            expecteds.push(utilities.fromDecimals(balance, 18));
+        }
+
         await usdController.methods.rebalanceByCredit().send(blockchainConnection.getSendingOptions());
 
+        for(var i in receivers) {
+            var balance = await usdCollection.methods.balanceOf(receivers[i], usdObjectId).call();
+            balance = utilities.fromDecimals(balance, 18);
+            assert.strictEqual(balance, expecteds[i]);
+        }
+    });
+
+    it("Transform Credit in uSD", async () => {
         var creditBalanceBefore = await usdCollection.methods.balanceOf(usdCreditController.options.address, usdObjectId).call();
 
-        var value = utilities.toDecimals(100, '18');
+        var value = utilities.toDecimals(35, '18');
 
-        var creditBalanceExpected = utilities.numberToString(utilities.formatNumber(creditBalanceBefore) - utilities.formatNumber(value));
+        var creditBalanceExpected = utilities.numberToString(utilities.formatNumber(creditBalanceBefore) - (utilities.formatNumber(value) * 2));
         creditBalanceExpected = utilities.fromDecimals(creditBalanceExpected, '18');
 
         await usdCollection.methods.safeTransferFrom(accounts[0], usdCreditController.options.address, usdCreditObjectId, value, "0x").send(blockchainConnection.getSendingOptions());

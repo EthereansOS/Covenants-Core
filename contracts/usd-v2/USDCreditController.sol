@@ -30,13 +30,15 @@ contract USDCreditController is ERC1155Receiver {
         returns(bytes4) {
             require(msg.sender == _usdCollection, "Only uSD collection allowed here");
             uint256[] memory usdIds = new uint256[](ids.length);
+            uint256[] memory usdValues = new uint256[](ids.length);
             for(uint256 i = 0; i < ids.length; i++) {
                 require(ids[i] == _usdCreditObjectId, "Only usd Credit allowed here");
                 usdIds[i] = _usdObjectId;
+                usdValues[i] = values[i] * 2;
             }
             INativeV1 collection = INativeV1(_usdCollection);
             collection.burnBatch(ids, values);
-            collection.safeBatchTransferFrom(address(this), from, usdIds, values, data);
+            collection.safeBatchTransferFrom(address(this), from, usdIds, usdValues, data);
             return this.onERC1155BatchReceived.selector;
     }
 
@@ -54,7 +56,7 @@ contract USDCreditController is ERC1155Receiver {
             require(id == _usdCreditObjectId, "Only usd Credit allowed here");
             INativeV1 collection = INativeV1(_usdCollection);
             collection.burn(id, value);
-            collection.safeTransferFrom(address(this), from, _usdObjectId, value, data);
+            collection.safeTransferFrom(address(this), from, _usdObjectId, value * 2, data);
             return this.onERC1155Received.selector;
     }
 }
