@@ -218,12 +218,17 @@ contract LiquidityMining is ILiquidityMining {
             liquidityPoolTokenAmount,
             tokens,
             amounts,
-            address(this)
+            address(this),
+            request.ethInvolved
         );
 
         if (request.liquidityPoolTokenAmount == 0) {
             // retrieve the poolTokenAmount from the amm
-            (liquidityPoolData.liquidityPoolAmount, amounts) = ammPlugin.addLiquidity(liquidityPoolData);
+            if(request.ethInvolved) {
+                (liquidityPoolData.liquidityPoolAmount, amounts) = ammPlugin.addLiquidity{value : msg.value}(liquidityPoolData);
+            } else {
+                (liquidityPoolData.liquidityPoolAmount, amounts) = ammPlugin.addLiquidity(liquidityPoolData);
+            }
         }
         // create the position id
         positionId = request.mintPositionToken ? _mintPosition(uniqueOwner) : uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex, block.number)));
@@ -261,7 +266,7 @@ contract LiquidityMining is ILiquidityMining {
       * @param positionId id of the liquidity mining position.
       * @param request update position request.
       */
-    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
@@ -280,7 +285,11 @@ contract LiquidityMining is ILiquidityMining {
         // check if liquidity pool token is being sent or not
         if (request.liquidityPoolTokenAmount == 0) {
             // retrieve the poolTokenAmount from the amm
-            (liquidityPoolTokenAmount, amounts) = ammPlugin.addLiquidity(LiquidityPoolData(liquidityPoolAddress, liquidityPoolTokenAmount, tokens, amounts, address(this)));
+            if(request.ethInvolved) {
+                (liquidityPoolTokenAmount, amounts) = ammPlugin.addLiquidity{value : msg.value}(LiquidityPoolData(liquidityPoolAddress, liquidityPoolTokenAmount, tokens, amounts, address(this), request.ethInvolved));
+            } else {
+                (liquidityPoolTokenAmount, amounts) = ammPlugin.addLiquidity(LiquidityPoolData(liquidityPoolAddress, liquidityPoolTokenAmount, tokens, amounts, address(this), request.ethInvolved));
+            }
         }
         // update the liquidity pool data inside the position
         for (uint256 i = 0; i < amounts.length; i++) {
@@ -540,7 +549,7 @@ contract LiquidityMining is ILiquidityMining {
                 }
             }
             if(request.ethInvolved && ethAddress == tokens[i]) {
-                require(msg.value == tokenAmounts[i], "Insufficient eth");
+                require(msg.value == tokenAmounts[i], "Incorrect eth value");
             } else {
                 _safeTransferFrom(tokens[i], msg.sender, address(this), tokenAmounts[i]);
                 _safeApprove(tokens[i], liquidityMiningSetup.ammPlugin, tokenAmounts[i]);

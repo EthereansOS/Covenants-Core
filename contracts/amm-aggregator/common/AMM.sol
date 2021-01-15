@@ -7,147 +7,280 @@ import "../util/IERC20.sol";
 
 abstract contract AMM is IAMM {
 
-    mapping(address => uint256) internal _tokenValuesToTransfer;
+    struct ProcessedLiquidityPoolData {
+        address liquidityPoolAddress;
+        uint256 liquidityPoolAmount;
+        address[] liquidityPoolTokens;
+        uint256[] tokensAmounts;
+        bool ethIsInvolved;
+        address liquidityPoolOperator;
+        address receiver;
+    }
+
+    struct ProcessedSwapData {
+        bool enterInETH;
+        bool exitInETH;
+        address[] liquidityPoolAddresses;
+        address[] paths;
+        address liquidityPoolOperator;
+        address inputToken;
+        uint256 amount;
+        address receiver;
+    }
+
+    mapping(address => uint256) internal _tokenIndex;
+    address[] internal _tokensToTransfer;
+    address[] internal _operators;
+    uint256[] internal _tokenAmounts;
+    uint256 private _tokensLength = 1;
+
+    address public override ethereumAddress;
+
+    constructor(address _ethereumAddress) {
+        ethereumAddress = _ethereumAddress;
+    }
 
     receive() external virtual payable {
     }
 
-    function ethereumAddress() public override virtual view returns(address) {
-        return address(0);
-    }
+    function byPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) public override view returns (uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
+        (liquidityPoolAmount, tokenAmounts, liquidityPoolTokens) = this.byLiquidityPool(liquidityPoolAddress);
 
-    function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) public override view returns (uint256, uint256[] memory) {
-        return this.inPercentage(liquidityPoolAddress, numerator, denominator, 0);
-    }
+        liquidityPoolAmount = (liquidityPoolAmount * numerator) / denominator;
 
-    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) public override view returns(uint256[] memory) {
-        return this.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount, 0);
-    }
-
-    function inPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator, uint256 normalizeToDecimals) public virtual override view returns (uint256 providerAmount, uint256[] memory tokenAmounts) {
-        providerAmount = (IERC20(liquidityPoolAddress).totalSupply() * numerator) / denominator;
-
-        address[] memory liquidityPoolTokens = this.tokens(liquidityPoolAddress);
-
-        tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeTokenAmountToTheseDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = (tokenAmounts[i] * numerator) / denominator;
         }
     }
 
-    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 normalizeToDecimals) public virtual override view returns(uint256[] memory tokenAmounts) {
-        IERC20 pair = IERC20(liquidityPoolAddress);
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) public virtual override view returns(uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
 
-        uint256 numerator = liquidityPoolAmount != 0 ? liquidityPoolAmount : pair.balanceOf(msg.sender);
-        uint256 denominator = pair.totalSupply();
+        uint256 numerator = liquidityPoolAmount;
+        uint256 denominator;
 
-        address[] memory liquidityPoolTokens = this.tokens(liquidityPoolAddress);
+        (denominator, tokenAmounts, liquidityPoolTokens) = this.byLiquidityPool(liquidityPoolAddress);
 
-        tokenAmounts = new uint256[](liquidityPoolTokens.length);
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            tokenAmounts[i] = _normalizeTokenAmountToTheseDecimals(liquidityPoolTokens[i], (IERC20(liquidityPoolTokens[i]).balanceOf(liquidityPoolAddress) * numerator) / denominator, normalizeToDecimals);
+            tokenAmounts[i] = (tokenAmounts[i] * numerator) / denominator;
         }
     }
 
-    function _receiver(LiquidityPoolData memory liquidityPoolData) internal virtual returns(address payable) {
-        return payable(liquidityPoolData.receiver != address(0) ? liquidityPoolData.receiver : msg.sender);
-    }
+    function byTokenAmount(address liquidityPoolAddress, uint256 tokenIndex, uint256 tokenAmount) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
 
-    function _receiver(LiquidityToSwap memory liquidityToSwap) internal virtual returns(address payable) {
-        return payable(liquidityToSwap.receiver != address(0) ? liquidityToSwap.receiver : msg.sender);
-    }
+        (liquidityPoolAmount, tokenAmounts, liquidityPoolTokens) = this.byLiquidityPool(liquidityPoolAddress);
 
-    function _flushBack(address payable sender, address[] memory tokens, uint256 tokensLength) internal virtual returns(uint256[] memory balances) {
-        balances = new uint256[](tokensLength + 1);
-        for(uint256 i = 0; i < tokensLength; i++) {
-            if(tokens[i] != address(0)) {
-                balances[i] = _flushBack(sender, tokens[i]);
-            }
-        }
-        balances[tokensLength] = _flushBack(sender, address(0));
-    }
+        uint256 numerator = tokenAmount;
+        uint256 denominator = tokenAmounts[tokenIndex];
 
-    function _flushBack(address payable sender, address tokenA, address tokenB) internal virtual returns(uint256 balance0, uint256 balance1, uint256 balanceETH) {
-        if(tokenA != address(0)) {
-            balance0 = _flushBack(sender, tokenA);
-        }
-        if(tokenB != address(0)) {
-            balance1 = _flushBack(sender, tokenB);
-        }
-        balanceETH = _flushBack(sender, address(0));
-    }
+        liquidityPoolAmount = (liquidityPoolAmount * numerator) / denominator;
 
-    function _flushBack(address payable sender, address tokenAddress) internal virtual returns (uint256 balance) {
-        balance = tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
-
-        if(balance == 0) {
-            return balance;
-        }
-
-        if(tokenAddress == address(0)) {
-            sender.transfer(balance);
-        } else {
-            _safeTransfer(tokenAddress, sender, balance);
-        }
-    }
-
-    function _transferToMeAndCheckAllowance(LiquidityPoolData memory data, address operator, bool add) internal virtual {
-        if(!add) {
-            return _transferToMeAndCheckAllowance(data.liquidityPoolAddress, data.liquidityPoolAmount, msg.sender, operator);
-        }
-        _transferToMeAndCheckAllowance(data.tokens, data.amounts, msg.sender, operator);
-    }
-
-    function _transferToMeAndCheckAllowance(LiquidityPoolData[] memory data, address operator, bool add) internal virtual returns (address[] memory tokens, uint256 length) {
-        tokens = new address[](200);
-        for(uint256 i = 0; i < data.length; i++) {
-            if(!add) {
-                if(_tokenValuesToTransfer[data[i].liquidityPoolAddress] == 0) {
-                    tokens[length++] = data[i].liquidityPoolAddress;
-                }
-                _tokenValuesToTransfer[data[i].liquidityPoolAddress] += data[i].liquidityPoolAmount;
+        for(uint256 i = 0; i < tokenAmounts.length; i++) {
+            if(i == tokenIndex) {
+                tokenAmounts[i] = numerator;
                 continue;
             }
-            address[] memory tokensInput = data[i].tokens;
-            uint256[] memory amounts = data[i].amounts;
-            for(uint256 j = 0; j < tokensInput.length; j++) {
-                if(_tokenValuesToTransfer[tokensInput[j]] == 0) {
-                    tokens[length++] = tokensInput[j];
-                }
-                _tokenValuesToTransfer[tokensInput[j]] += amounts[j];
-            }
-        }
-        _transferToMeCheckAllowanceAndClear(tokens, length, msg.sender, operator);
-    }
-
-    function _transferToMeCheckAllowanceAndClear(address[] memory tokens, uint256 length, address from, address operator) internal virtual {
-        for(uint256 i = 0; i < length; i++) {
-            if(_tokenValuesToTransfer[tokens[i]] > 0) {
-                _transferToMeAndCheckAllowance(tokens[i], _tokenValuesToTransfer[tokens[i]], from, operator);
-            }
-            delete _tokenValuesToTransfer[tokens[i]];
+            tokenAmounts[i] = (tokenAmounts[i] * numerator) / denominator;
         }
     }
 
-    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address from, address operator) internal virtual {
+    function addLiquidity(LiquidityPoolData calldata data) public override virtual payable returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+        ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
+        _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, data.ethIsInvolved);
+        (liquidityPoolAmount, tokensAmounts) = _addLiquidity(processedLiquidityPoolData);
+        _flushBack(liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, tokensAmounts);
+    }
+
+    function addLiquidityBatch(LiquidityPoolData[] calldata data) public override virtual payable returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
+        liquidityPoolAmounts = new uint256[](data.length);
+        tokensAmounts = new uint256[][](data.length);
+        liquidityPoolTokens = new address[][](data.length);
+        ProcessedLiquidityPoolData[] memory processedLiquidityPoolDataArray = new ProcessedLiquidityPoolData[](data.length);
+        for(uint256 i = 0; i < data.length; i++) {
+            processedLiquidityPoolDataArray[i] = _processLiquidityPoolData(data[i]);
+            _collect(liquidityPoolTokens[i] = processedLiquidityPoolDataArray[i].liquidityPoolTokens, processedLiquidityPoolDataArray[i].tokensAmounts, processedLiquidityPoolDataArray[i].liquidityPoolOperator, processedLiquidityPoolDataArray[i].ethIsInvolved);
+        }
+        _transferToMeAndCheckAllowance();
+        uint256[] memory collected = new uint256[](_tokensLength);
+        for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
+            (liquidityPoolAmounts[i], tokensAmounts[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
+            for(uint256 z = 0; z < tokensAmounts[i].length; z++) {
+                collected[_tokenIndex[liquidityPoolTokens[i][z]]] += tokensAmounts[i][z];
+            }
+        }
+        _flushBackAndClear(collected);
+    }
+
+    function removeLiquidity(LiquidityPoolData calldata data) public override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+        ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
+        liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens;
+        _transferToMeAndCheckAllowance(processedLiquidityPoolData.liquidityPoolAddress, processedLiquidityPoolData.liquidityPoolAmount, processedLiquidityPoolData.liquidityPoolOperator);
+        (liquidityPoolAmount, tokensAmounts) = _removeLiquidity(processedLiquidityPoolData);
+        _flushBack(processedLiquidityPoolData.liquidityPoolAddress, processedLiquidityPoolData.liquidityPoolAmount, liquidityPoolAmount);
+    }
+
+    function removeLiquidityBatch(LiquidityPoolData[] calldata data) public override virtual returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
+        liquidityPoolAmounts = new uint256[](data.length);
+        tokensAmounts = new uint256[][](data.length);
+        liquidityPoolTokens = new address[][](data.length);
+        ProcessedLiquidityPoolData[] memory processedLiquidityPoolDataArray = new ProcessedLiquidityPoolData[](data.length);
+        for(uint256 i = 0; i < data.length; i++) {
+            processedLiquidityPoolDataArray[i] = _processLiquidityPoolData(data[i]);
+            liquidityPoolTokens[i] = processedLiquidityPoolDataArray[i].liquidityPoolTokens;
+            _collect(processedLiquidityPoolDataArray[i].liquidityPoolAddress, processedLiquidityPoolDataArray[i].liquidityPoolAmount, processedLiquidityPoolDataArray[i].liquidityPoolOperator, false);
+        }
+        _transferToMeAndCheckAllowance();
+        uint256[] memory collected = new uint256[](_tokensLength);
+        for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
+            (liquidityPoolAmounts[i], tokensAmounts[i]) = _removeLiquidity(processedLiquidityPoolDataArray[i]);
+            collected[_tokenIndex[processedLiquidityPoolDataArray[i].liquidityPoolAddress]] += liquidityPoolAmounts[i];
+        }
+        _flushBackAndClear(collected);
+    }
+
+    function swapLiquidity(SwapData calldata data) public override payable returns(uint256 outputAmount) {
+        ProcessedSwapData memory processedSwapData = _processSwapData(data);
+        _transferToMeAndCheckAllowance(processedSwapData.inputToken, processedSwapData.amount, processedSwapData.liquidityPoolOperator);
+        outputAmount = _swapLiquidity(processedSwapData);
+        _flushBack(processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken , processedSwapData.amount, 0);
+    }
+
+    function swapLiquidityBatch(SwapData[] calldata data) public override payable returns(uint256[] memory outputAmounts) {
+        ProcessedSwapData[] memory processedSwapDatas = new ProcessedSwapData[](data.length);
+        outputAmounts = new uint256[](data.length);
+        for(uint256 i = 0; i < data.length; i++) {
+            processedSwapDatas[i] = _processSwapData(data[i]);
+            _collect(processedSwapDatas[i].inputToken, processedSwapDatas[i].amount, processedSwapDatas[i].liquidityPoolOperator, processedSwapDatas[i].enterInETH);
+        }
+        _transferToMeAndCheckAllowance();
+        for(uint256 i = 0; i < data.length; i++) {
+            outputAmounts[i] = _swapLiquidity(processedSwapDatas[i]);
+        }
+        _flushBackAndClear(new uint256[](0));
+    }
+
+    function _getLiquidityPoolOperator(address liquidityPoolAddress, address[] memory liquidityPoolTokens) internal virtual view returns(address);
+
+    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal virtual returns(uint256, uint256[] memory);
+
+    function _removeLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal virtual returns(uint256, uint256[] memory);
+
+    function _swapLiquidity(ProcessedSwapData memory data) internal virtual returns(uint256 outputAmount);
+
+    function _processLiquidityPoolData(LiquidityPoolData calldata data) private view returns(ProcessedLiquidityPoolData memory) {
+        require(data.amount > 0, "Zero amount");
+        uint256[] memory tokensAmounts;
+        address[] memory liquidityPoolTokens;
+        uint256 liquidityPoolAmount;
+        if(data.amountIsLiquidityPool) {
+            (tokensAmounts, liquidityPoolTokens) = this.byLiquidityPoolAmount(data.liquidityPoolAddress, liquidityPoolAmount = data.amount);
+        } else {
+            (liquidityPoolAmount, tokensAmounts, liquidityPoolTokens) = this.byTokenAmount(data.liquidityPoolAddress, data.tokenIndex, data.amount);
+        }
+        bool ethIsInvolved = data.ethIsInvolved;
+        for(uint256 i = 0; i < liquidityPoolTokens.length; i++) {
+            if(liquidityPoolTokens[i] == address(0)) {
+                ethIsInvolved = true;
+            }
+        }
+        return ProcessedLiquidityPoolData(
+            data.liquidityPoolAddress,
+            liquidityPoolAmount,
+            liquidityPoolTokens,
+            tokensAmounts,
+            ethIsInvolved,
+            _getLiquidityPoolOperator(data.liquidityPoolAddress, liquidityPoolTokens),
+            data.receiver == address(0) ? msg.sender : data.receiver
+        );
+    }
+
+    function _processSwapData(SwapData calldata data) private view returns(ProcessedSwapData memory) {
+        require(data.amount > 0, "Zero amount");
+        require(data.paths.length > 0 && data.liquidityPoolAddresses.length == data.paths.length, "Invalid length");
+        ( , ,address[] memory liquidityPoolTokens) = this.byLiquidityPool(data.liquidityPoolAddresses[0]);
+        return ProcessedSwapData(
+            data.enterInETH && data.inputToken == ethereumAddress,
+            data.exitInETH && data.paths[data.paths.length - 1] == ethereumAddress,
+            data.liquidityPoolAddresses,
+            data.paths,
+            _getLiquidityPoolOperator(data.liquidityPoolAddresses[0], liquidityPoolTokens),
+            data.inputToken,
+            data.amount,
+            data.receiver == address(0) ? msg.sender : data.receiver
+        );
+    }
+
+    function _collect(address[] memory tokenAddresses, uint256[] memory tokenAmounts, address operator, bool ethIsInvolved) private {
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            _collect(tokenAddresses[i], tokenAmounts[i], operator, ethIsInvolved);
+        }
+    }
+
+    function _collect(address tokenAddress, uint256 tokenAmount, address operator, bool ethIsInvolved) private {
+        address realTokenAddress = ethIsInvolved && tokenAddress == ethereumAddress ? address(0) : tokenAddress;
+        uint256 position = _tokenIndex[realTokenAddress];
+        if(position == 0) {
+            _tokenIndex[realTokenAddress] = position = (_tokensLength++) - 1;
+            _tokensToTransfer.push(realTokenAddress);
+            _operators.push(operator);
+            _tokenAmounts.push(0);
+        }
+        _tokenAmounts[position] = _tokenAmounts[position] + tokenAmount;
+    }
+
+    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator, bool ethIsInvolved) private {
         for(uint256 i = 0; i < tokens.length; i++) {
-            _transferToMeAndCheckAllowance(tokens[i], amounts[i], from, operator);
+            _transferToMeAndCheckAllowance(ethIsInvolved && tokens[i] == ethereumAddress ? address(0) : tokens[i] , amounts[i], operator);
         }
     }
 
-    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address from, address operator) internal virtual {
-        _transferToMe(tokenAddress, from, value);
+    function _transferToMeAndCheckAllowance() private {
+        for(uint256 i = 0; i < _tokensLength; i++) {
+            _transferToMeAndCheckAllowance(_tokensToTransfer[i], _tokenAmounts[i], _operators[i]);
+        }
+    }
+
+    function _flushBackAndClear(uint256[] memory collectedAmounts) private {
+        for(uint256 i = 0; i < _tokensLength; i++) {
+            delete _tokenIndex[_tokensToTransfer[i]];
+            _flushBack(_tokensToTransfer[i], _tokenAmounts[i], collectedAmounts.length > 0 ? collectedAmounts[i] : 0);
+        }
+        _tokensLength = 1;
+        delete _tokensToTransfer;
+        delete _operators;
+        delete _tokenAmounts;
+    }
+
+    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) private {
+        _transferToMe(tokenAddress, value);
         _checkAllowance(tokenAddress, value, operator);
     }
 
-    function _transferToMe(address tokenAddress, address from, uint256 value) internal virtual {
+    function _transferToMe(address tokenAddress, uint256 value) private {
         if(tokenAddress == address(0)) {
-            return;
+            require(msg.value == value, "Incorrect eth value");
         }
-        _safeTransferFrom(tokenAddress, from, address(this), value);
+        _safeTransferFrom(tokenAddress, msg.sender, address(this), value);
     }
 
-    function _checkAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
+    function _flushBack(address[] memory tokenAddresses, uint256[] memory originalAmounts, uint256[] memory collectedAmounts) private {
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            _flushBack(tokenAddresses[i], originalAmounts[i], collectedAmounts.length > 0 ? collectedAmounts[i] : 0);
+        }
+    }
+
+    function _flushBack(address tokenAddress, uint256 originalAmount, uint256 collectedAmount) private {
+        uint256 amount = originalAmount != 0 && collectedAmount != 0 ? originalAmount - collectedAmount : tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
+        if(amount == 0) {
+            return;
+        }
+        if(tokenAddress == address(0)) {
+            payable(msg.sender).transfer(amount);
+            return;
+        }
+        _safeTransfer(tokenAddress, msg.sender, amount);
+    }
+
+    function _checkAllowance(address tokenAddress, uint256 value, address operator) private {
         if(tokenAddress == address(0) || operator == address(0)) {
             return;
         }
@@ -157,80 +290,18 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) private {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
     }
 
-    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
+    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) private {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
     }
 
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
         (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
-    }
-
-    function _sortTokens(IERC20 tokenA, IERC20 tokenB) internal virtual pure returns(IERC20, IERC20) {
-        if (tokenA < tokenB) {
-            return (tokenA, tokenB);
-        }
-        return (tokenB, tokenA);
-    }
-
-    function _normalizeTokenAmountsToTheseDecimals(address[] memory tokenAddresses, uint256[] memory amounts, uint256 decimals) internal virtual view returns (uint256[] memory) {
-        if(decimals == 0) {
-            return amounts;
-        }
-        uint256[] memory newAmounts = new uint256[] (amounts.length);
-        for(uint256 i = 0; i < newAmounts.length; i++) {
-            newAmounts[i] = _normalizeTokenAmountToTheseDecimals(tokenAddresses[i], amounts[i], decimals);
-        }
-        return newAmounts;
-    }
-
-    function _normalizeTokenAmountToTheseDecimals(address tokenAddress, uint256 amount, uint256 decimals) internal virtual view returns(uint256) {
-        if(decimals == 0) {
-            return amount;
-        }
-        uint256 remainingDecimals = decimals;
-        IERC20 token = IERC20(tokenAddress);
-        remainingDecimals -= token.decimals();
-
-        if(remainingDecimals == 0) {
-            return amount;
-        }
-
-        return amount * (remainingDecimals == 0 ? 1 : (10**remainingDecimals));
-    }
-
-    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount, uint256 normalizeTokenAmountsToTheseDecimals) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts) {
-        address[] memory lpTokens = this.tokens(liquidityPoolAddress);
-        (uint256 lpTotalAmount, uint256[] memory lpTokenTotalAmounts) = this.amounts(liquidityPoolAddress);
-        uint256 i = 0;
-        for(i; i < lpTokens.length; i++) {
-            if(lpTokens[i] == tokenAddress) {
-                break;
-            }
-        }
-        uint256 denominator = lpTokenTotalAmounts[i];
-        tokenAmounts = new uint256[](lpTokenTotalAmounts.length);
-        liquidityPoolAmount = (lpTotalAmount * tokenAmount) / denominator;
-        for(uint256 z = 0; z < lpTokenTotalAmounts.length; z++) {
-            if(z == i) {
-                tokenAmounts[z] = tokenAmount;
-                continue;
-            }
-            tokenAmounts[z] = (lpTokenTotalAmounts[z] * tokenAmount) / denominator;
-        }
-
-        if(normalizeTokenAmountsToTheseDecimals != 0) {
-            tokenAmounts = _normalizeTokenAmountsToTheseDecimals(lpTokens, tokenAmounts, normalizeTokenAmountsToTheseDecimals);
-        }
-    }
-
-    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount) public override view returns(uint256, uint256[] memory) {
-        return byTokenAmount(liquidityPoolAddress, tokenAddress, tokenAmount, 0);
     }
 }

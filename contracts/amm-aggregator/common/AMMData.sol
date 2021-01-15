@@ -3,13 +3,14 @@ pragma solidity ^0.7.6;
 
 struct LiquidityPoolData {
     address liquidityPoolAddress;
-    uint256 liquidityPoolAmount;
-    address[] tokens;
-    uint256[] amounts;
+    uint256 amount;
+    uint256 tokenIndex;
+    bool amountIsLiquidityPool;
+    bool ethIsInvolved;
     address receiver;
 }
 
-struct LiquidityToSwap {
+struct SwapData {
     bool enterInETH;
     bool exitInETH;
     address[] liquidityPoolAddresses;

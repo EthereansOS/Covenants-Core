@@ -7,9 +7,7 @@ import "../../../util/IERC20.sol";
 
 interface IUniswapV2AMMV1 is IAMM {
 
-    function router() external view returns(address);
-
-    function wethAddress() external view returns(address);
+    function uniswapData() external view returns(address routerAddress, address factoryAddress, address wethAddress);
 }
 
 interface IUniswapV2Router {
