@@ -841,10 +841,11 @@ describe("LiquidityMining", () => {
 
         var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, mainTokenAmount).call();
         var secondaryTokenAmount = amounts[1][secondaryTokenIndex];
-        var liquidityPoolTokenAmount;
+        var liquidityPoolTokenAmount = 0;
         if (hasLpToken) {
             if (mainToken != utilities.voidEthereumAddress) await mainToken.methods.approve(uniswapV2Router.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
-            if (secondaryToken != utilities.voidEthereumAddress) await secondaryToken.methods.approve(uniswapV2Router.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);       
+            if (secondaryToken != utilities.voidEthereumAddress) await secondaryToken.methods.approve(uniswapV2Router.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from); 
+            var liquidityPoolTokenContract = new web3.eth.Contract(context.IERC20ABI, liquidityPoolTokenAddress);      
             const startingBalance = parseInt(await liquidityPoolTokenContract.methods.balanceOf(address).call());
             await uniswapV2Router.methods.addLiquidity(
                 mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress, 
@@ -857,7 +858,6 @@ describe("LiquidityMining", () => {
                 (await web3.eth.getBlock(await web3.eth.getBlockNumber())).timestamp + 10000
             ).send(from);
             console.log('add liquidity done.');
-            var liquidityPoolTokenContract = new web3.eth.Contract(context.IERC20ABI, liquidityPoolTokenAddress);
             console.log(`lp token balance is ${await liquidityPoolTokenContract.methods.balanceOf(address).call()}`);
             await liquidityPoolTokenContract.methods.approve(liquidityMiningContract.options.address, await liquidityPoolTokenContract.methods.totalSupply().call()).send(from);
             liquidityPoolTokenAmount = parseInt(await liquidityPoolTokenContract.methods.balanceOf(address).call()) - startingBalance;
