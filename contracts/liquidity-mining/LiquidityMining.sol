@@ -132,9 +132,9 @@ contract LiquidityMining is ILiquidityMining {
             LiquidityMiningSetupConfiguration memory configuration = liquidityMiningSetups[i];
             if (configuration.add) {
                 require(
-                    configuration.data.ammPlugin != address(0) && 
+                    configuration.data.ammPlugin != address(0) &&
                     (
-                        (configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length == 1 && configuration.data.totalSupply == 0 && configuration.data.currentRewardPerBlock == configuration.data.rewardPerBlock) || 
+                        (configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length == 1 && configuration.data.totalSupply == 0 && configuration.data.currentRewardPerBlock == configuration.data.rewardPerBlock) ||
                         (!configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length > 0 && configuration.data.startBlock < configuration.data.endBlock && configuration.data.currentRewardPerBlock == 0)
                     ),
                     "Invalid setup configuration."
@@ -274,11 +274,11 @@ contract LiquidityMining is ILiquidityMining {
         require(liquidityMiningPosition.ammPlugin != address(0), "Invalid liquidity mining position.");
         require(request.liquidityPoolTokenAmount > 0 || request.mainTokenAmount > 0, "No tokens");
         (
-            IAMM ammPlugin, 
-            address liquidityPoolAddress, 
-            address[] memory tokens, 
-            uint256 mainTokenAmount, 
-            uint256 liquidityPoolTokenAmount, 
+            IAMM ammPlugin,
+            address liquidityPoolAddress,
+            address[] memory tokens,
+            uint256 mainTokenAmount,
+            uint256 liquidityPoolTokenAmount,
             uint256[] memory amounts
         ) = _transferToMeAndCheckAllowance(_setups[liquidityMiningPosition.setupIndex], request);
         require(liquidityPoolAddress == liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, "Invalid liquidity pool address.");
@@ -327,7 +327,7 @@ contract LiquidityMining is ILiquidityMining {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         require(
-            liquidityMiningPosition.ammPlugin != address(0) && 
+            liquidityMiningPosition.ammPlugin != address(0) &&
             to != address(0) &&
             liquidityMiningPosition.uniqueOwner == msg.sender &&
             liquidityMiningPosition.setupStartBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
@@ -514,14 +514,14 @@ contract LiquidityMining is ILiquidityMining {
       * @return tokenAmounts amount for each token return above.
      */
     function _transferToMeAndCheckAllowance(
-        LiquidityMiningSetup storage liquidityMiningSetup, 
+        LiquidityMiningSetup storage liquidityMiningSetup,
         LiquidityMiningPositionRequest memory request
     ) private returns(
-        IAMM amm, 
-        address liquidityPoolAddress, 
-        address[] memory tokens, 
-        uint256 mainTokenAmount, 
-        uint256 liquidityPoolTokenAmount, 
+        IAMM amm,
+        address liquidityPoolAddress,
+        address[] memory tokens,
+        uint256 mainTokenAmount,
+        uint256 liquidityPoolTokenAmount,
         uint256[] memory tokenAmounts
     ) {
         // retrieve the values
@@ -618,7 +618,7 @@ contract LiquidityMining is ILiquidityMining {
                         // renew the setup if renewable
                         _renewSetup(liquidityMiningPosition.setupIndex);
                     }
-                } else {                    
+                } else {
                     _rebalanceRewardPerBlock(_pinnedSetupIndex, liquidityMiningPosition.lockedRewardPerBlock, true);
                 }
             }

@@ -11,4 +11,4 @@ interface ILiquidityMiningExtension {
     function transferTo(uint256 amount, address recipient) external;
     function backToYou(uint256 amount) external payable;
     function setLiquidityMiningSetups(address liquidityMiningContractAddress, LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
-} 
+}
