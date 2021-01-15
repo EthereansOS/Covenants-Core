@@ -48,7 +48,6 @@ struct LiquidityMiningSetup {
     uint256 endBlock; // liquidity mining setup end block (used only if free is false).
     uint256 rewardPerBlock; // liquidity mining setup reward per single block.
     uint256 currentRewardPerBlock; // liquidity mining setup current reward per single block (used only if free is false).
-    uint256 maximumLiquidity; // maximum total liquidity (used only if free is false).
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
     uint256 lastBlockUpdate; // number of the block where an update was triggered.
     bool free; // if the setup is a free liquidity mining setup or a locked one.

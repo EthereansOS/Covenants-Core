@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.4;
+pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 import "./ILiquidityMiningFactory.sol";
@@ -131,6 +131,14 @@ contract LiquidityMining is ILiquidityMining {
         for (uint256 i = 0; i < liquidityMiningSetups.length; i++) {
             LiquidityMiningSetupConfiguration memory configuration = liquidityMiningSetups[i];
             if (configuration.add) {
+                require(
+                    configuration.data.ammPlugin != address(0) && 
+                    (
+                        (configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length == 1 && configuration.data.totalSupply == 0 && configuration.data.currentRewardPerBlock == configuration.data.rewardPerBlock) || 
+                        (!configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length > 0 && configuration.data.startBlock < configuration.data.endBlock && configuration.data.currentRewardPerBlock == 0)
+                    ),
+                    "Invalid setup configuration."
+                );
                 // adding new liquidity mining setup
                 _setups.push(configuration.data);
             } else {
@@ -146,8 +154,12 @@ contract LiquidityMining is ILiquidityMining {
                 } else {
                     // update locked liquidity mining setup
                     liquidityMiningSetup.rewardPerBlock = configuration.data.rewardPerBlock;
-                    liquidityMiningSetup.maximumLiquidity = configuration.data.maximumLiquidity != 0 ? configuration.data.maximumLiquidity : liquidityMiningSetup.maximumLiquidity;
-                    liquidityMiningSetup.liquidityPoolTokenAddresses = configuration.data.liquidityPoolTokenAddresses.length > 0 ? configuration.data.liquidityPoolTokenAddresses : liquidityMiningSetup.liquidityPoolTokenAddresses;
+                    if (configuration.data.liquidityPoolTokenAddresses.length > 0) {
+                        liquidityMiningSetup.liquidityPoolTokenAddresses = new address[](configuration.data.liquidityPoolTokenAddresses.length);
+                        for (uint256 j = 0; j < configuration.data.liquidityPoolTokenAddresses.length; j++) {
+                            liquidityMiningSetup.liquidityPoolTokenAddresses.push(configuration.data.liquidityPoolTokenAddresses[j]);
+                        }
+                    }
                     liquidityMiningSetup.renewable = configuration.data.renewable;
                     liquidityMiningSetup.penaltyFee = configuration.data.penaltyFee;
                 }
@@ -445,7 +457,7 @@ contract LiquidityMining is ILiquidityMining {
         // get total reward still available (= 0 if rewardPerBlock = 0)
         require(setup.rewardPerBlock * remainingBlocks > 0, "No rewards!");
         // calculate relativeRewardPerBlock
-        relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / setup.maximumLiquidity)) / 1e18;
+        relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / (setup.rewardPerBlock * (setup.endBlock - setup.startBlock)))) / 1e18;
         // check if rewardPerBlock is greater than 0
         require(relativeRewardPerBlock > 0, "relativeRewardPerBlock must be greater than 0.");
         // calculate reward by multiplying relative reward per block and the remaining blocks
