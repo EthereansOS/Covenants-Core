@@ -18,7 +18,7 @@ interface IAMM {
 
     function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) external view returns(uint256[] memory, address[] memory);
 
-    function byTokenAmount(address liquidityPoolAddress, uint256 tokenIndex, uint256 tokenAmount) external view returns(uint256, uint256[] memory, address[] memory);
+    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount) external view returns(uint256, uint256[] memory, address[] memory);
 
     function addLiquidity(LiquidityPoolData calldata data) external payable returns(uint256, uint256[] memory, address[] memory);
     function addLiquidityBatch(LiquidityPoolData[] calldata data) external payable returns(uint256[] memory, uint256[][] memory, address[][] memory);

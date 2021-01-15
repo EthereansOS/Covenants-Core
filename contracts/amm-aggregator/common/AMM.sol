@@ -65,17 +65,24 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function byTokenAmount(address liquidityPoolAddress, uint256 tokenIndex, uint256 tokenAmount) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
+    function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
 
         (liquidityPoolAmount, tokenAmounts, liquidityPoolTokens) = this.byLiquidityPool(liquidityPoolAddress);
 
         uint256 numerator = tokenAmount;
-        uint256 denominator = tokenAmounts[tokenIndex];
+        uint256 denominator;
+
+        for(uint256 i = 0; i < liquidityPoolTokens.length; i++) {
+            if(liquidityPoolTokens[i] == tokenAddress) {
+                denominator =  tokenAmounts[i];
+                break;
+            }
+        }
 
         liquidityPoolAmount = (liquidityPoolAmount * numerator) / denominator;
 
         for(uint256 i = 0; i < tokenAmounts.length; i++) {
-            if(i == tokenIndex) {
+            if(liquidityPoolTokens[i] == tokenAddress) {
                 tokenAmounts[i] = numerator;
                 continue;
             }
@@ -174,7 +181,7 @@ abstract contract AMM is IAMM {
         if(data.amountIsLiquidityPool) {
             (tokensAmounts, liquidityPoolTokens) = this.byLiquidityPoolAmount(data.liquidityPoolAddress, liquidityPoolAmount = data.amount);
         } else {
-            (liquidityPoolAmount, tokensAmounts, liquidityPoolTokens) = this.byTokenAmount(data.liquidityPoolAddress, data.tokenIndex, data.amount);
+            (liquidityPoolAmount, tokensAmounts, liquidityPoolTokens) = this.byTokenAmount(data.liquidityPoolAddress, data.tokenAddress, data.amount);
         }
         bool ethIsInvolved = data.ethIsInvolved;
         for(uint256 i = 0; i < liquidityPoolTokens.length; i++) {

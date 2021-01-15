@@ -4,7 +4,7 @@ pragma solidity ^0.7.6;
 struct LiquidityPoolData {
     address liquidityPoolAddress;
     uint256 amount;
-    uint256 tokenIndex;
+    address tokenAddress;
     bool amountIsLiquidityPool;
     bool ethIsInvolved;
     address receiver;
