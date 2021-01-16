@@ -21,7 +21,7 @@ struct LiquidityMiningSetup {
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
     uint256 lastBlockUpdate; // number of the block where an update was triggered.
     bool free; // if the setup is a free liquidity mining setup or a locked one.
-    bool renewable; // if the locked setup is renewable or if it's one time (used only if free is false).
+    uint256 renewTimes; // if the locked setup is renewable or if it's one time (used only if free is false).
     uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
 }
 
