@@ -1,0 +1,106 @@
+//SPDX-License-Identifier: MIT
+pragma solidity ^0.7.6;
+
+import "./util/DFOHub.sol";
+
+contract FixedInflationFactory {
+
+    // fixed inflation contract implementation address
+    address public fixedInflationImplementationAddress;
+
+    // double proxy address of the linked DFO
+    address private _doubleProxy;
+
+    // linked DFO exit fee
+    uint256 private _feePercentage;
+
+
+    // event that tracks fixed inflation contracts deployed
+    event FixedInflationDeployed(address indexed owner, address indexed contractAddress);
+
+    // event that tracks logic contract address change
+    event FixedInflationLogicSet(address indexed newAddress);
+
+    // event that tracks wallet changes
+    event FeePercentageSet(uint256);
+
+    constructor(address doubleProxy, address _fixedInflationImplementationAddress, uint256 feePercentage) {
+        _doubleProxy = doubleProxy;
+        emit FixedInflationLogicSet(fixedInflationImplementationAddress = _fixedInflationImplementationAddress);
+        emit FeePercentageSet(_feePercentage = feePercentage);
+    }
+
+    /** PUBLIC METHODS */
+
+    function feePercentageInfo() public view returns (uint256, address) {
+        return (_feePercentage, IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress());
+    }
+
+    /** @dev allows the DFO to update the double proxy address.
+      * @param newDoubleProxy new double proxy address.
+     */
+    function setDoubleProxy(address newDoubleProxy) public onlyDFO {
+        _doubleProxy = newDoubleProxy;
+    }
+
+    /** @dev change the fee percentage
+      * @param feePercentage new fee percentage.
+      */
+    function updateFeePercentage(uint256 feePercentage) public onlyDFO {
+        emit FeePercentageSet(_feePercentage = feePercentage);
+    }
+
+    /** @dev allows the factory owner to update the logic contract address.
+      * @param _fixedInflationImplementationAddress new fixed inflation implementation address.
+     */
+    function updateLogicAddress(address _fixedInflationImplementationAddress) public onlyDFO {
+        emit FixedInflationLogicSet(fixedInflationImplementationAddress = _fixedInflationImplementationAddress);
+    }
+
+    /** @dev this function deploys a new FixedInflation contract and calls the encoded function passed as data.
+      * @param data encoded initialize function for the fixed inflation contract (check FixedInflation contract code).
+      * @return contractAddress new fixed inflation contract address.
+     */
+    function deploy(bytes memory data) public returns (address contractAddress) {
+        (bool initSuccess,) = (contractAddress = _clone(fixedInflationImplementationAddress)).call(data);
+        require(initSuccess, "Error while creating new fixed inflation contract");
+        emit FixedInflationDeployed(msg.sender, contractAddress);
+    }
+
+    /** PRIVATE METHODS */
+
+    /** @dev clones the input contract address and returns the copied contract address.
+      * @param original address of the original contract.
+      * @return copy copied contract address.
+     */
+    function _clone(address original) private returns (address copy) {
+        assembly {
+            mstore(
+                0,
+                or(
+                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
+                    mul(original, 0x1000000000000000000)
+                )
+            )
+            copy := create(0, 0, 32)
+            switch extcodesize(copy)
+                case 0 {
+                    invalid()
+                }
+        }
+    }
+
+    /** @dev onlyDFO modifier used to check for unauthorized accesses. */
+    modifier onlyDFO() {
+        require(_isFromDFO(msg.sender), "Unauthorized.");
+        _;
+    }
+
+    /** @dev this function returns true if the sender is an authorized DFO functionality, false otherwise.
+      * @param sender address of the caller.
+      * @return true if the call is from a DFO, false otherwise.
+     */
+    function _isFromDFO(address sender) private view returns(bool) {
+        return IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender);
+    }
+}

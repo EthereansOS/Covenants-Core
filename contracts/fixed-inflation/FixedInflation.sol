@@ -66,6 +66,7 @@ contract FixedInflation {
             if(entryConfiguration.add) {
                 _add(FixedInflationEntry(
                     0,
+                    entryConfiguration.name,
                     entryConfiguration.blockInterval,
                     entryConfiguration.callerRewardPercentage
                 ), operationSets[i]);
@@ -153,7 +154,7 @@ contract FixedInflation {
 
         address outputToken = operation.swapPath[operation.swapPath.length - 1];
 
-        LiquidityToSwap memory liquidityToSwap = LiquidityToSwap(
+        SwapData memory swapData = SwapData(
             operation.inputTokenAddress == address(0),
             outputToken == address(0),
             operation.liquidityPoolAddresses,
@@ -164,10 +165,10 @@ contract FixedInflation {
         );
 
         uint256 amountOut;
-        if(liquidityToSwap.enterInETH) {
-            amountOut = IAMM(operation.ammPlugin).swapLiquidity{value : amountIn}(liquidityToSwap);
+        if(swapData.enterInETH) {
+            amountOut = IAMM(operation.ammPlugin).swapLiquidity{value : amountIn}(swapData);
         } else {
-            amountOut = IAMM(operation.ammPlugin).swapLiquidity(liquidityToSwap);
+            amountOut = IAMM(operation.ammPlugin).swapLiquidity(swapData);
         }
 
         if(earnByInput) {
