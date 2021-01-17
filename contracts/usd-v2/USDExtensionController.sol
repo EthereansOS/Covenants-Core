@@ -318,29 +318,38 @@ contract USDExtensionController is ERC1155Receiver {
     function addLiquidity(
         uint256 ammPosition,
         uint256 liquidityPoolPosition,
-        uint256 liquidityPoolAmount
+        uint256 liquidityPoolAmount,
+        bool byLiquidityPool
     )
         public
         _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
         returns(uint256 toMint)
     {
-        IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
         address liquidityPoolAddress = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
-        uint256[] memory amounts = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
-        address[] memory tokens = amm.tokens(liquidityPoolAddress);
-        for(uint256 i = 0; i < tokens.length; i++) {
-            _safeTransferFrom(tokens[i], msg.sender, address(this), amounts[i]);
-            _safeApprove(tokens[i], address(amm), amounts[i]);
-        }
         uint256[] memory spent;
-        (toMint, spent) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(LiquidityPoolData(
-            _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
-            liquidityPoolAmount,
-            tokens,
-            amounts,
-            _extension
-        ));
+        uint256[] memory amounts;
+        address[] memory tokens;
+        if(byLiquidityPool) {
+            _safeTransferFrom(liquidityPoolAddress, msg.sender, _extension, toMint = liquidityPoolAmount);
+        } else {
+            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
+            (amounts, tokens) = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
+            for(uint256 i = 0; i < tokens.length; i++) {
+                _safeTransferFrom(tokens[i], msg.sender, address(this), amounts[i]);
+                _safeApprove(tokens[i], address(amm), amounts[i]);
+            }
+            (toMint, spent,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(LiquidityPoolData(
+                liquidityPoolAddress,
+                liquidityPoolAmount,
+                address(0),
+                true,
+                false,
+                _extension
+            ));
+        }
+
         USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
+
         for(uint256 i = 0; i < spent.length; i++) {
             uint256 difference = amounts[i] - spent[i];
             if(difference > 0) {
@@ -370,8 +379,9 @@ contract USDExtensionController is ERC1155Receiver {
         amm.removeLiquidity(LiquidityPoolData(
             _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
             liquidityPoolAmount,
-            amm.tokens(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]),
-            new uint256[](0),
+            address(0),
+            true,
+            false,
             owner
         ));
     }
@@ -381,9 +391,9 @@ contract USDExtensionController is ERC1155Receiver {
         view
         returns(uint256 amount) {
             IERC20 liquidityPool = IERC20(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]);
-            uint256[] memory amounts = IAMM(_allowedAMMs[ammPosition].ammAddress).byLiquidityPoolAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension), DECIMALS);
+            (uint256[] memory amounts, address[] memory tokens) = IAMM(_allowedAMMs[ammPosition].ammAddress).byLiquidityPoolAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension));
             for(uint256 i = 0; i < amounts.length; i++) {
-                amount += amounts[i];
+                amount += _normalizeTokenAmountToDefaultDecimals(tokens[i], amounts[i]);
             }
     }
 
@@ -432,5 +442,17 @@ contract USDExtensionController is ERC1155Receiver {
             return sender.transfer(balance);
         }
         _safeTransfer(tokenAddress, sender, balance);
+    }
+
+    function _normalizeTokenAmountToDefaultDecimals(address tokenAddress, uint256 amount) internal virtual view returns(uint256) {
+        uint256 remainingDecimals = DECIMALS;
+        IERC20 token = IERC20(tokenAddress);
+        remainingDecimals -= token.decimals();
+
+        if(remainingDecimals == 0) {
+            return amount;
+        }
+
+        return amount * (remainingDecimals == 0 ? 1 : (10**remainingDecimals));
     }
 }

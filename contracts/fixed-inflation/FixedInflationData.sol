@@ -5,14 +5,14 @@ struct FixedInflationEntryConfiguration {
     bool add;
     bool remove;
     uint256 index;
-	string name;
+    string name;
     uint256 blockInterval;
     uint256 callerRewardPercentage;
 }
 
 struct FixedInflationEntry {
     uint256 lastBlock;
-	string name;
+    string name;
     uint256 blockInterval;
     uint256 callerRewardPercentage;
 }
