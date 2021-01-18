@@ -148,7 +148,7 @@ describe("LiquidityMining", () => {
         }
 
         var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
-        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address]}).send(blockchainConnection.getSendingOptions());
+        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, 0]}).send(blockchainConnection.getSendingOptions());
 
         liquidityMiningExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
 
@@ -177,7 +177,7 @@ describe("LiquidityMining", () => {
         var payload = web3.utils.sha3(`initialize(${params.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(params, values).substring(2));
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-        var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address)"))[0].topics[2]);
+        var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address,bytes)"))[0].topics[1]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
 
@@ -205,7 +205,7 @@ describe("LiquidityMining", () => {
         positionTokenCollection = new web3.eth.Contract(context.ethItemNativeABI, positionTokenCollection);
     });
     it("Exit fee is 0", async() => {
-        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
+        var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         assert.strictEqual(parseInt(exitFee), 0);
     });
     it("DFO can update the exit fee to 1", async() => {
@@ -213,12 +213,12 @@ describe("LiquidityMining", () => {
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFeeProposal.sol'), 'UTF-8').format(liquidityMiningFactory.options.address, exitFeeExpected);
         var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
         await dfoManager.finalizeProposal(dfo, proposal);
-        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
+        var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         assert.strictEqual(parseInt(exitFee), exitFeeExpected);
     });
     it("Another account cannot update the exit fee", async() => {
         try {
-            await liquidityMiningFactory.methods.updateExitFee(0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
+            await liquidityMiningFactory.methods.updateFeePercentage(0).send(blockchainConnection.getSendingOptions({from: accounts[1]}));
         } catch (e) {
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf("unauthorized"), -1);
         }
@@ -476,7 +476,7 @@ describe("LiquidityMining", () => {
     async function unlockStakingPosition(actor) {
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
         var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
-        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
+        var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         if(parseInt(exitFee) > 0) {
             exitFee = web3.utils.toBN(exitFee);
             var oneE18 = web3.utils.toBN(1e18);
@@ -530,11 +530,11 @@ describe("LiquidityMining", () => {
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
 
         var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
-        var exitFee = await liquidityMiningFactory.methods._exitFee().call();
+        var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         if(parseInt(exitFee) > 0) {
             exitFee = web3.utils.toBN(exitFee);
             var oneE18 = web3.utils.toBN(1e18);
-            var hundred = web3.utils.toBN(100);
+            var hundred = web3.utils.toBN(await liquidityMiningContract.methods.ONE_HUNDRED().call());
             var diff = liquidityPoolTokenAmount.mul(exitFee.mul(oneE18).div(hundred)).div(oneE18);
             liquidityPoolTokenAmount = liquidityPoolTokenAmount.sub(diff);
         }

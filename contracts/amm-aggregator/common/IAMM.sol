@@ -10,6 +10,8 @@ interface IAMM {
 
     function ethereumAddress() external view returns(address);
 
+    function balanceOf(address liquidityPoolAddress, address owner) external view returns(uint256, uint256[] memory, address[] memory);
+
     function byLiquidityPool(address liquidityPoolAddress) external view returns(uint256, uint256[] memory, address[] memory);
 
     function byTokens(address[] memory liquidityPoolTokens) external view returns(uint256, uint256[] memory, address);

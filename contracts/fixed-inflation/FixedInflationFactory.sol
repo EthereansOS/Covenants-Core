@@ -2,8 +2,9 @@
 pragma solidity ^0.7.6;
 
 import "./util/DFOHub.sol";
+import "./IFixedInflationFactory.sol";
 
-contract FixedInflationFactory {
+contract FixedInflationFactory is IFixedInflationFactory{
 
     // fixed inflation contract implementation address
     address public fixedInflationImplementationAddress;
@@ -31,7 +32,7 @@ contract FixedInflationFactory {
 
     /** PUBLIC METHODS */
 
-    function feePercentageInfo() public view returns (uint256, address) {
+    function feePercentageInfo() public override view returns (uint256, address) {
         return (_feePercentage, IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress());
     }
 
@@ -65,7 +66,7 @@ contract FixedInflationFactory {
         bool initSuccess;
         (initSuccess, initResultData) = (contractAddress = _clone(fixedInflationImplementationAddress)).call(data);
         require(initSuccess, "Error while creating new fixed inflation contract");
-        emit FixedInflationDeployed(msg.sender, contractAddress, initResultData);
+        emit FixedInflationDeployed(contractAddress, msg.sender, initResultData);
     }
 
     /** PRIVATE METHODS */

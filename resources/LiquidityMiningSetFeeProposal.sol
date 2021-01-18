@@ -20,10 +20,10 @@ contract ProposalCode {
     }
 
     function callOneTime(address) public {
-        ILiquidityMiningFactory({0}).updateExitFee({1});
+        ILiquidityMiningFactory({0}).updateFeePercentage({1});
     }
 }
 
 interface ILiquidityMiningFactory {
-    function updateExitFee(uint256 newExitFee) external;
+    function updateFeePercentage(uint256 newExitFee) external;
 }

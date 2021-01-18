@@ -6,17 +6,19 @@ import "./FixedInflationData.sol";
 import "./IFixedInflationExtension.sol";
 import "./util/IERC20.sol";
 import "../amm-aggregator/common/IAMM.sol";
+import "./IFixedInflationFactory.sol";
 
 contract FixedInflation {
 
     uint256 public constant ONE_HUNDRED = 10000;
 
-    mapping(address => uint256) internal _tokenIndex;
-    mapping(address => uint256) internal _tokenTotalSupply;
+    address public _factory;
+
+    mapping(address => uint256) private _tokenIndex;
+    mapping(address => uint256) private _tokenTotalSupply;
     address[] private _tokensToTransfer;
     uint256[] private _tokenAmounts;
     uint256[] private _tokenMintAmounts;
-    uint256 private _tokensLength = 1;
 
     address public extension;
 
@@ -25,8 +27,9 @@ contract FixedInflation {
     uint256 private _entriesLength;
 
     function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory newEntries, FixedInflationOperation[][] memory operationSets) public returns(bytes memory extensionInitResult) {
-        require(extension == address(0), "Already init");
+        require(_factory == address(0), "Already init");
         require(_extension != address(0), "Blank extension");
+        _factory = msg.sender;
         extension = _extension;
         if(keccak256(extensionPayload) != keccak256("")) {
             bool result;
@@ -34,8 +37,9 @@ contract FixedInflation {
             require(result, "Extension fail");
         }
         require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
+        (uint256 dfoFeePercentage,) = IFixedInflationFactory(_factory).feePercentageInfo();
         for(uint256 i = 0; i < newEntries.length; i++) {
-            _add(newEntries[i], operationSets[i]);
+            _add(newEntries[i], operationSets[i], dfoFeePercentage);
         }
     }
 
@@ -61,6 +65,7 @@ contract FixedInflation {
 
     function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public extensionOnly {
         require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
+        (uint256 dfoFeePercentage,) = IFixedInflationFactory(_factory).feePercentageInfo();
         for(uint256 i = 0; i < newEntries.length; i++) {
             FixedInflationEntryConfiguration memory entryConfiguration = newEntries[i];
             if(entryConfiguration.add) {
@@ -69,7 +74,8 @@ contract FixedInflation {
                     entryConfiguration.name,
                     entryConfiguration.blockInterval,
                     entryConfiguration.callerRewardPercentage
-                ), operationSets[i]);
+                ), operationSets[i],
+                dfoFeePercentage);
                 continue;
             }
             if(entryConfiguration.remove) {
@@ -78,7 +84,7 @@ contract FixedInflation {
             }
             _entries[entryConfiguration.index].blockInterval = entryConfiguration.blockInterval;
             _entries[entryConfiguration.index].callerRewardPercentage = entryConfiguration.callerRewardPercentage;
-            _setOperations(entryConfiguration.index, operationSets[i]);
+            _setOperations(entryConfiguration.index, operationSets[i], dfoFeePercentage);
         }
     }
 
@@ -113,9 +119,11 @@ contract FixedInflation {
         if(inputTokenAmount == 0) {
             return;
         }
+
         uint256 position = _tokenIndex[inputTokenAddress];
-        if(position == 0) {
-            _tokenIndex[inputTokenAddress] = position = (_tokensLength++) - 1;
+
+        if(_tokensToTransfer.length == 0 || _tokensToTransfer[position] != inputTokenAddress) {
+            _tokenIndex[inputTokenAddress] = (position = _tokensToTransfer.length);
             _tokensToTransfer.push(inputTokenAddress);
             _tokenAmounts.push(0);
             _tokenMintAmounts.push(0);
@@ -188,6 +196,11 @@ contract FixedInflation {
         _transferTo(erc20TokenAddress, rewardReceiver, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 
+        (uint256 dfoFeePercentage, address dfoWallet) = IFixedInflationFactory(_factory).feePercentageInfo();
+        currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(totalAmount, dfoFeePercentage);
+        _transferTo(erc20TokenAddress, dfoWallet, currentPartialAmount);
+        availableAmount -= currentPartialAmount;
+
         for(uint256 i = 0; i < receiversPercentages.length; i++) {
             _transferTo(erc20TokenAddress, receivers[i], currentPartialAmount = _calculateRewardPercentage(totalAmount, receiversPercentages[i]));
             availableAmount -= currentPartialAmount;
@@ -213,32 +226,31 @@ contract FixedInflation {
     }
 
     function _clearVars() private {
-        _tokensLength = 1;
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
             if(_tokensToTransfer[i] == address(0) && _tokenAmounts[i] == 0 && _tokenMintAmounts[i] == 0) {
                 break;
             }
-            delete _tokenIndex[address(_tokensToTransfer[i])];
-            delete _tokenTotalSupply[address(_tokensToTransfer[i])];
+            delete _tokenIndex[_tokensToTransfer[i]];
+            delete _tokenTotalSupply[_tokensToTransfer[i]];
         }
         delete _tokensToTransfer;
         delete _tokenAmounts;
         delete _tokenMintAmounts;
     }
 
-    function _add(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations) private {
+    function _add(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, uint256 dfoFeePercentage) private {
         _entries[_entriesLength++] = fixedInflationEntry;
-        _setOperations(_entriesLength - 1, operations);
+        _setOperations(_entriesLength - 1, operations, dfoFeePercentage);
     }
 
-    function _setOperations(uint256 index, FixedInflationOperation[] memory operations) private {
+    function _setOperations(uint256 index, FixedInflationOperation[] memory operations, uint256 dfoFeePercentage) private {
         require(index < _entriesLength, "Invalid length");
         delete _operations[index];
         for(uint256 i = 0; i < operations.length; i++) {
             FixedInflationOperation memory operation = operations[i];
             require(operation.receivers.length > 0, "No receivers");
             require(operation.receiversPercentages.length == (operation.receivers.length - 1), "Percentages must be less than receivers");
-            uint256 percentage = _entries[index].callerRewardPercentage;
+            uint256 percentage = dfoFeePercentage + _entries[index].callerRewardPercentage;
             for(uint256 j = 0; j < operation.receiversPercentages.length; j++) {
                 percentage += operation.receiversPercentages[j];
                 require(operation.receivers[j] != address(0), "Void receiver");

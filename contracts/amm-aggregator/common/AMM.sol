@@ -43,6 +43,10 @@ abstract contract AMM is IAMM {
     receive() external virtual payable {
     }
 
+    function balanceOf(address liquidityPoolAddress, address owner) public override view returns (uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
+        (tokenAmounts, liquidityPoolTokens) = byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount = IERC20(liquidityPoolAddress).balanceOf(owner));
+    }
+
     function byPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) public override view returns (uint256 liquidityPoolAmount, uint256[] memory tokenAmounts, address[] memory liquidityPoolTokens) {
         (liquidityPoolAmount, tokenAmounts, liquidityPoolTokens) = this.byLiquidityPool(liquidityPoolAddress);
 

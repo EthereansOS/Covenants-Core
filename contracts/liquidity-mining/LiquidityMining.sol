@@ -14,6 +14,8 @@ import "./ILiquidityMining.sol";
 
 contract LiquidityMining is ILiquidityMining {
 
+    uint256 public constant ONE_HUNDRED = 10000;
+
     // event that tracks liquidity mining contracts deployed
     event RewardToken(address indexed rewardTokenAddress);
     // new liquidity mining position event
@@ -402,7 +404,7 @@ contract LiquidityMining is ILiquidityMining {
         require(!_positionRedeemed[positionId], "LiquidityMiningPosition already redeemed");
         // must pay a penalty fee
         uint256 amount = _partiallyRedeemed[positionId];
-        amount += (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / 100) / 1e18);
+        amount += (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / ONE_HUNDRED) / 1e18);
         if(_rewardTokenAddress != address(0)) {
             _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
             _safeApprove(_rewardTokenAddress, _extension, amount);
@@ -607,11 +609,11 @@ contract LiquidityMining is ILiquidityMining {
      */
     function _exit(uint256 positionId, bool unwrapPair) private {
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        uint256 exitFee = ILiquidityMiningFactory(_factory)._exitFee();
+        (uint256 exitFeePercentage, address exitFeeWallet) = ILiquidityMiningFactory(_factory).feePercentageInfo();
         // pay the fees!
-        if (exitFee > 0) {
-            uint256 fee = (liquidityMiningPosition.liquidityPoolData.amount * ((exitFee * 1e18) / 100)) / 1e18;
-            _safeTransfer(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, _extension, fee);
+        if (exitFeePercentage > 0) {
+            uint256 fee = (liquidityMiningPosition.liquidityPoolData.amount * ((exitFeePercentage * 1e18) / ONE_HUNDRED)) / 1e18;
+            _safeTransfer(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, exitFeeWallet, fee);
             liquidityMiningPosition.liquidityPoolData.amount = liquidityMiningPosition.liquidityPoolData.amount - fee;
         }
         // check if the user wants to unwrap its pair or not
