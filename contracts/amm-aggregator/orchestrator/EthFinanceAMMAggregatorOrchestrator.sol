@@ -13,7 +13,7 @@ contract EthFinanceAMMAggregatorOrchestrator is IEthFinanceAMMAggregatorOrchestr
     }
 
     modifier byDFO virtual {
-        require(_isFromDFO(msg.sender), "Unauthorized Action!");
+        require(_isFromDFO(msg.sender), "Unauthorized action");
         _;
     }
 

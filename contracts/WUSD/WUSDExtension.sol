@@ -6,7 +6,7 @@ import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/IERC20.sol";
 
-contract USDExtension {
+contract WUSDExtension {
 
     uint256 private constant DECIMALS = 18;
 

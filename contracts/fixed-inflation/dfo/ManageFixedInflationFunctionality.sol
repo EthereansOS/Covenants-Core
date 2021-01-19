@@ -26,7 +26,7 @@ contract ProposalCode {
     function manageFixedInflation(address sender, uint256, address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint, address to) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        require(stateHolder.getBool(_toStateHolderKey("fixedinflation.authorized", _toString(sender))), "Unauthorized Action!");
+        require(stateHolder.getBool(_toStateHolderKey("fixedinflation.authorized", _toString(sender))), "Unauthorized action");
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
             IERC20 token = IERC20(tokenAddresses[i]);
             if(amountsToMint[i] > 0) {

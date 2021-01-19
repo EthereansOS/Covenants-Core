@@ -26,7 +26,7 @@ contract ProposalCode {
     function manageLiquidityMining(address sender, uint256, bool transfer, address erc20TokenAddress, address to, uint256 value, bool byMint) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        require(stateHolder.getBool(_toStateHolderKey("liquiditymining.authorized", _toString(sender))), "Unauthorized Action!");
+        require(stateHolder.getBool(_toStateHolderKey("liquiditymining.authorized", _toString(sender))), "Unauthorized action");
         IERC20 token = IERC20(erc20TokenAddress);
         if(transfer) {
             if(byMint) {

@@ -557,7 +557,10 @@ contract LiquidityMining is ILiquidityMining {
         }
 
         // check if the eth is involved in the request
-        address ethAddress = request.involvingETH ? amm.ethereumAddress() : address(0);
+        address ethAddress = address(0); 
+        if(request.involvingETH) {
+            (ethAddress,,) = amm.data();
+        }
         // iterate the tokens and perform the transferFrom and the approve
         for(uint256 i = 0; i < tokens.length; i++) {
             if(tokens[i] == setup.mainTokenAddress) {

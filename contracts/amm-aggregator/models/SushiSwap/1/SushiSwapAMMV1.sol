@@ -2,23 +2,23 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./IUniswapV2AMMV1.sol";
+import "./ISushiSwapAMMV1.sol";
 import "../../../common/AMM.sol";
 
-contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
+contract SushiSwapAMMV1 is ISushiSwapAMMV1, AMM {
 
-    address private _uniswapV2RouterAddress;
+    address private _sushiSwapV2RouterAddress;
 
     address private _wethAddress;
 
     address private immutable _factoryAddress;
 
-    constructor(address uniswapV2RouterAddress) AMM("UniswapV2AMM", 1, _wethAddress = IUniswapV2Router(_uniswapV2RouterAddress = uniswapV2RouterAddress).WETH(), 2, true) {
-        _factoryAddress = IUniswapV2Router(uniswapV2RouterAddress).factory();
+    constructor(address sushiSwapV2RouterAddress) AMM("SushiSwapAMM", 1, _wethAddress = IUniswapV2Router(_sushiSwapV2RouterAddress = sushiSwapV2RouterAddress).WETH(), 2, true) {
+        _factoryAddress = IUniswapV2Router(sushiSwapV2RouterAddress).factory();
     }
 
-    function uniswapData() public virtual override view returns(address routerAddress, address factoryAddress, address wethAddress) {
-        routerAddress = _uniswapV2RouterAddress;
+    function sushiSwapData() public virtual override view returns(address routerAddress, address factoryAddress, address wethAddress) {
+        routerAddress = _sushiSwapV2RouterAddress;
         factoryAddress = _factoryAddress;
         wethAddress = _wethAddress;
     }
@@ -60,18 +60,18 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     }
 
     function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
-        return _uniswapV2RouterAddress;
+        return _sushiSwapV2RouterAddress;
     }
 
     function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool) internal virtual view override returns(address) {
-        return _uniswapV2RouterAddress;
+        return _sushiSwapV2RouterAddress;
     }
 
     function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
         if(!involvingETH) {
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidity(
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_sushiSwapV2RouterAddress).addLiquidity(
                 tokenAddresses[0],
                 tokenAddresses[1],
                 amounts[0],
@@ -85,7 +85,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
             address token = tokenAddresses[0] != _wethAddress ? tokenAddresses[0] : tokenAddresses[1];
             uint256 amountTokenDesired = tokenAddresses[0] != _wethAddress ? amounts[0] : amounts[1];
             uint256 amountETHDesired = tokenAddresses[0] == _wethAddress ? amounts[0] : amounts[1];
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_sushiSwapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
                 1,
@@ -102,7 +102,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
     function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
         tokensAmounts = new uint256[](2);
         if(!processedLiquidityPoolData.involvingETH) {
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidity(
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_sushiSwapV2RouterAddress).addLiquidity(
                 processedLiquidityPoolData.liquidityPoolTokens[0],
                 processedLiquidityPoolData.liquidityPoolTokens[1],
                 processedLiquidityPoolData.tokensAmounts[0],
@@ -116,7 +116,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
             address token = processedLiquidityPoolData.liquidityPoolTokens[0] != _wethAddress ? processedLiquidityPoolData.liquidityPoolTokens[0] : processedLiquidityPoolData.liquidityPoolTokens[1];
             uint256 amountTokenDesired = processedLiquidityPoolData.liquidityPoolTokens[0] != _wethAddress ? processedLiquidityPoolData.tokensAmounts[0] : processedLiquidityPoolData.tokensAmounts[1];
             uint256 amountETHDesired = processedLiquidityPoolData.liquidityPoolTokens[0] == _wethAddress ? processedLiquidityPoolData.tokensAmounts[0] : processedLiquidityPoolData.tokensAmounts[1];
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_uniswapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_sushiSwapV2RouterAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
                 1,
@@ -135,9 +135,9 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         uint256 amount0;
         uint256 amount1;
         if(!processedLiquidityPoolData.involvingETH) {
-            (amount0, amount1) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidity(processedLiquidityPoolData.liquidityPoolTokens[0], processedLiquidityPoolData.liquidityPoolTokens[1], processedLiquidityPoolData.liquidityPoolAmount, 1, 1, processedLiquidityPoolData.receiver, block.timestamp + 1000);
+            (amount0, amount1) = IUniswapV2Router(_sushiSwapV2RouterAddress).removeLiquidity(processedLiquidityPoolData.liquidityPoolTokens[0], processedLiquidityPoolData.liquidityPoolTokens[1], processedLiquidityPoolData.liquidityPoolAmount, 1, 1, processedLiquidityPoolData.receiver, block.timestamp + 1000);
         } else {
-            (amount0, amount1) = IUniswapV2Router(_uniswapV2RouterAddress).removeLiquidityETH(processedLiquidityPoolData.liquidityPoolTokens[0] != _wethAddress ? processedLiquidityPoolData.liquidityPoolTokens[0] : processedLiquidityPoolData.liquidityPoolTokens[1], processedLiquidityPoolData.liquidityPoolAmount, 1, 1, processedLiquidityPoolData.receiver, block.timestamp + 1000);
+            (amount0, amount1) = IUniswapV2Router(_sushiSwapV2RouterAddress).removeLiquidityETH(processedLiquidityPoolData.liquidityPoolTokens[0] != _wethAddress ? processedLiquidityPoolData.liquidityPoolTokens[0] : processedLiquidityPoolData.liquidityPoolTokens[1], processedLiquidityPoolData.liquidityPoolAmount, 1, 1, processedLiquidityPoolData.receiver, block.timestamp + 1000);
         }
         tokensAmounts[0] = amount0;
         tokensAmounts[1] = amount1;
@@ -153,13 +153,13 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
             path[path.length - 1] = _wethAddress;
         }
         if(!data.enterInETH && !data.exitInETH) {
-            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForTokens(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(_sushiSwapV2RouterAddress).swapExactTokensForTokens(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
         }
         if(data.enterInETH) {
-            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactETHForTokens{value : data.amount}(1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(_sushiSwapV2RouterAddress).swapExactETHForTokens{value : data.amount}(1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
         }
         if(data.exitInETH) {
-            return IUniswapV2Router(_uniswapV2RouterAddress).swapExactTokensForETH(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(_sushiSwapV2RouterAddress).swapExactTokensForETH(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
         }
         return 0;
     }

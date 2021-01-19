@@ -24,7 +24,7 @@ abstract contract EthFinanceAMMAggregatorOrchestratorDependantElement is IEthFin
     function _registerSpecificInterfaces() internal virtual;
 
     modifier byOrchestrator virtual {
-        require(isAuthorizedOrchestrator(msg.sender), "Unauthorized Action!");
+        require(isAuthorizedOrchestrator(msg.sender), "Unauthorized action");
         _;
     }
 

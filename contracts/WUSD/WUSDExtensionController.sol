@@ -3,17 +3,18 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./USDExtension.sol";
+import "./WUSDExtension.sol";
 import "./util/DFOHub.sol";
 import "./util/ERC1155Receiver.sol";
 import "./util/INativeV1.sol";
 import "./util/IERC20WrapperV1.sol";
 import "./util/IERC20.sol";
 import "./AllowedAMM.sol";
+import "./IWUSDNoteController.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "../amm-aggregator/common/AMMData.sol";
 
-contract USDExtensionController is ERC1155Receiver {
+contract WUSDExtensionController is ERC1155Receiver {
 
     uint256 public constant ONE_HUNDRED = 10000;
 
@@ -25,11 +26,18 @@ contract USDExtensionController is ERC1155Receiver {
 
     address private _collection;
 
-    uint256 private _usdObjectId;
-    address private _usdInteroperableInterfaceAddress;
+    uint256 private _wusdObjectId;
+    address private _wusdInteroperableInterfaceAddress;
 
-    uint256 private _usdCreditObjectId;
-    address private _usdCreditInteroperableInterfaceAddress;
+    uint256 private _wusdNote2ObjectId;
+    address private _wusdNote2InteroperableInterfaceAddress;
+    address private _wusdNote2Controller;
+    uint256 private _wusdNote2Percentage;
+
+    uint256 private _wusdNote5ObjectId;
+    address private _wusdNote5InteroperableInterfaceAddress;
+    address private _wusdNote5Controller;
+    uint256 private _wusdNote5Percentage;
 
     uint256 private _lastRedeemBlock;
 
@@ -41,53 +49,79 @@ contract USDExtensionController is ERC1155Receiver {
 
     uint256 private _rebalanceByCreditPercentageForCaller;
 
-    constructor(address doubleProxyAddress,
-        address[] memory rebalanceByCreditReceivers, uint256[] memory rebalanceByCreditPercentages, uint256 rebalanceByCreditPercentageForCaller, bytes memory allowedAMMsBytes) {
-        _doubleProxy = doubleProxyAddress;
-        _setRebalanceByCreditData(rebalanceByCreditReceivers, rebalanceByCreditPercentages, rebalanceByCreditPercentageForCaller);
-        _setAllowedAMMs(allowedAMMsBytes);
+    struct WUSDInitializer {
+        address doubleProxyAddress;
+        address[] rebalanceByCreditReceivers;
+        uint256[] rebalanceByCreditPercentages;
+        uint256 rebalanceByCreditPercentageForCaller;
+        bytes allowedAMMsBytes;
+        address wusdExtension;
+        uint256 wusdObjectId;
+        uint256 wusdNote2ObjectId;
+        address wusdNote2Controller;
+        uint256 wusdNote2Percentage;
+        uint256 wusdNote5ObjectId;
+        address wusdNote5Controller;
+        uint256 wusdNote5Percentage;
+        address orchestratorAddress;
+        string[] names;
+        string[] symbols;
+        string[] uris;
+    }
+
+    constructor(bytes memory wusdInitializerBytes) {
+        WUSDInitializer memory wusdInitializer = abi.decode(wusdInitializerBytes, (WUSDInitializer));
+        _doubleProxy = wusdInitializer.doubleProxyAddress;
+        WUSDExtension wusdExtension = WUSDExtension(_extension = wusdInitializer.wusdExtension != address(0) ? wusdInitializer.wusdExtension : address(new WUSDExtension(wusdInitializer.orchestratorAddress, wusdInitializer.names[0], wusdInitializer.symbols[0], wusdInitializer.uris[0])));
+        INativeV1 wusdCollection = INativeV1(_collection = wusdExtension.collection());
+        if(wusdInitializer.wusdObjectId == 0) {
+            (_wusdObjectId, _wusdInteroperableInterfaceAddress) = wusdExtension.mintEmpty(wusdInitializer.names[1], wusdInitializer.symbols[1], wusdInitializer.uris[1], true);
+        } else {
+            _wusdInteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdObjectId = wusdInitializer.wusdObjectId));
+            _wusdNote2InteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdNote2ObjectId = wusdInitializer.wusdNote2ObjectId));
+            _wusdNote5InteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdNote5ObjectId = wusdInitializer.wusdNote5ObjectId));
+            _checkNoteController(_wusdNote2Controller = wusdInitializer.wusdNote2Controller, _wusdNote2ObjectId, 2);
+            _checkNoteController(_wusdNote5Controller = wusdInitializer.wusdNote5Controller, _wusdNote5ObjectId, 5);
+        }
+        _wusdNote2Percentage = wusdInitializer.wusdNote2Percentage;
+        _wusdNote5Percentage = wusdInitializer.wusdNote5Percentage;
+        _setRebalanceByCreditData(wusdInitializer.rebalanceByCreditReceivers, wusdInitializer.rebalanceByCreditPercentages, wusdInitializer.rebalanceByCreditPercentageForCaller);
+        _setAllowedAMMs(wusdInitializer.allowedAMMsBytes);
+    }
+
+    function initNotes(address[] memory controllers, string[] memory names, string[] memory symbols, string[] memory uris) public {
+        require(_wusdNote2InteroperableInterfaceAddress == address(0), "already init");
+        WUSDExtension wusdExtension = WUSDExtension(_extension);
+        (_wusdNote2ObjectId, _wusdNote2InteroperableInterfaceAddress) = wusdExtension.mintEmpty(names[0], symbols[0], uris[0], true);
+        (_wusdNote5ObjectId, _wusdNote5InteroperableInterfaceAddress) = wusdExtension.mintEmpty(names[1], symbols[1], uris[1], true);
+        IWUSDNoteController(_wusdNote2Controller = controllers[0]).init(_collection, _wusdObjectId, _wusdNote2ObjectId, 2);
+        IWUSDNoteController(_wusdNote5Controller = controllers[1]).init(_collection, _wusdObjectId, _wusdNote5ObjectId, 5);
     }
 
     receive() external payable {
     }
 
-    function init(address orchestratorAddress,
-        string calldata collectionName, string calldata collectionSymbol, string calldata collectionUri) public {
-        require(_extension == address(0), "Init already called");
-        USDExtension usdExtension = new USDExtension(orchestratorAddress, collectionName, collectionSymbol, collectionUri);
-        _extension = address(usdExtension);
-        _collection = usdExtension.collection();
-    }
-
-    function initUsdCollection(string calldata usdName, string calldata usdSymbol, string calldata usdUri) public {
-        require(_usdInteroperableInterfaceAddress == address(0), "Init already called");
-        USDExtension usdExtension = USDExtension(_extension);
-        (_usdObjectId, _usdInteroperableInterfaceAddress) = usdExtension.mintEmpty(usdName, usdSymbol, usdUri, true);
-    }
-
-    function initCreditCollection(string calldata usdCreditName, string calldata usdCreditSymbol, string calldata usdCreditUri) public {
-        require(_usdCreditInteroperableInterfaceAddress == address(0), "Init already called");
-        USDExtension usdExtension = USDExtension(_extension);
-        (_usdCreditObjectId, _usdCreditInteroperableInterfaceAddress) = usdExtension.mintEmpty(usdCreditName, usdCreditSymbol, usdCreditUri, true);
-    }
-
-    function init(address extensionAddress, uint256 usdObjectId, uint256 usdCreditObjectId) public {
-        require(_extension == address(0), "Init already called");
-        INativeV1 usdCollection = INativeV1(_collection = USDExtension(_extension = extensionAddress).collection());
-        _usdInteroperableInterfaceAddress = address(usdCollection.asInteroperable(_usdObjectId = usdObjectId));
-        _usdCreditInteroperableInterfaceAddress = address(usdCollection.asInteroperable(_usdCreditObjectId = usdCreditObjectId));
+    function _checkNoteController(address noteController, uint256 wusdNoteObjectIdInput, uint256 multiplierInput) private {
+        (address collectionAddress, uint256 wusdObjectId, uint256 wusdNoteObjectId, uint256 multiplier) = IWUSDNoteController(noteController).info();
+        if(collectionAddress == address(0)) {
+            IWUSDNoteController(noteController).init(_collection, _wusdObjectId, wusdNoteObjectIdInput, multiplierInput);
+            (collectionAddress, wusdObjectId, wusdNoteObjectId, multiplier) = IWUSDNoteController(noteController).info();
+        }
+        require(collectionAddress == _collection, "Wrong collection");
+        require(wusdObjectId == _wusdObjectId, "Wrong WUSD Object Id");
+        require(wusdNoteObjectId == wusdNoteObjectIdInput, "Wrong WUSD Note Object Id");
+        require(multiplier == multiplierInput, "Wrong WUSD Note multiplier");
     }
 
     function _setRebalanceByCreditData(address[] memory rebalanceByCreditReceivers, uint256[] memory rebalanceByCreditPercentages, uint256 rebalanceByCreditPercentageForCaller) private {
-        require(rebalanceByCreditReceivers.length > 0 && rebalanceByCreditReceivers.length == rebalanceByCreditPercentages.length, "Invalid lengths");
-        uint256 percentage = rebalanceByCreditPercentageForCaller;
+        require((_rebalanceByCreditPercentages = rebalanceByCreditPercentages).length == (_rebalanceByCreditReceivers = rebalanceByCreditReceivers).length, "Invalid lengths");
+        uint256 percentage = _rebalanceByCreditPercentageForCaller = rebalanceByCreditPercentageForCaller + _wusdNote2Percentage + _wusdNote5Percentage;
         for(uint256 i = 0; i < rebalanceByCreditReceivers.length; i++) {
             require(rebalanceByCreditReceivers[i] != address(0), "Void address");
             require(rebalanceByCreditPercentages[i] > 0, "Zero percentage");
             percentage += rebalanceByCreditPercentages[i];
         }
         require(percentage <= ONE_HUNDRED, "More than one hundred");
-        _rebalanceByCreditPercentageForCaller = rebalanceByCreditPercentageForCaller;
         _rebalanceByCreditPercentages = rebalanceByCreditPercentages;
         _rebalanceByCreditReceivers = rebalanceByCreditReceivers;
     }
@@ -112,12 +146,16 @@ contract USDExtensionController is ERC1155Receiver {
         return _collection;
     }
 
-    function usdInfo() public view returns (address, uint256, address) {
-        return (_collection, _usdObjectId, _usdInteroperableInterfaceAddress);
+    function wusdInfo() public view returns (address, uint256, address) {
+        return (_collection, _wusdObjectId, _wusdInteroperableInterfaceAddress);
     }
 
-    function usdCreditInfo() public view returns (address, uint256, address) {
-        return (_collection, _usdCreditObjectId, _usdCreditInteroperableInterfaceAddress);
+    function wusdNote2Info() public view returns (address, uint256, address, address, uint256) {
+        return (_collection, _wusdNote2ObjectId, _wusdNote2InteroperableInterfaceAddress, _wusdNote2Controller, _wusdNote2Percentage);
+    }
+
+    function wusdNote5Info() public view returns (address, uint256, address, address, uint256) {
+        return (_collection, _wusdNote5ObjectId, _wusdNote5InteroperableInterfaceAddress, _wusdNote5Controller, _wusdNote5Percentage);
     }
 
     function rebalanceByCreditReceiversInfo() public view returns (address[] memory, uint256[] memory, uint256, address) {
@@ -125,7 +163,7 @@ contract USDExtensionController is ERC1155Receiver {
     }
 
     modifier byDFO virtual {
-        require(_isFromDFO(msg.sender), "Unauthorized Action!");
+        require(_isFromDFO(msg.sender), "Unauthorized action");
         _;
     }
 
@@ -142,19 +180,19 @@ contract USDExtensionController is ERC1155Receiver {
     }
 
     function changeController(address controller) public byDFO {
-        USDExtension(_extension).setController(controller);
+        WUSDExtension(_extension).setController(controller);
     }
 
     function setCollectionUri(string memory uri) public byDFO {
-        USDExtension(_extension).setCollectionUri(uri);
+        WUSDExtension(_extension).setCollectionUri(uri);
     }
 
     function setItemUri(uint256 existingObjectId, string memory uri) public byDFO {
-        USDExtension(_extension).setItemUri(existingObjectId, uri);
+        WUSDExtension(_extension).setItemUri(existingObjectId, uri);
     }
 
     function setController(address newController) public byDFO {
-        USDExtension(_extension).setController(newController);
+        WUSDExtension(_extension).setController(newController);
     }
 
     function allowedAMMs() public view returns(AllowedAMM[] memory) {
@@ -170,7 +208,7 @@ contract USDExtensionController is ERC1155Receiver {
         view
         returns (uint256 credit, uint256 debt)
     {
-        uint256 totalSupply = INativeV1(_collection).totalSupply(_usdObjectId);
+        uint256 totalSupply = INativeV1(_collection).totalSupply(_wusdObjectId);
         uint256 effectiveAmount = 0;
         for(uint256 i = 0; i < _allowedAMMs.length; i++) {
             for(uint256 j = 0; j < _allowedAMMs[i].liquidityPools.length; j++) {
@@ -210,7 +248,7 @@ contract USDExtensionController is ERC1155Receiver {
         public
         override
         returns(bytes4) {
-            require(msg.sender == _collection, "Only uSD collection allowed here");
+            require(msg.sender == _collection, "Only WUSD collection allowed here");
             _onSingleReceived(from, id, value, data);
             return this.onERC1155Received.selector;
     }
@@ -226,7 +264,7 @@ contract USDExtensionController is ERC1155Receiver {
         override
         returns(bytes4) {
 
-        require(msg.sender == _collection, "Only uSD collection allowed here");
+        require(msg.sender == _collection, "Only WUSD collection allowed here");
         bytes[] memory payloads = abi.decode(data, (bytes[]));
         require(payloads.length == ids.length, "Wrong payloads length");
         for(uint256 i = 0; i < ids.length; i++) {
@@ -240,13 +278,13 @@ contract USDExtensionController is ERC1155Receiver {
         uint256 id,
         uint256 value,
         bytes memory data) private {
-            require(id == _usdObjectId, "Only uSD id allowed here");
+            require(id == _wusdObjectId, "Only WUSD id allowed here");
             if(from == _extension) {
                 return;
             }
             (uint256 action, bytes memory payload) = abi.decode(data, (uint256, bytes));
             if(action == 1) {
-                _rebalanceByDebt(from, value);
+                _rebalanceByDebt(from, value, payload);
             } else {
                 _burn(from, value, payload);
             }
@@ -257,17 +295,18 @@ contract USDExtensionController is ERC1155Receiver {
         uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, liquidityPoolAmount);
         require(value >= toBurn, "Insufficient Amount");
         if(value > toBurn) {
-            INativeV1(_collection).safeTransferFrom(address(this), from, _usdObjectId, value - toBurn, "");
+            INativeV1(_collection).safeTransferFrom(address(this), from, _wusdObjectId, value - toBurn, "");
         }
-        INativeV1(_collection).burn(_usdObjectId, toBurn);
+        INativeV1(_collection).burn(_wusdObjectId, toBurn);
         _removeLiquidity(from, ammPosition, liquidityPoolPosition, liquidityPoolAmount);
     }
 
-    function _rebalanceByDebt(address from, uint256 value) private {
+    function _rebalanceByDebt(address from, uint256 value, bytes memory payload) private {
         (, uint256 debt) = differences();
         require(value <= debt, "Cannot Burn this amount");
-        INativeV1(_collection).burn(_usdObjectId, value);
-        USDExtension(_extension).mint(_usdCreditObjectId, value, from);
+        INativeV1(_collection).burn(_wusdObjectId, value);
+        uint256 note = abi.decode(payload, (uint256));
+        WUSDExtension(_extension).mint(note == 2 ? _wusdNote2ObjectId : _wusdNote5ObjectId, value, from);
     }
 
     function rebalanceByCredit() public {
@@ -279,23 +318,31 @@ contract USDExtensionController is ERC1155Receiver {
                     .getStateHolderAddress()
             )
                 .getUint256("stablecoin.v2.rebalancebycredit.block.interval"),
-            "Unauthorized action!"
+            "Unauthorized action"
         );
         _lastRedeemBlock = block.number;
         (uint256 credit, ) = differences();
-        USDExtension(_extension).mint(_usdObjectId, credit, address(this));
+        WUSDExtension(_extension).mint(_wusdObjectId, credit, address(this));
         uint256 availableCredit = credit;
         uint256 reward = 0;
         if(_rebalanceByCreditPercentageForCaller > 0) {
-            IERC20(_usdInteroperableInterfaceAddress).transfer(msg.sender, reward = _calculatePercentage(credit, _rebalanceByCreditPercentageForCaller));
+            IERC20(_wusdInteroperableInterfaceAddress).transfer(msg.sender, reward = _calculatePercentage(credit, _rebalanceByCreditPercentageForCaller));
+            availableCredit -= reward;
+        }
+        if(_wusdNote2Percentage > 0) {
+            IERC20(_wusdInteroperableInterfaceAddress).transfer(_wusdNote2Controller, reward = _calculatePercentage(credit, _wusdNote2Percentage));
+            availableCredit -= reward;
+        }
+        if(_wusdNote5Percentage > 0) {
+            IERC20(_wusdInteroperableInterfaceAddress).transfer(_wusdNote5Controller, reward = _calculatePercentage(credit, _wusdNote5Percentage));
             availableCredit -= reward;
         }
         for(uint256 i = 0; i < _rebalanceByCreditReceivers.length; i++) {
-            IERC20(_usdInteroperableInterfaceAddress).transfer(_rebalanceByCreditReceivers[i], reward = _calculatePercentage(credit, _rebalanceByCreditPercentages[i]));
+            IERC20(_wusdInteroperableInterfaceAddress).transfer(_rebalanceByCreditReceivers[i], reward = _calculatePercentage(credit, _rebalanceByCreditPercentages[i]));
             availableCredit -= reward;
         }
         if(availableCredit > 0) {
-            IERC20(_usdInteroperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), availableCredit);
+            IERC20(_wusdInteroperableInterfaceAddress).transfer(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), availableCredit);
         }
     }
 
@@ -348,7 +395,7 @@ contract USDExtensionController is ERC1155Receiver {
             ));
         }
 
-        USDExtension(_extension).mint(_usdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
+        WUSDExtension(_extension).mint(_wusdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
 
         for(uint256 i = 0; i < spent.length; i++) {
             uint256 difference = amounts[i] - spent[i];
@@ -373,7 +420,7 @@ contract USDExtensionController is ERC1155Receiver {
         amounts[0] = liquidityPoolAmount;
         address[] memory receivers = new address[](1);
         receivers[0] = address(this);
-        USDExtension(_extension).send(tokenAddresses, amounts, receivers);
+        WUSDExtension(_extension).send(tokenAddresses, amounts, receivers);
         IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
         _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
         amm.removeLiquidity(LiquidityPoolData(
