@@ -224,7 +224,7 @@ contract LiquidityMining is ILiquidityMining {
         // retrieve the setup
         LiquidityMiningSetup storage chosenSetup = _setups[request.setupIndex];
         require(chosenSetup.free || (block.number >= chosenSetup.startBlock && block.number <= chosenSetup.endBlock), "Setup not available");
-        (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool ethIsInvolved) = _transferToMeAndCheckAllowance(chosenSetup, chosenSetup.liquidityPoolTokenAddresses[request.liquidityPoolAddressIndex], request);
+        (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, chosenSetup.liquidityPoolTokenAddresses[request.liquidityPoolAddressIndex], request);
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
 
@@ -233,13 +233,13 @@ contract LiquidityMining is ILiquidityMining {
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
             chosenSetup.mainTokenAddress,
             request.amountIsLiquidityPool,
-            ethIsInvolved,
+            involvingETH,
             address(this)
         );
 
         if (!liquidityPoolData.amountIsLiquidityPool) {
             // retrieve the poolTokenAmount from the amm
-            if(liquidityPoolData.ethIsInvolved) {
+            if(liquidityPoolData.involvingETH) {
                 (liquidityPoolData.amount,,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
             } else {
                 (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
@@ -289,20 +289,20 @@ contract LiquidityMining is ILiquidityMining {
         // check if liquidity mining position is valid
         require(liquidityMiningPosition.free || liquidityMiningPosition.setupEndBlock >= block.number, "Invalid add liquidity");
         LiquidityMiningSetup memory chosenSetup = _setups[liquidityMiningPosition.setupIndex];
-        (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool ethIsInvolved) = _transferToMeAndCheckAllowance(chosenSetup, liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, request);
+        (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress, request);
 
         LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
             chosenSetup.liquidityPoolTokenAddresses[request.liquidityPoolAddressIndex],
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
             chosenSetup.mainTokenAddress,
             request.amountIsLiquidityPool,
-            ethIsInvolved,
+            involvingETH,
             address(this)
         );
 
         if (!liquidityPoolData.amountIsLiquidityPool) {
             // retrieve the poolTokenAmount from the amm
-            if(liquidityPoolData.ethIsInvolved) {
+            if(liquidityPoolData.involvingETH) {
                 (liquidityPoolData.amount,,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
             } else {
                 (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
@@ -528,7 +528,7 @@ contract LiquidityMining is ILiquidityMining {
       * @return amm AMM plugin interface.
       * @return liquidityPoolAmount amount of liquidity pool token.
       * @return mainTokenAmount amount of main token staked.
-      * @return ethIsInvolved if the inputed flag is consistent.
+      * @return involvingETH if the inputed flag is consistent.
      */
     function _transferToMeAndCheckAllowance(
         LiquidityMiningSetup memory setup,
@@ -538,7 +538,7 @@ contract LiquidityMining is ILiquidityMining {
         IAMM amm,
         uint256 liquidityPoolAmount,
         uint256 mainTokenAmount,
-        bool ethIsInvolved
+        bool involvingETH
     ) {
         require(request.amount > 0, "No amount");
         // retrieve the values
@@ -557,7 +557,7 @@ contract LiquidityMining is ILiquidityMining {
         }
 
         // check if the eth is involved in the request
-        address ethAddress = request.ethIsInvolved ? amm.ethereumAddress() : address(0);
+        address ethAddress = request.involvingETH ? amm.ethereumAddress() : address(0);
         // iterate the tokens and perform the transferFrom and the approve
         for(uint256 i = 0; i < tokens.length; i++) {
             if(tokens[i] == setup.mainTokenAddress) {
@@ -569,8 +569,8 @@ contract LiquidityMining is ILiquidityMining {
             if(request.amountIsLiquidityPool) {
                 continue;
             }
-            if(request.ethIsInvolved && ethAddress == tokens[i]) {
-                ethIsInvolved = true;
+            if(request.involvingETH && ethAddress == tokens[i]) {
+                involvingETH = true;
                 require(msg.value == tokenAmounts[i], "Incorrect eth value");
             } else {
                 _safeTransferFrom(tokens[i], msg.sender, address(this), tokenAmounts[i]);

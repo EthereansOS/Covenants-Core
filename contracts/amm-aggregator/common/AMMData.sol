@@ -6,7 +6,7 @@ struct LiquidityPoolData {
     uint256 amount;
     address tokenAddress;
     bool amountIsLiquidityPool;
-    bool ethIsInvolved;
+    bool involvingETH;
     address receiver;
 }
 

@@ -14,7 +14,7 @@ interface IAMM {
 
     function byLiquidityPool(address liquidityPoolAddress) external view returns(uint256, uint256[] memory, address[] memory);
 
-    function byTokens(address[] memory liquidityPoolTokens) external view returns(uint256, uint256[] memory, address);
+    function byTokens(address[] memory liquidityPoolTokens) external view returns(uint256, uint256[] memory, address, address[] memory);
 
     function byPercentage(address liquidityPoolAddress, uint256 numerator, uint256 denominator) external view returns (uint256, uint256[] memory, address[] memory);
 

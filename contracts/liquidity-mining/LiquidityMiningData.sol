@@ -46,5 +46,5 @@ struct LiquidityMiningPositionRequest {
     bool amountIsLiquidityPool; //true if user wants to directly share the liquidity pool token amount, false to add liquidity to AMM
     address positionOwner; // position extension or address(0) [msg.sender].
     bool mintPositionToken; // if the position will be represented by a minted item or not.
-    bool ethIsInvolved; // whether eth is involved in the request or not.
+    bool involvingETH; // whether eth is involved in the request or not.
 }

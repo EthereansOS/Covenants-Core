@@ -225,7 +225,7 @@ describe("USDV2", () => {
                 amount : liquidityPoolAmount,
                 tokenAddress : utilities.voidEthereumAddress,
                 amountIsLiquidityPool : true,
-                ethIsInvolved : false,
+                involvingETH : false,
                 receiver : accounts[0]
             }).send(blockchainConnection.getSendingOptions());
 
@@ -484,7 +484,7 @@ describe("USDV2", () => {
             amount : amounts[0],
             tokenAddress : tokenA.options.address,
             amountIsLiquidityPool : false,
-            ethIsInvolved : false,
+            involvingETH : false,
             receiver : uSDExtension.options.address
         };
 

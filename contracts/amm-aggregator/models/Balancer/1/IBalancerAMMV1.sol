@@ -6,9 +6,6 @@ import "../../../common/IAMM.sol";
 import "../../../util/IERC20.sol";
 
 interface IBalancerAMMV1 is IAMM {
-
-    function wethAddress() external view returns(address);
-
 }
 
 interface IWETH {
