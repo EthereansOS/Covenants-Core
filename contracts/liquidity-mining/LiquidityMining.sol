@@ -401,7 +401,8 @@ contract LiquidityMining is ILiquidityMining {
         require(!liquidityMiningPosition.free && liquidityMiningPosition.setupEndBlock >= block.number, "Invalid unlock");
         require(!_positionRedeemed[positionId], "LiquidityMiningPosition already redeemed");
         // must pay a penalty fee
-        uint256 amount = (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / 100) / 1e18);
+        uint256 amount = _partiallyRedeemed[positionId];
+        amount += (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / 100) / 1e18);
         if(_rewardTokenAddress != address(0)) {
             _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
             _safeApprove(_rewardTokenAddress, _extension, amount);
