@@ -400,18 +400,15 @@ contract LiquidityMining is ILiquidityMining {
         require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid liquidityMiningPosition");
         require(!liquidityMiningPosition.free && liquidityMiningPosition.setupEndBlock >= block.number, "Invalid unlock");
         require(!_positionRedeemed[positionId], "LiquidityMiningPosition already redeemed");
-        uint256 amount = _partiallyRedeemed[positionId];
-        if (amount > 0) {
-            // has partially redeemed, must pay a penalty fee
-            amount += (_partiallyRedeemed[positionId] * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / 100) / 1e18);
-            if(_rewardTokenAddress != address(0)) {
-                _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
-                _safeApprove(_rewardTokenAddress, _extension, amount);
-                ILiquidityMiningExtension(_extension).backToYou(amount);
-            } else {
-                require(msg.value == amount, "Invalid sent amount");
-                ILiquidityMiningExtension(_extension).backToYou{value : amount}(amount);
-            }
+        // must pay a penalty fee
+        uint256 amount = (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / 100) / 1e18);
+        if(_rewardTokenAddress != address(0)) {
+            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
+            _safeApprove(_rewardTokenAddress, _extension, amount);
+            ILiquidityMiningExtension(_extension).backToYou(amount);
+        } else {
+            require(msg.value == amount, "Invalid sent amount");
+            ILiquidityMiningExtension(_extension).backToYou{value : amount}(amount);
         }
         if (hasPositionItem) {
             _burnPosition(positionId, msg.sender);
