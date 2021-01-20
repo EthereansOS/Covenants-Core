@@ -78,7 +78,7 @@ contract LiquidityMining is ILiquidityMining {
       * @param collectionUri ethItem liquidity mining position token uri.
       * @param rewardTokenAddress the address of the reward token.
      */
-    function initialize(address extension, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress) public {
+    function initialize(address extension, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, LiquidityMiningSetup[] memory liquidityMiningSetups, bool setPinned, uint256 pinnedIndex) public {
         require(
             _factory == address(0),
             "Already initialized"
@@ -91,6 +91,7 @@ contract LiquidityMining is ILiquidityMining {
             (bool result,) = _extension.call(ownerInitData);
             require(result, "Error while initializing extension");
         }
+        _initLiquidityMiningSetups(liquidityMiningSetups, setPinned, pinnedIndex);
         emit RewardToken(_rewardTokenAddress);
     }
 
@@ -129,57 +130,72 @@ contract LiquidityMining is ILiquidityMining {
       */
     function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override byExtension {
         for (uint256 i = 0; i < liquidityMiningSetups.length; i++) {
-            LiquidityMiningSetupConfiguration memory configuration = liquidityMiningSetups[i];
-            LiquidityMiningSetup memory liquidityMiningSetup = configuration.add ? configuration.data : _setups[configuration.index];
-            require(
-                configuration.data.ammPlugin != address(0) &&
-                (
-                    (configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length == 1) ||
-                    (!configuration.data.free && configuration.data.liquidityPoolTokenAddresses.length > 0 && configuration.data.startBlock < configuration.data.endBlock)
-                ),
-                "Invalid setup configuration"
-            );
-            require(!configuration.add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
-            if(!configuration.add) {
-                liquidityMiningSetup.liquidityPoolTokenAddresses = configuration.data.liquidityPoolTokenAddresses;
-            }
-            address mainTokenAddress = configuration.add ? configuration.data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
-            address ammPlugin = configuration.add ? configuration.data.ammPlugin : liquidityMiningSetup.ammPlugin;
-            for(uint256 j = 0; j < configuration.data.liquidityPoolTokenAddresses.length; j++) {
-                (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(configuration.data.liquidityPoolTokenAddresses[j]);
-                bool found = false;
-                for(uint256 z = 0; z < tokenAddresses.length; z++) {
-                    if(tokenAddresses[z] == mainTokenAddress) {
-                        found = true;
-                        break;
-                    }
-                }
-                require(found, "No main token");
-            }
-            if (configuration.add) {
-                configuration.data.totalSupply = 0;
-                configuration.data.currentRewardPerBlock = configuration.data.free ? configuration.data.rewardPerBlock : 0;
-                // adding new liquidity mining setup
-                _setups.push(configuration.data);
-            } else {
-                if (liquidityMiningSetup.free) {
-                    // update free liquidity mining setup reward per block
-                    if (configuration.data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
-                        _rebalanceRewardPerBlock(configuration.index, liquidityMiningSetup.rewardPerBlock - configuration.data.rewardPerBlock, false);
-                    } else {
-                        _rebalanceRewardPerBlock(configuration.index, configuration.data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock, true);
-                    }
-                    liquidityMiningSetup.rewardPerBlock = _setups[configuration.index].rewardPerBlock;
-                    liquidityMiningSetup.currentRewardPerBlock = liquidityMiningSetup.rewardPerBlock;
-                } else {
-                    // update locked liquidity mining setup
-                    liquidityMiningSetup.rewardPerBlock = configuration.data.rewardPerBlock;
-                    liquidityMiningSetup.renewTimes = configuration.data.renewTimes;
-                    liquidityMiningSetup.penaltyFee = configuration.data.penaltyFee;
-                }
-                _setups[configuration.index] = liquidityMiningSetup;
-            }
+            _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i].data, liquidityMiningSetups[i].add, liquidityMiningSetups[i].index);
         }
+        _pinnedSetup(clearPinned, setPinned, pinnedIndex);
+    }
+
+    function _initLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, bool setPinned, uint256 pinnedIndex) private {
+        require(liquidityMiningSetups.length > 0, "invalid length");
+        for(uint256 i = 0; i < liquidityMiningSetups.length; i++) {
+            _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i], true, 0);
+        }
+        _pinnedSetup(false, setPinned, pinnedIndex);
+    }
+
+    function _setOrAddLiquidityMiningSetup(LiquidityMiningSetup memory data, bool add, uint256 index) private {
+        LiquidityMiningSetup memory liquidityMiningSetup = add ? data : _setups[index];
+        require(
+            data.ammPlugin != address(0) &&
+            (
+                (data.free && data.liquidityPoolTokenAddresses.length == 1) ||
+                (!data.free && data.liquidityPoolTokenAddresses.length > 0 && data.startBlock < data.endBlock)
+            ),
+            "Invalid setup configuration"
+        );
+        require(!add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
+        if(!add) {
+            liquidityMiningSetup.liquidityPoolTokenAddresses = data.liquidityPoolTokenAddresses;
+        }
+        address mainTokenAddress = add ? data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
+        address ammPlugin = add ? data.ammPlugin : liquidityMiningSetup.ammPlugin;
+        for(uint256 j = 0; j < data.liquidityPoolTokenAddresses.length; j++) {
+            (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(data.liquidityPoolTokenAddresses[j]);
+            bool found = false;
+            for(uint256 z = 0; z < tokenAddresses.length; z++) {
+                if(tokenAddresses[z] == mainTokenAddress) {
+                    found = true;
+                    break;
+                }
+            }
+            require(found, "No main token");
+        }
+        if (add) {
+            data.totalSupply = 0;
+            data.currentRewardPerBlock = data.free ? data.rewardPerBlock : 0;
+            // adding new liquidity mining setup
+            _setups.push(data);
+        } else {
+            if (liquidityMiningSetup.free) {
+                // update free liquidity mining setup reward per block
+                if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
+                    _rebalanceRewardPerBlock(index, liquidityMiningSetup.rewardPerBlock - data.rewardPerBlock, false);
+                } else {
+                    _rebalanceRewardPerBlock(index, data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock, true);
+                }
+                liquidityMiningSetup.rewardPerBlock = _setups[index].rewardPerBlock;
+                liquidityMiningSetup.currentRewardPerBlock = liquidityMiningSetup.rewardPerBlock;
+            } else {
+                // update locked liquidity mining setup
+                liquidityMiningSetup.rewardPerBlock = data.rewardPerBlock;
+                liquidityMiningSetup.renewTimes = data.renewTimes;
+                liquidityMiningSetup.penaltyFee = data.penaltyFee;
+            }
+            _setups[index] = liquidityMiningSetup;
+        }
+    }
+
+    function _pinnedSetup(bool clearPinned, bool setPinned, uint256 pinnedIndex) private {
         // if we're clearing the pinned setup we must also remove the excess reward per block
         if (clearPinned) {
             _hasPinned = false;
