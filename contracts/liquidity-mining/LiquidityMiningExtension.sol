@@ -106,14 +106,14 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         return IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender);
     }
 
-    /** this function safely approves the transfer of the ERC20 token with the given address.
-      * @param erc20TokenAddress erc20 token address.
-      * @param to address to.
-      * @param value amount to transfer.
+    /** @dev function used to safely approve ERC20 transfers.
+      * @param erc20TokenAddress address of the token to approve.
+      * @param to receiver of the approval.
+      * @param value amount to approve for.
      */
     function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
     /** @dev this function safely transfers the given ERC20 value from an address to another.
@@ -122,8 +122,21 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param to address to.
       * @param value amount to transfer.
      */
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
     }
 }
