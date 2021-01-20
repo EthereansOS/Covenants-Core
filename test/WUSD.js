@@ -11,8 +11,6 @@ var fs = require('fs');
 
 describe("WUSD", () => {
 
-    global.formatMoneyDecPlaces = 4;
-
     var WUSDExtensionController;
     var WUSDExtension;
     var UniswapV2AMMV1;
@@ -41,6 +39,7 @@ describe("WUSD", () => {
     var usdCreditObjectId;
 
     before(async() => {
+
         await blockchainConnection.init;
 
         WUSDExtension = await compile('WUSD/WUSDExtension');

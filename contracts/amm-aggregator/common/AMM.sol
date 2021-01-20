@@ -134,7 +134,7 @@ abstract contract AMM is IAMM {
         ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, data.involvingETH);
         (liquidityPoolAmount, tokensAmounts) = _addLiquidity(processedLiquidityPoolData);
-        _flushBack(liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, tokensAmounts);
+        _flushBack(liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, tokensAmounts, processedLiquidityPoolData.involvingETH);
     }
 
     function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
@@ -308,13 +308,14 @@ abstract contract AMM is IAMM {
     function _transferToMe(address tokenAddress, uint256 value) private {
         if(tokenAddress == address(0)) {
             require(msg.value == value, "Incorrect eth value");
+            return;
         }
         _safeTransferFrom(tokenAddress, msg.sender, address(this), value);
     }
 
-    function _flushBack(address[] memory tokenAddresses, uint256[] memory originalAmounts, uint256[] memory collectedAmounts) private {
+    function _flushBack(address[] memory tokenAddresses, uint256[] memory originalAmounts, uint256[] memory collectedAmounts, bool involvingETH) private {
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
-            _flushBack(tokenAddresses[i], originalAmounts[i], collectedAmounts.length > 0 ? collectedAmounts[i] : 0);
+            _flushBack(involvingETH && tokenAddresses[i] == _ethereumAddress ? address(0) : tokenAddresses[i], originalAmounts[i], collectedAmounts.length > 0 ? collectedAmounts[i] : 0);
         }
     }
 
@@ -324,10 +325,14 @@ abstract contract AMM is IAMM {
             return;
         }
         if(tokenAddress == address(0)) {
-            payable(msg.sender).transfer(amount);
+            if(address(this).balance >= amount) {
+                payable(msg.sender).transfer(amount);
+            }
             return;
         }
-        _safeTransfer(tokenAddress, msg.sender, amount);
+        if(IERC20(tokenAddress).balanceOf(address(this)) >= amount) {
+            _safeTransfer(tokenAddress, msg.sender, amount);
+        }
     }
 
     function _checkAllowance(address tokenAddress, uint256 value, address operator) private {

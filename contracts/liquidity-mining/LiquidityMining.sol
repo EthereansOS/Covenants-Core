@@ -243,7 +243,6 @@ contract LiquidityMining is ILiquidityMining {
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, chosenSetup.liquidityPoolTokenAddresses[request.liquidityPoolAddressIndex], request);
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
-
         LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
             chosenSetup.liquidityPoolTokenAddresses[request.liquidityPoolAddressIndex],
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
@@ -261,6 +260,8 @@ contract LiquidityMining is ILiquidityMining {
                 (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
             }
             liquidityPoolData.amountIsLiquidityPool = true;
+        } else {
+            require(msg.value == 0, "ETH not involved");
         }
         // create the position id
         positionId = request.mintPositionToken ? _mintPosition(uniqueOwner) : uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex, block.number)));
@@ -324,6 +325,8 @@ contract LiquidityMining is ILiquidityMining {
                 (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
             }
             liquidityPoolData.amountIsLiquidityPool = true;
+        } else {
+            require(msg.value == 0, "ETH not involved");
         }
 
         // update the liquidity pool token amount

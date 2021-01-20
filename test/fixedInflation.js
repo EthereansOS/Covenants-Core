@@ -9,8 +9,6 @@ var abi = new ethers.utils.AbiCoder();
 var path = require('path');
 var fs = require('fs');
 
-global.formatMoneyDecPlaces = 4;
-
 var ethItemOrchestrator;
 var uniswapV2Factory;
 var uniswapV2Router;
@@ -43,8 +41,8 @@ var actors = {};
 describe("FixedInflation", () => {
 
     before(async () => {
-        await blockchainConnection.init;
 
+        await blockchainConnection.init;
 
         ethItemOrchestrator = new web3.eth.Contract(context.ethItemOrchestratorABI, context.ethItemOrchestratorAddress);
         uniswapV2Router = new web3.eth.Contract(context.uniswapV2RouterABI, context.uniswapV2RouterAddress);

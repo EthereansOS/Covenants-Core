@@ -9,7 +9,7 @@ if (!String.prototype.format) {
 
 var voidEthereumAddress = "0x0000000000000000000000000000000000000000";
 
-global.formatMoneyDecPlaces = 2;
+global.formatMoneyDecPlaces = 4;
 
 function fromDecimals(n, d, noFormat) {
     n = (n && n.value || n);
