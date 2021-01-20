@@ -63,10 +63,21 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
      * @return initResultData new liquidity mining contract call result.
      */
     function deploy(bytes memory data) public returns (address contractAddress, bytes memory initResultData) {
-        bool initSuccess;
-        (initSuccess, initResultData) = (contractAddress = _clone(liquidityMiningImplementationAddress)).call(data);
-        require(initSuccess, "Error while creating new liquidity mining contract");
+        initResultData = _call(contractAddress = _clone(liquidityMiningImplementationAddress), data);
         emit LiquidityMiningDeployed(contractAddress, msg.sender, initResultData);
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
     }
 
     /** PRIVATE METHODS */

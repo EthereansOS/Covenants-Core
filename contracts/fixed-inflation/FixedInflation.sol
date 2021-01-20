@@ -32,9 +32,7 @@ contract FixedInflation {
         _factory = msg.sender;
         extension = _extension;
         if(keccak256(extensionPayload) != keccak256("")) {
-            bool result;
-            (result, extensionInitResult) = _extension.call(extensionPayload);
-            require(result, "Extension fail");
+            extensionInitResult = _call(_extension, extensionPayload);
         }
         require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
         (uint256 dfoFeePercentage,) = IFixedInflationFactory(_factory).feePercentageInfo();
@@ -221,8 +219,21 @@ contract FixedInflation {
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) private {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
     }
 
     function _clearVars() private {

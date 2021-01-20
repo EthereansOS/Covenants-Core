@@ -71,14 +71,14 @@ contract LiquidityMining is ILiquidityMining {
 
     /** @dev function called by the factory contract to initialize a new clone.
       * @param extension liquidity mining contract extension (a wallet or an extension).
-      * @param ownerInitData encoded call function of the extension (used from an extension).
+      * @param extensionInitData encoded call function of the extension (used from an extension).
       * @param orchestrator ethItemOrchestrator address.
       * @param name ethItem liquidity mining position token name.
       * @param symbol ethitem liquidity mining position token symbol.
       * @param collectionUri ethItem liquidity mining position token uri.
       * @param rewardTokenAddress the address of the reward token.
      */
-    function initialize(address extension, bytes memory ownerInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, LiquidityMiningSetup[] memory liquidityMiningSetups, bool setPinned, uint256 pinnedIndex) public {
+    function init(address extension, bytes memory extensionInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) public returns(bytes memory extensionReturnCall) {
         require(
             _factory == address(0),
             "Already initialized"
@@ -87,11 +87,10 @@ contract LiquidityMining is ILiquidityMining {
         _extension = extension;
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, false, collectionUri, address(this), ""), "");
-        if (keccak256(ownerInitData) != keccak256("")) {
-            (bool result,) = _extension.call(ownerInitData);
-            require(result, "Error while initializing extension");
+        if (keccak256(extensionInitData) != keccak256("")) {
+            extensionReturnCall = _call(_extension, extensionInitData);
         }
-        _initLiquidityMiningSetups(liquidityMiningSetups, setPinned, pinnedIndex);
+        _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
         emit RewardToken(_rewardTokenAddress);
     }
 
@@ -135,7 +134,8 @@ contract LiquidityMining is ILiquidityMining {
         _pinnedSetup(clearPinned, setPinned, pinnedIndex);
     }
 
-    function _initLiquidityMiningSetups(LiquidityMiningSetup[] memory liquidityMiningSetups, bool setPinned, uint256 pinnedIndex) private {
+    function _initLiquidityMiningSetups(bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) private {
+        LiquidityMiningSetup[] memory liquidityMiningSetups = abi.decode(liquidityMiningSetupsBytes, (LiquidityMiningSetup[]));
         require(liquidityMiningSetups.length > 0, "invalid length");
         for(uint256 i = 0; i < liquidityMiningSetups.length; i++) {
             _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i], true, 0);
@@ -204,7 +204,7 @@ contract LiquidityMining is ILiquidityMining {
         }
         // check if we're updating the pinned setup
         if (!clearPinned && setPinned) {
-            require(_setups[_pinnedSetupIndex].free, "Invalid pinned free setup");
+            require(_setups[pinnedIndex].free, "Invalid pinned free setup");
             uint256 oldBalancedRewardPerBlock;
             // check if we already have a free pinned setup
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
@@ -330,7 +330,6 @@ contract LiquidityMining is ILiquidityMining {
         liquidityMiningPosition.liquidityPoolData.amount += liquidityPoolData.amount;
 
         (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (_calculateFreeLiquidityMiningSetupReward(positionId), 0) : _calculateLockedLiquidityMiningSetupReward(_setups[liquidityMiningPosition.setupIndex], mainTokenAmount);
-        require(newReward > 0, "Reward cannot be 0");
         if (!liquidityMiningPosition.free) {
             // transfer the reward in advance to this contract
             ILiquidityMiningExtension(_extension).transferTo(newReward, address(this));
@@ -699,7 +698,6 @@ contract LiquidityMining is ILiquidityMining {
         if (_setups[liquidityMiningPosition.setupIndex].free && !isPartial) {
             _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityMiningPosition.liquidityPoolData.amount, true);
             reward = (reward == 0) ? _calculateFreeLiquidityMiningSetupReward(positionId) : reward;
-            require(reward > 0, "Reward cannot be 0");
         }
         // transfer the reward
         if (reward > 0) {
@@ -752,8 +750,8 @@ contract LiquidityMining is ILiquidityMining {
       * @param value amount to approve for.
      */
     function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
     /** @dev function used to safe transfer ERC20 tokens.
@@ -762,8 +760,8 @@ contract LiquidityMining is ILiquidityMining {
       * @param value amount of tokens to transfer.
      */
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
     /** @dev this function safely transfers the given ERC20 value from an address to another.
@@ -773,7 +771,20 @@ contract LiquidityMining is ILiquidityMining {
       * @param value amount to transfer.
      */
     function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
     }
 }
