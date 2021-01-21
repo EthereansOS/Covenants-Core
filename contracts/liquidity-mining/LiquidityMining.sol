@@ -85,6 +85,9 @@ contract LiquidityMining is ILiquidityMining {
         );
         _factory = msg.sender;
         _extension = extension;
+        if(_extension == address(0)) {
+            _extension = _clone(ILiquidityMiningFactory(_factory).liquidityMiningDefaultExtension());
+        }
         _rewardTokenAddress = rewardTokenAddress;
         (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, false, collectionUri, address(this), ""), "");
         if (keccak256(extensionInitData) != keccak256("")) {
@@ -788,6 +791,27 @@ contract LiquidityMining is ILiquidityMining {
             returndatacopy(returnDataPayloadStart, 0, size)
             mstore(0x40, add(returnDataPayloadStart, size))
             switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
+    }
+
+    /** @dev clones the input contract address and returns the copied contract address.
+     * @param original address of the original contract.
+     * @return copy copied contract address.
+     */
+    function _clone(address original) private returns (address copy) {
+        assembly {
+            mstore(
+                0,
+                or(
+                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
+                    mul(original, 0x1000000000000000000)
+                )
+            )
+            copy := create(0, 0, 32)
+            switch extcodesize(copy)
+                case 0 {
+                    invalid()
+                }
         }
     }
 }

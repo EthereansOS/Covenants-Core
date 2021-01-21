@@ -31,6 +31,9 @@ contract FixedInflation {
         require(_extension != address(0), "Blank extension");
         _factory = msg.sender;
         extension = _extension;
+        if(_extension == address(0)) {
+            _extension = _clone(IFixedInflationFactory(_factory).fixedInflationDefaultExtension());
+        }
         if(keccak256(extensionPayload) != keccak256("")) {
             extensionInitResult = _call(_extension, extensionPayload);
         }
@@ -90,7 +93,7 @@ contract FixedInflation {
         return _entries[i].lastBlock == 0 ? block.number : (_entries[i].lastBlock + _entries[i].blockInterval);
     }
 
-    function call(uint256[][] memory indexes) public {
+    function execute(uint256[][] memory indexes) public {
         require(indexes.length > 0, "Invalid input data");
         for(uint256 i = 0; i < indexes.length; i++) {
             require(_entriesLength > indexes[i][0], "Invalid index");
@@ -278,5 +281,26 @@ contract FixedInflation {
         _operations[i] = _operations[_entriesLength];
         delete _entries[_entriesLength + 1];
         delete _operations[_entriesLength + 1];
+    }
+
+    /** @dev clones the input contract address and returns the copied contract address.
+     * @param original address of the original contract.
+     * @return copy copied contract address.
+     */
+    function _clone(address original) private returns (address copy) {
+        assembly {
+            mstore(
+                0,
+                or(
+                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
+                    mul(original, 0x1000000000000000000)
+                )
+            )
+            copy := create(0, 0, 32)
+            switch extcodesize(copy)
+                case 0 {
+                    invalid()
+                }
+        }
     }
 }

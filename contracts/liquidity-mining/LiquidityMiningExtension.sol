@@ -38,6 +38,10 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** PUBLIC METHODS */
 
+    receive() external payable {
+        require(_liquidityMiningContract != address(0) && _rewardTokenAddress == address(0), "ETH not allowed");
+    }
+
     function init(bool byMint, address host) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();

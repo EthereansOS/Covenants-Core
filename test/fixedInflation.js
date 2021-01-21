@@ -65,6 +65,7 @@ describe("FixedInflation", () => {
 
         FixedInflationFactory = await compile('fixed-inflation/FixedInflationFactory');
         FixedInflationExtension = await compile('fixed-inflation/DFOBasedFixedInflationExtension');
+        FixedInflationDefaultExtension = await compile('fixed-inflation/FixedInflationExtension');
         FixedInflation = await compile('fixed-inflation/FixedInflation');
 
         /*await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);
@@ -146,9 +147,12 @@ describe("FixedInflation", () => {
 
         var fixedInflationModel = await new web3.eth.Contract(FixedInflation.abi).deploy({data : FixedInflation.bin}).send(blockchainConnection.getSendingOptions());
 
+        var fixedInflationDefaultExtensionModel = await new web3.eth.Contract(FixedInflationDefaultExtension.abi).deploy({data : FixedInflationDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
+
         fixedInflationFactory = await new web3.eth.Contract(FixedInflationFactory.abi).deploy({data : FixedInflationFactory.bin, arguments : [
             dfo.doubleProxyAddress,
             fixedInflationModel.options.address,
+            fixedInflationDefaultExtensionModel.options.address,
             150
         ]}).send(blockchainConnection.getSendingOptions());
 
@@ -247,7 +251,7 @@ describe("FixedInflation", () => {
         var balanceOfExpected = await web3.eth.getBalance(receiver);
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
 
-        var transactionResult = await fixedInflation.methods.call([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+        var transactionResult = await fixedInflation.methods.execute([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
 
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString();
 
@@ -261,7 +265,7 @@ describe("FixedInflation", () => {
 
     it("Cannot be possible to call an already-called fixedInflation", async () => {
         try {
-            await fixedInflation.methods.call([[0, 0]]).send(blockchainConnection.getSendingOptions());
+            await fixedInflation.methods.execute([[0, 0]]).send(blockchainConnection.getSendingOptions());
             assert(false);
         } catch(e) {
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("too early to call index"), -1);
@@ -280,7 +284,7 @@ describe("FixedInflation", () => {
         var balanceOfExpected = await web3.eth.getBalance(receiver);
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
 
-        var transactionResult = await fixedInflation.methods.call([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
+        var transactionResult = await fixedInflation.methods.execute([[entryIndex, earnByInput ? 1 : 0]]).send(blockchainConnection.getSendingOptions());
 
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString();
 

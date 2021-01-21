@@ -4,10 +4,13 @@ pragma solidity ^0.7.6;
 import "./util/DFOHub.sol";
 import "./IFixedInflationFactory.sol";
 
-contract FixedInflationFactory is IFixedInflationFactory{
+contract FixedInflationFactory is IFixedInflationFactory {
 
     // fixed inflation contract implementation address
     address public fixedInflationImplementationAddress;
+
+    // fixed inflation default extension
+    address public override fixedInflationDefaultExtension;
 
     // double proxy address of the linked DFO
     address public _doubleProxy;
@@ -21,12 +24,16 @@ contract FixedInflationFactory is IFixedInflationFactory{
     // event that tracks logic contract address change
     event FixedInflationLogicSet(address indexed newAddress);
 
+    // event that tracks default extension contract address change
+    event FixedInflationDefaultExtensionSet(address indexed newAddress);
+
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    constructor(address doubleProxy, address _fixedInflationImplementationAddress, uint256 feePercentage) {
+    constructor(address doubleProxy, address _fixedInflationImplementationAddress, address _fixedInflationDefaultExtension, uint256 feePercentage) {
         _doubleProxy = doubleProxy;
         emit FixedInflationLogicSet(fixedInflationImplementationAddress = _fixedInflationImplementationAddress);
+        emit FixedInflationDefaultExtensionSet(fixedInflationDefaultExtension = _fixedInflationDefaultExtension);
         emit FeePercentageSet(_feePercentage = feePercentage);
     }
 
@@ -57,6 +64,13 @@ contract FixedInflationFactory is IFixedInflationFactory{
         emit FixedInflationLogicSet(fixedInflationImplementationAddress = _fixedInflationImplementationAddress);
     }
 
+    /** @dev allows the factory owner to update the extension contract address.
+     * @param _fixedInflationDefaultExtension new fixed inflation extension address.
+     */
+    function updateDefaultExtensionAddress(address _fixedInflationDefaultExtension) public onlyDFO {
+        emit FixedInflationDefaultExtensionSet(fixedInflationDefaultExtension = _fixedInflationDefaultExtension);
+    }
+
     /** @dev this function deploys a new FixedInflation contract and calls the encoded function passed as data.
      * @param data encoded initialize function for the fixed inflation contract (check FixedInflation contract code).
      * @return contractAddress new fixed inflation contract address.
@@ -65,19 +79,6 @@ contract FixedInflationFactory is IFixedInflationFactory{
     function deploy(bytes memory data) public returns (address contractAddress, bytes memory initResultData) {
         initResultData = _call(contractAddress = _clone(fixedInflationImplementationAddress), data);
         emit FixedInflationDeployed(contractAddress, msg.sender, initResultData);
-    }
-
-    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
-        assembly {
-            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
-            let size := returndatasize()
-            returnData := mload(0x40)
-            mstore(returnData, size)
-            let returnDataPayloadStart := add(returnData, 0x20)
-            returndatacopy(returnDataPayloadStart, 0, size)
-            mstore(0x40, add(returnDataPayloadStart, size))
-            switch result case 0 {revert(returnDataPayloadStart, size)}
-        }
     }
 
     /** PRIVATE METHODS */
@@ -100,6 +101,19 @@ contract FixedInflationFactory is IFixedInflationFactory{
                 case 0 {
                     invalid()
                 }
+        }
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
         }
     }
 

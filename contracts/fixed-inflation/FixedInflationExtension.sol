@@ -23,6 +23,9 @@ contract FixedInflationExtension is IFixedInflationExtension {
         _;
     }
 
+    receive() external payable {
+    }
+
     function init(address host) override public {
         require(_host == address(0), "Already init");
         _host = host;

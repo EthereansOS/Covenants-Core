@@ -9,6 +9,9 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     // liquidity mining contract implementation address
     address public liquidityMiningImplementationAddress;
 
+    // liquidity mining default extension
+    address public override liquidityMiningDefaultExtension;
+
     // double proxy address of the linked DFO
     address public _doubleProxy;
 
@@ -21,12 +24,16 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     // event that tracks logic contract address change
     event LiquidityMiningLogicSet(address indexed newAddress);
 
+    // event that tracks default extension contract address change
+    event LiquidityMiningDefaultExtensionSet(address indexed newAddress);
+
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, uint256 feePercentage) {
+    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage) {
         _doubleProxy = doubleProxy;
         emit LiquidityMiningLogicSet(liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress);
+        emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtension);
         emit FeePercentageSet(_feePercentage = feePercentage);
     }
 
@@ -57,6 +64,13 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
         emit LiquidityMiningLogicSet(liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress);
     }
 
+    /** @dev allows the factory owner to update the default extension contract address.
+     * @param _liquidityMiningDefaultExtensionAddress new liquidity mining extension address.
+     */
+    function updateDefaultExtensionAddress(address _liquidityMiningDefaultExtensionAddress) public onlyDFO {
+        emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtensionAddress);
+    }
+
     /** @dev this function deploys a new LiquidityMining contract and calls the encoded function passed as data.
      * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
      * @return contractAddress new liquidity mining contract address.
@@ -65,19 +79,6 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     function deploy(bytes memory data) public returns (address contractAddress, bytes memory initResultData) {
         initResultData = _call(contractAddress = _clone(liquidityMiningImplementationAddress), data);
         emit LiquidityMiningDeployed(contractAddress, msg.sender, initResultData);
-    }
-
-    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
-        assembly {
-            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
-            let size := returndatasize()
-            returnData := mload(0x40)
-            mstore(returnData, size)
-            let returnDataPayloadStart := add(returnData, 0x20)
-            returndatacopy(returnDataPayloadStart, 0, size)
-            mstore(0x40, add(returnDataPayloadStart, size))
-            switch result case 0 {revert(returnDataPayloadStart, size)}
-        }
     }
 
     /** PRIVATE METHODS */
@@ -100,6 +101,19 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
                 case 0 {
                     invalid()
                 }
+        }
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
         }
     }
 
