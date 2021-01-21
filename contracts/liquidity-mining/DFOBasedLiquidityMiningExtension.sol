@@ -8,10 +8,12 @@ import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
 import "./LiquidityMiningData.sol";
 
-contract LiquidityMiningExtension is ILiquidityMiningExtension {
+contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
+
+    string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
 
     // wallet who has control on the extension
-    address internal _host;
+    address internal _doubleProxy;
 
     // mapping that contains all the liquidity mining contract linked to this extension
     address internal _liquidityMiningContract;
@@ -32,7 +34,7 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** @dev hostOnly modifier used to check for unauthorized edits. */
     modifier hostOnly() {
-        require(msg.sender == _host, "Unauthorized");
+        require(_isFromDFO(msg.sender), "Unauthorized");
         _;
     }
 
@@ -42,35 +44,39 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         require(_liquidityMiningContract == address(0), "Already init");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
-        _host = host;
+        _doubleProxy = host;
     }
 
     function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
-        return (_liquidityMiningContract, _byMint, _host, _rewardTokenAddress);
+        return (_liquidityMiningContract, _byMint, _doubleProxy, _rewardTokenAddress);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.
       * @param amount amount of erc20 to transfer or mint.
      */
-    function transferTo(uint256 amount, address recipient) public virtual override liquidityMiningOnly {
-        if(_rewardTokenAddress != address(0)) {
-            return _byMint ? _mintAndTransfer(_rewardTokenAddress, recipient, amount) : _safeTransfer(_rewardTokenAddress, recipient, amount);
-        }
-        payable(recipient).transfer(amount);
+    function transferTo(uint256 amount, address recipient) override public liquidityMiningOnly {
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, ILiquidityMining(msg.sender)._rewardTokenAddress(), recipient, amount, _byMint));
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
      */
-    function backToYou(uint256 amount) payable public virtual override liquidityMiningOnly {
-        if(_rewardTokenAddress != address(0)) {
-            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
-            if(_byMint) {
-                _burn(_rewardTokenAddress, amount);
-            }
+    function backToYou(uint256 amount) override payable public liquidityMiningOnly {
+        address rewardTokenAddress = ILiquidityMining(msg.sender)._rewardTokenAddress();
+        if(rewardTokenAddress != address(0)) {
+            _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
+            _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
         } else {
-            require(msg.value == amount, "invalid sent amount");
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
         }
+    }
+
+    /** @dev allows the DFO to update the double proxy address.
+      * @param newDoubleProxy new double proxy address.
+     */
+    function setDoubleProxy(address newDoubleProxy) public hostOnly {
+        _doubleProxy = newDoubleProxy;
     }
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
@@ -78,19 +84,33 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
       * @param setPinned if we're updating the pinned setup or not.
       * @param pinnedIndex new pinned setup index.
      */
-    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public virtual override hostOnly {
+    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override hostOnly {
         ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
     }
 
-    function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual {
-        IERC20Mintable(erc20TokenAddress).mint(recipient, value);
+    /** PRIVATE METHODS */
+
+    /** @dev this function returns the address of the functionality with the FUNCTIONALITY_NAME.
+      * @return functionalityAddress functionality FUNCTIONALITY_NAME address.
+     */
+    function _getFunctionalityAddress() private view returns(address functionalityAddress) {
+        (functionalityAddress,,,,) = IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).getFunctionalityData(FUNCTIONALITY_NAME);
     }
 
-    function _burn(address erc20TokenAddress, uint256 value) internal virtual {
-        IERC20Mintable(erc20TokenAddress).burn(msg.sender, value);
+    /** @dev this function returns the address of the wallet of the linked DFO.
+      * @return linked DFO wallet address.
+     */
+    function _getDFOWallet() private view returns(address) {
+        return IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress();
     }
 
-    /** INTERNAL METHODS */
+    /** @dev this function returns true if the sender is an authorized DFO functionality, false otherwise.
+      * @param sender address of the caller.
+      * @return true if the call is from a DFO, false otherwise.
+     */
+    function _isFromDFO(address sender) private view returns(bool) {
+        return IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender);
+    }
 
     /** @dev function used to safely approve ERC20 transfers.
       * @param erc20TokenAddress address of the token to approve.
@@ -102,23 +122,13 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
-    /** @dev function used to safe transfer ERC20 tokens.
-      * @param erc20TokenAddress address of the token to transfer.
-      * @param to receiver of the tokens.
-      * @param value amount of tokens to transfer.
-     */
-    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
-        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
-    }
-
     /** @dev this function safely transfers the given ERC20 value from an address to another.
       * @param erc20TokenAddress erc20 token address.
       * @param from address from.
       * @param to address to.
       * @param value amount to transfer.
      */
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
         bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }

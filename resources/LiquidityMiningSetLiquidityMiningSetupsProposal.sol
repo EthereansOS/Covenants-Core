@@ -25,12 +25,12 @@ contract ProposalCode {
         liquidityPoolTokenAddresses[0] = {0};
         LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[]({1});
         {2}
-        ILiquidityMiningExtension({3}).setLiquidityMiningSetups({4}, liquidityMiningSetups, {5}, {6}, {7});
+        ILiquidityMiningExtension({3}).setLiquidityMiningSetups(liquidityMiningSetups, {4}, {5}, {6});
     }
 }
 
 interface ILiquidityMiningExtension {
-    function setLiquidityMiningSetups(address liquidityMiningContractAddress, LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
+    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
 }
 
 struct LiquidityMiningSetupConfiguration {
