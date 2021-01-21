@@ -55,20 +55,19 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
       * @param amount amount of erc20 to transfer or mint.
      */
     function transferTo(uint256 amount, address recipient) override public liquidityMiningOnly {
-        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, ILiquidityMining(msg.sender)._rewardTokenAddress(), recipient, amount, _byMint));
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, recipient, amount, _byMint));
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
      */
     function backToYou(uint256 amount) override payable public liquidityMiningOnly {
-        address rewardTokenAddress = ILiquidityMining(msg.sender)._rewardTokenAddress();
-        if(rewardTokenAddress != address(0)) {
-            _safeTransferFrom(rewardTokenAddress, msg.sender, address(this), amount);
-            _safeApprove(rewardTokenAddress, _getFunctionalityAddress(), amount);
-            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
+        if(_rewardTokenAddress != address(0)) {
+            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
+            _safeApprove(_rewardTokenAddress, _getFunctionalityAddress(), amount);
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, _rewardTokenAddress, msg.sender, amount, _byMint));
         } else {
-            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, rewardTokenAddress, msg.sender, amount, _byMint));
+            IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, _rewardTokenAddress, msg.sender, amount, _byMint));
         }
     }
 

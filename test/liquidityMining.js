@@ -13,6 +13,7 @@ var LiquidityMiningFactory;
 var LiquidityMiningExtension;
 var UniswapV2AMMV1;
 
+var byMint;
 var ethItemOrchestrator;
 var uniswapV2Router;
 var uniswapV2Factory;
@@ -49,17 +50,24 @@ describe("LiquidityMining", () => {
 
             wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
 
-            rewardToken = new web3.eth.Contract(context.IERC20ABI, context.daiTokenAddress);
+            dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
+
+            var rewardTokenAddress = dfo.votingTokenAddress;//context.daiTokenAddress;
+
+            rewardToken = new web3.eth.Contract(context.IERC20ABI, rewardTokenAddress);
             //rewardToken = utilities.voidEthereumAddress;
+
+            byMint = (rewardToken.options && rewardToken.options.address === dfo.votingTokenAddress) || false;
+
             mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
             //mainToken = utilities.voidEthereumAddress;
             secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
             liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : wethToken.options.address).call());
 
-            if (mainToken !== utilities.voidEthereumAddress) await buyForETH(mainToken, ethToSpend);
-            if (secondaryToken !== utilities.voidEthereumAddress) await buyForETH(secondaryToken, ethToSpend);
-            if (rewardToken !== utilities.voidEthereumAddress) await buyForETH(rewardToken, ethToSpend);
+            mainToken !== utilities.voidEthereumAddress && await buyForETH(mainToken, ethToSpend);
+            secondaryToken !== utilities.voidEthereumAddress && await buyForETH(secondaryToken, ethToSpend);
+            rewardToken !== utilities.voidEthereumAddress && rewardToken.options.address !== dfo.votingTokenAddress && await buyForETH(rewardToken, ethToSpend);
 
             uniswapAMM = await new web3.eth.Contract(UniswapV2AMMV1.abi).deploy({data : UniswapV2AMMV1.bin, arguments: [uniswapV2Router.options.address]}).send(blockchainConnection.getSendingOptions());
 
@@ -136,10 +144,8 @@ describe("LiquidityMining", () => {
 
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
-        dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000, 100, 10);
-
         if (rewardToken != utilities.voidEthereumAddress) {
-            await rewardToken.methods.transfer(dfo.mvdWalletAddress, await rewardToken.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
+            !byMint && await rewardToken.methods.transfer(dfo.mvdWalletAddress, utilities.toDecimals(1000, await rewardToken.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
         } else {
             await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
                 to: dfo.mvdWalletAddress,
@@ -185,7 +191,7 @@ describe("LiquidityMining", () => {
         ];
         var params = [
             liquidityMiningExtension.options.address,
-            liquidityMiningExtension.methods.init(false, dfo.doubleProxyAddress).encodeABI(),
+            liquidityMiningExtension.methods.init(byMint, dfo.doubleProxyAddress).encodeABI(),
             ethItemOrchestrator.options.address,
             "LiquidityMiningToken",
             "LMT",
@@ -650,7 +656,7 @@ describe("LiquidityMining", () => {
             assert(false);
         } catch (e) {
             console.log(e);
-            assert.notStrictEqual((e.message|| e).toLowerCase().indexOf(rewardToken !== utilities.voidEthereumAddress ? "insufficient-balance" : "invalid sent amount"), -1);
+            assert.notStrictEqual((e.message|| e).toLowerCase().indexOf(rewardToken !== utilities.voidEthereumAddress ? rewardToken.options.address === dfo.votingTokenAddress ? "transfer amount exceeds balance" : "insufficient-balance" : "invalid sent amount"), -1);
         }
     });
     /*
