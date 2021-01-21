@@ -2,12 +2,13 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./util/DFOHub.sol";
 import "./LiquidityMiningData.sol";
 
 interface ILiquidityMiningExtension {
 
     function init(bool byMint, address host) external;
+
+    function setHost(address host) external;
 
     function data() external view returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress);
 

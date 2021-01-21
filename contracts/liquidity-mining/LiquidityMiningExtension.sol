@@ -45,6 +45,10 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         _host = host;
     }
 
+    function setHost(address host) public virtual override hostOnly {
+        _host = host;
+    }
+
     function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
         return (_liquidityMiningContract, _byMint, _host, _rewardTokenAddress);
     }
@@ -82,6 +86,8 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
     }
 
+    /** INTERNAL METHODS */
+
     function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual {
         IERC20Mintable(erc20TokenAddress).mint(recipient, value);
     }
@@ -89,8 +95,6 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     function _burn(address erc20TokenAddress, uint256 value) internal virtual {
         IERC20Mintable(erc20TokenAddress).burn(msg.sender, value);
     }
-
-    /** INTERNAL METHODS */
 
     /** @dev function used to safely approve ERC20 transfers.
       * @param erc20TokenAddress address of the token to approve.

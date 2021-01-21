@@ -64,7 +64,7 @@ describe("FixedInflation", () => {
         uniswapAMM = await new web3.eth.Contract(UniswapV2AMMV1.abi).deploy({data : UniswapV2AMMV1.bin, arguments: [uniswapV2Router.options.address]}).send(blockchainConnection.getSendingOptions());
 
         FixedInflationFactory = await compile('fixed-inflation/FixedInflationFactory');
-        FixedInflationExtension = await compile('fixed-inflation/FixedInflationExtension');
+        FixedInflationExtension = await compile('fixed-inflation/DFOBasedFixedInflationExtension');
         FixedInflation = await compile('fixed-inflation/FixedInflation');
 
         /*await initActor("Alice", accounts[1], 0, 30, 1, 0, false, false, 0.09, 0.247, 0.09, 0.003);

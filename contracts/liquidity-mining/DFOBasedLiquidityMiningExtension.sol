@@ -7,6 +7,7 @@ import "./ILiquidityMining.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
 import "./LiquidityMiningData.sol";
+import "./util/DFOHub.sol";
 
 contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
@@ -47,6 +48,13 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
         _doubleProxy = host;
     }
 
+    /** @dev allows the DFO to update the double proxy address.
+      * @param newDoubleProxy new double proxy address.
+     */
+    function setHost(address newDoubleProxy) public virtual override hostOnly {
+        _doubleProxy = newDoubleProxy;
+    }
+
     function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
         return (_liquidityMiningContract, _byMint, _doubleProxy, _rewardTokenAddress);
     }
@@ -69,13 +77,6 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
         } else {
             IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit{value : amount}(FUNCTIONALITY_NAME, abi.encode(address(0), 0, false, _rewardTokenAddress, msg.sender, amount, _byMint));
         }
-    }
-
-    /** @dev allows the DFO to update the double proxy address.
-      * @param newDoubleProxy new double proxy address.
-     */
-    function setDoubleProxy(address newDoubleProxy) public hostOnly {
-        _doubleProxy = newDoubleProxy;
     }
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
