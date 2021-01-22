@@ -4,14 +4,12 @@ pragma solidity ^0.7.6;
 struct FixedInflationEntryConfiguration {
     bool add;
     bool remove;
-    uint256 index;
-    string name;
-    uint256 blockInterval;
-    uint256 callerRewardPercentage;
+    FixedInflationEntry data;
 }
 
 struct FixedInflationEntry {
     uint256 lastBlock;
+    bytes32 id;
     string name;
     uint256 blockInterval;
     uint256 callerRewardPercentage;

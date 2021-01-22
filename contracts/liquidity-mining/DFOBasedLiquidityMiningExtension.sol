@@ -43,6 +43,7 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
     function init(bool byMint, address host) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
+        require(host != address(0), "blank host");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
         _doubleProxy = host;

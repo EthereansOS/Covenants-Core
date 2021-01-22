@@ -6,6 +6,7 @@ import "./FixedInflationData.sol";
 import "./IFixedInflationExtension.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
+import "./IFixedInflation.sol";
 
 contract FixedInflationExtension is IFixedInflationExtension {
 
@@ -53,6 +54,10 @@ contract FixedInflationExtension is IFixedInflationExtension {
                 _mintAndTransfer(tokenAddresses[i], msg.sender, amountsToMint[i]);
             }
         }
+    }
+
+    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public override hostOnly {
+        IFixedInflation(_fixedInflationContract).setEntries(newEntries, operationSets);
     }
 
     /** INTERNAL METHODS */

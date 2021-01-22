@@ -5,6 +5,7 @@ pragma abicoder v2;
 import "./FixedInflationData.sol";
 import "./IFixedInflationExtension.sol";
 import "./util/DFOHub.sol";
+import "./IFixedInflation.sol";
 
 contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
@@ -26,6 +27,7 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
     function init(address doubleProxyAddress) override public {
         require(_host == address(0), "Already init");
+        require(doubleProxyAddress != address(0), "blank host");
         _host = doubleProxyAddress;
         _fixedInflationContract = msg.sender;
     }
@@ -40,6 +42,10 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
     function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) public override fixedInflationOnly {
         IMVDProxy(IDoubleProxy(_host).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, tokenAddresses, transferAmounts, amountsToMint, _fixedInflationContract));
+    }
+
+    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public override hostOnly {
+        IFixedInflation(_fixedInflationContract).setEntries(newEntries, operationSets);
     }
 
     function _getFunctionalityAddress() private view returns(address functionalityAddress) {
