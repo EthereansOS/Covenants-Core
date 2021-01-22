@@ -291,14 +291,14 @@ contract WUSDExtensionController is ERC1155Receiver {
     }
 
     function _burn(address from, uint256 value, bytes memory payload) private {
-        (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount) = abi.decode(payload, (uint256, uint256, uint256));
+        (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount, bool keepLiquidityPool) = abi.decode(payload, (uint256, uint256, uint256, bool));
         uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, liquidityPoolAmount);
         require(value >= toBurn, "Insufficient Amount");
         if(value > toBurn) {
             INativeV1(_collection).safeTransferFrom(address(this), from, _wusdObjectId, value - toBurn, "");
         }
         INativeV1(_collection).burn(_wusdObjectId, toBurn);
-        _removeLiquidity(from, ammPosition, liquidityPoolPosition, liquidityPoolAmount);
+        _removeLiquidity(from, ammPosition, liquidityPoolPosition, liquidityPoolAmount, keepLiquidityPool);
     }
 
     function _rebalanceByDebt(address from, uint256 value, bytes memory payload) private {
@@ -409,7 +409,8 @@ contract WUSDExtensionController is ERC1155Receiver {
         address owner,
         uint256 ammPosition,
         uint256 liquidityPoolPosition,
-        uint256 liquidityPoolAmount
+        uint256 liquidityPoolAmount,
+        bool keepLiquidityPool
     )
         private
         _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
@@ -419,18 +420,20 @@ contract WUSDExtensionController is ERC1155Receiver {
         uint256[] memory amounts = new uint256[](1);
         amounts[0] = liquidityPoolAmount;
         address[] memory receivers = new address[](1);
-        receivers[0] = address(this);
+        receivers[0] = keepLiquidityPool ? owner : address(this);
         WUSDExtension(_extension).send(tokenAddresses, amounts, receivers);
-        IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-        _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, _allowedAMMs[ammPosition].ammAddress);
-        amm.removeLiquidity(LiquidityPoolData(
-            _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
-            liquidityPoolAmount,
-            address(0),
-            true,
-            false,
-            owner
-        ));
+        if(!keepLiquidityPool) {
+            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
+            _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, address(amm));
+            amm.removeLiquidity(LiquidityPoolData(
+                _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
+                liquidityPoolAmount,
+                address(0),
+                true,
+                false,
+                owner
+            ));
+        }
     }
 
     function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount)

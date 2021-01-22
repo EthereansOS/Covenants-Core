@@ -324,7 +324,7 @@ describe("WUSD", () => {
         var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
 
-        var consume = async function consume(liquidityPoolPosition, testMainCode, mainObjectId, otherObjectId, maxAmountPerToken) {
+        var consume = async function consume(liquidityPoolPosition, testMainCode, mainObjectId, otherObjectId, maxAmountPerToken, keepLiquidityPool) {
             var liquidityPoolAddress = allowedAMMS[0][1][liquidityPoolPosition];
 
             var maxuSDExpected = maxAmountPerToken * 2;
@@ -374,8 +374,8 @@ describe("WUSD", () => {
             var otherBalanceOfExpected = otherBalanceOfBefore + amountsPlain[otherAmountIndex];
             otherBalanceOfExpected = utilities.formatMoney(otherBalanceOfExpected);
 
-            var types = ['uint256', 'uint256', 'uint256'];
-            var params = ['0', liquidityPoolPosition, liquidityPoolAmount];
+            var types = ['uint256', 'uint256', 'uint256', 'bool'];
+            var params = ['0', liquidityPoolPosition, liquidityPoolAmount, keepLiquidityPool || false];
             var data = web3.eth.abi.encodeParameters(types, params);
             return {
                 tokens,
@@ -383,25 +383,28 @@ describe("WUSD", () => {
                 data,
                 objectIds,
                 exactBalanceOfBefore,
-                exactAmount: amountsPlain[exactAmountIndex],
+                exactAmount: keepLiquidityPool ? 0 : amountsPlain[exactAmountIndex],
                 exactBalanceOfExpected,
                 otherBalanceOfBefore,
-                otherAmount: amountsPlain[otherAmountIndex],
+                otherAmount: keepLiquidityPool ? 0 : amountsPlain[otherAmountIndex],
                 otherBalanceOfExpected,
                 amountsPlain,
                 exactAmountIndex,
-                otherAmountIndex
+                otherAmountIndex,
+                liquidityPoolAddress,
+                liquidityPoolAmount : keepLiquidityPool ? utilities.fromDecimals(liquidityPoolAmount, await new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress).methods.decimals().call(), true) : 0
             };
         };
 
         var inputs = [
-            await consume(0, DAI, DAIItemObjectId, USDCItemObjectId, 5),
-            await consume(1, USDT, USDTItemObjectId, USDCItemObjectId, 11),
-            await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30),
+            await consume(0, DAI, DAIItemObjectId, USDCItemObjectId, 5, true),
+            await consume(1, USDT, USDTItemObjectId, USDCItemObjectId, 11, false),
+            await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30, true),
         ];
 
         var tokens = {};
         inputs.forEach(it => it.tokens.forEach(token => tokens[token.options.address] = { token }));
+        inputs.forEach(it => tokens[it.liquidityPoolAddress] = { token : new web3.eth.Contract(context.IERC20ABI, it.liquidityPoolAddress) });
 
         for (var token of Object.values(tokens)) {
             token.balanceOfExpected = await token.token.methods.balanceOf(accounts[0]).call();
@@ -412,6 +415,7 @@ describe("WUSD", () => {
         for (var input of inputs) {
             tokens[input.tokens[input.exactAmountIndex].options.address].balanceOfExpected += utilities.formatNumber(input.exactAmount);
             tokens[input.tokens[input.otherAmountIndex].options.address].balanceOfExpected += utilities.formatNumber(input.otherAmount);
+            tokens[input.liquidityPoolAddress].balanceOfExpected += utilities.formatNumber(input.liquidityPoolAmount);
         }
 
         var expectedUsdBalance = usdBalanceBefore;
