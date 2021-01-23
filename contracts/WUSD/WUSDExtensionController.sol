@@ -22,6 +22,8 @@ contract WUSDExtensionController is ERC1155Receiver {
 
     address private _doubleProxy;
 
+    uint256 public rebalanceByCreditBlockInterval;
+
     address private _extension;
 
     address private _collection;
@@ -54,6 +56,7 @@ contract WUSDExtensionController is ERC1155Receiver {
         address[] rebalanceByCreditReceivers;
         uint256[] rebalanceByCreditPercentages;
         uint256 rebalanceByCreditPercentageForCaller;
+        uint256 rebalanceByCreditBlockInterval;
         bytes allowedAMMsBytes;
         address wusdExtension;
         uint256 wusdObjectId;
@@ -72,6 +75,7 @@ contract WUSDExtensionController is ERC1155Receiver {
     constructor(bytes memory wusdInitializerBytes) {
         WUSDInitializer memory wusdInitializer = abi.decode(wusdInitializerBytes, (WUSDInitializer));
         _doubleProxy = wusdInitializer.doubleProxyAddress;
+        rebalanceByCreditBlockInterval = wusdInitializer.rebalanceByCreditBlockInterval;
         WUSDExtension wusdExtension = WUSDExtension(_extension = wusdInitializer.wusdExtension != address(0) ? wusdInitializer.wusdExtension : address(new WUSDExtension(wusdInitializer.orchestratorAddress, wusdInitializer.names[0], wusdInitializer.symbols[0], wusdInitializer.uris[0])));
         INativeV1 wusdCollection = INativeV1(_collection = wusdExtension.collection());
         if(wusdInitializer.wusdObjectId == 0) {
@@ -195,6 +199,10 @@ contract WUSDExtensionController is ERC1155Receiver {
         WUSDExtension(_extension).setController(newController);
     }
 
+    function setrebalanceByCreditBlockInterval(uint256 newrebalanceByCreditBlockInterval) public byDFO {
+        rebalanceByCreditBlockInterval = newrebalanceByCreditBlockInterval;
+    }
+
     function allowedAMMs() public view returns(AllowedAMM[] memory) {
         return _allowedAMMs;
     }
@@ -310,16 +318,7 @@ contract WUSDExtensionController is ERC1155Receiver {
     }
 
     function rebalanceByCredit() public {
-        require(
-            block.number >=
-            _lastRedeemBlock +
-            IStateHolder(
-                IMVDProxy(IDoubleProxy(_doubleProxy).proxy())
-                    .getStateHolderAddress()
-            )
-                .getUint256("stablecoin.v2.rebalancebycredit.block.interval"),
-            "Unauthorized action"
-        );
+        require(block.number >= (_lastRedeemBlock + rebalanceByCreditBlockInterval), "Unauthorized action");
         _lastRedeemBlock = block.number;
         (uint256 credit, ) = differences();
         WUSDExtension(_extension).mint(_wusdObjectId, credit, address(this));
