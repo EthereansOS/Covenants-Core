@@ -13,8 +13,9 @@ import "./AllowedAMM.sol";
 import "./IWUSDNoteController.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "../amm-aggregator/common/AMMData.sol";
+import "./IWUSDExtensionController.sol";
 
-contract WUSDExtensionController is ERC1155Receiver {
+contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
     uint256 public constant ONE_HUNDRED = 10000;
 
@@ -22,7 +23,7 @@ contract WUSDExtensionController is ERC1155Receiver {
 
     address private _doubleProxy;
 
-    uint256 public rebalanceByCreditBlockInterval;
+    uint256 public override rebalanceByCreditBlockInterval;
 
     address private _extension;
 
@@ -41,7 +42,7 @@ contract WUSDExtensionController is ERC1155Receiver {
     address private _wusdNote5Controller;
     uint256 private _wusdNote5Percentage;
 
-    uint256 private _lastRedeemBlock;
+    uint256 public override lastRebalanceByCreditBlock;
 
     AllowedAMM[] private _allowedAMMs;
 
@@ -150,7 +151,7 @@ contract WUSDExtensionController is ERC1155Receiver {
         return _collection;
     }
 
-    function wusdInfo() public view returns (address, uint256, address) {
+    function wusdInfo() public override view returns (address, uint256, address) {
         return (_collection, _wusdObjectId, _wusdInteroperableInterfaceAddress);
     }
 
@@ -318,8 +319,8 @@ contract WUSDExtensionController is ERC1155Receiver {
     }
 
     function rebalanceByCredit() public {
-        require(block.number >= (_lastRedeemBlock + rebalanceByCreditBlockInterval), "Unauthorized action");
-        _lastRedeemBlock = block.number;
+        require(block.number >= (lastRebalanceByCreditBlock + rebalanceByCreditBlockInterval), "Unauthorized action");
+        lastRebalanceByCreditBlock = block.number;
         (uint256 credit, ) = differences();
         WUSDExtension(_extension).mint(_wusdObjectId, credit, address(this));
         uint256 availableCredit = credit;
@@ -456,19 +457,32 @@ contract WUSDExtensionController is ERC1155Receiver {
         }
     }
 
-    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'APPROVE_FAILED');
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
-    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFER_FAILED');
+    function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal virtual {
-        (bool success, bytes memory data) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))), 'TRANSFERFROM_FAILED');
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
+    }
+
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
+        assembly {
+            let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
+            let size := returndatasize()
+            returnData := mload(0x40)
+            mstore(returnData, size)
+            let returnDataPayloadStart := add(returnData, 0x20)
+            returndatacopy(returnDataPayloadStart, 0, size)
+            mstore(0x40, add(returnDataPayloadStart, size))
+            switch result case 0 {revert(returnDataPayloadStart, size)}
+        }
     }
 
     function _flushBack(address payable sender, address[] memory tokens) internal virtual {

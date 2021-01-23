@@ -104,7 +104,7 @@ contract LiquidityMining is ILiquidityMining {
     /** @dev returns the liquidity mining setups.
       * @return array containing all the liquidity mining setups.
      */
-    function setups() public view returns (LiquidityMiningSetup[] memory) {
+    function setups() view public override returns (LiquidityMiningSetup[] memory) {
         return _setups;
     }
 

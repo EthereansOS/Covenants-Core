@@ -2,15 +2,19 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./ILiquidityMiningExtension.sol";
-import "./ILiquidityMining.sol";
+import "../liquidity-mining/ILiquidityMiningExtension.sol";
+import "../liquidity-mining/ILiquidityMining.sol";
+import "../liquidity-mining/LiquidityMiningData.sol";
+import "../liquidity-mining/util/DFOHub.sol";
+import "./IWUSDExtensionController.sol";
 import "./util/IERC20.sol";
-import "./LiquidityMiningData.sol";
-import "./util/DFOHub.sol";
+import "./util/INativeV1.sol";
 
-contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
+contract WUSDLiquidityMiningExtension is ILiquidityMiningExtension {
 
     string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
+
+    uint256 public constant ONE_HUNDRED = 10000;
 
     // wallet who has control on the extension
     address internal _doubleProxy;
@@ -23,6 +27,12 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
     // whether the token is by mint or by reserve
     bool internal _byMint;
+
+    address public wusdExtensionControllerAddress;
+
+    uint256[] public rebalancePercentages;
+
+    uint256 public rebalanceByCreditBlockIntervalMultiplier;
 
     /** MODIFIERS */
 
@@ -40,12 +50,19 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** PUBLIC METHODS */
 
-    function init(bool byMint, address host) public virtual override {
+    function init(bool, address) public virtual override {
+        revert("Method not allowed, use specific one instead");
+    }
+
+    function init(bool byMint, address host, address _wusdExtensionControllerAddress, uint256[] memory _rebalancePercentages, uint256 _rebalanceByCreditBlockIntervalMultiplier) public virtual {
         require(_liquidityMiningContract == address(0), "Already init");
         require(host != address(0), "blank host");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
         _doubleProxy = host;
+        wusdExtensionControllerAddress = _wusdExtensionControllerAddress;
+        require(ILiquidityMining(_liquidityMiningContract).setups().length == (rebalancePercentages = _rebalancePercentages).length, "Invalid length");
+        rebalanceByCreditBlockIntervalMultiplier = _rebalanceByCreditBlockIntervalMultiplier;
     }
 
     /** @dev allows the DFO to update the double proxy address.
@@ -79,16 +96,42 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
         }
     }
 
-    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
-      * @param liquidityMiningSetups array containing all the liquidity mining setups.
-      * @param setPinned if we're updating the pinned setup or not.
-      * @param pinnedIndex new pinned setup index.
-     */
-    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override hostOnly {
+    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.*/
+    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory, bool, bool, uint256) public override hostOnly {
+        revert("Method not allowed, use specific one instead");
+    }
+
+    function setWusdExtensionControllerAddress(address _wusdExtensionControllerAddress) public hostOnly {
+        wusdExtensionControllerAddress = _wusdExtensionControllerAddress;
+    }
+
+    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex, uint256[] memory _rebalancePercentages) public hostOnly {
         ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
+        require(ILiquidityMining(_liquidityMiningContract).setups().length == (rebalancePercentages = _rebalancePercentages).length, "Invalid length");
+    }
+
+    function rebalanceRewardsPerBlock() public {
+        (address collection, uint256 objectId,) = IWUSDExtensionController(wusdExtensionControllerAddress).wusdInfo();
+        uint256 totalBalance = INativeV1(collection).balanceOf(address(this), objectId);
+        uint256 periodLength = _calculatePercentage(IWUSDExtensionController(wusdExtensionControllerAddress).rebalanceByCreditBlockInterval(), rebalanceByCreditBlockIntervalMultiplier);
+        LiquidityMiningSetup[] memory setups = ILiquidityMining(_liquidityMiningContract).setups();
+        LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[](setups.length);
+        for(uint256 i = 0; i < liquidityMiningSetups.length; i++) {
+            setups[i].rewardPerBlock = (_calculatePercentage(totalBalance, rebalancePercentages[i]) / periodLength);
+            liquidityMiningSetups[i] = LiquidityMiningSetupConfiguration(
+                false,
+                i,
+                setups[i]
+            );
+        }
+        ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, false, false, 0);
     }
 
     /** PRIVATE METHODS */
+
+    function _calculatePercentage(uint256 totalSupply, uint256 percentage) private pure returns(uint256) {
+        return (totalSupply * ((percentage * 1e18) / ONE_HUNDRED)) / 1e18;
+    }
 
     /** @dev this function returns the address of the functionality with the FUNCTIONALITY_NAME.
       * @return functionalityAddress functionality FUNCTIONALITY_NAME address.
