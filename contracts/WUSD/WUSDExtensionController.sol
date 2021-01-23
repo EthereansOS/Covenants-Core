@@ -60,7 +60,6 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         uint256 rebalanceByCreditBlockInterval;
         bytes allowedAMMsBytes;
         address wusdExtension;
-        uint256 wusdObjectId;
         uint256 wusdNote2ObjectId;
         address wusdNote2Controller;
         uint256 wusdNote2Percentage;
@@ -77,15 +76,14 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         WUSDInitializer memory wusdInitializer = abi.decode(wusdInitializerBytes, (WUSDInitializer));
         _doubleProxy = wusdInitializer.doubleProxyAddress;
         rebalanceByCreditBlockInterval = wusdInitializer.rebalanceByCreditBlockInterval;
-        WUSDExtension wusdExtension = WUSDExtension(_extension = wusdInitializer.wusdExtension != address(0) ? wusdInitializer.wusdExtension : address(new WUSDExtension(wusdInitializer.orchestratorAddress, wusdInitializer.names[0], wusdInitializer.symbols[0], wusdInitializer.uris[0])));
-        INativeV1 wusdCollection = INativeV1(_collection = wusdExtension.collection());
-        if(wusdInitializer.wusdObjectId == 0) {
-            (_wusdObjectId, _wusdInteroperableInterfaceAddress) = wusdExtension.mintEmpty(wusdInitializer.names[1], wusdInitializer.symbols[1], wusdInitializer.uris[1], true);
-        } else {
-            _wusdInteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdObjectId = wusdInitializer.wusdObjectId));
-            _wusdNote2InteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdNote2ObjectId = wusdInitializer.wusdNote2ObjectId));
-            _wusdNote5InteroperableInterfaceAddress = address(wusdCollection.asInteroperable(_wusdNote5ObjectId = wusdInitializer.wusdNote5ObjectId));
+        WUSDExtension wusdExtension = WUSDExtension(_extension = wusdInitializer.wusdExtension != address(0) ? wusdInitializer.wusdExtension : address(new WUSDExtension(wusdInitializer.orchestratorAddress, wusdInitializer.names[0], wusdInitializer.symbols[0], wusdInitializer.uris[0], wusdInitializer.names[1], wusdInitializer.symbols[1], wusdInitializer.uris[1])));
+        (_collection, _wusdObjectId, _wusdInteroperableInterfaceAddress) = wusdExtension.data();
+        if(wusdInitializer.wusdNote2ObjectId != 0) {
+            _wusdNote2InteroperableInterfaceAddress = address(INativeV1(_collection).asInteroperable(_wusdNote2ObjectId = wusdInitializer.wusdNote2ObjectId));
             _checkNoteController(_wusdNote2Controller = wusdInitializer.wusdNote2Controller, _wusdNote2ObjectId, 2);
+        }
+        if(wusdInitializer.wusdNote5ObjectId != 0) {
+            _wusdNote5InteroperableInterfaceAddress = address(INativeV1(_collection).asInteroperable(_wusdNote5ObjectId = wusdInitializer.wusdNote5ObjectId));
             _checkNoteController(_wusdNote5Controller = wusdInitializer.wusdNote5Controller, _wusdNote5ObjectId, 5);
         }
         _wusdNote2Percentage = wusdInitializer.wusdNote2Percentage;
@@ -301,28 +299,34 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
     function _burn(address from, uint256 value, bytes memory payload) private {
         (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount, bool keepLiquidityPool) = abi.decode(payload, (uint256, uint256, uint256, bool));
-        uint256 toBurn = _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, liquidityPoolAmount);
-        require(value >= toBurn, "Insufficient Amount");
-        if(value > toBurn) {
-            INativeV1(_collection).safeTransferFrom(address(this), from, _wusdObjectId, value - toBurn, "");
+        _safeApprove(_wusdInteroperableInterfaceAddress, _extension, INativeV1(_collection).toInteroperableInterfaceAmount(_wusdObjectId, value));
+        WUSDExtension(_extension).burnFor(from, value, _allowedAMMs[ammPosition].ammAddress, _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, keepLiquidityPool ? from : address(this));
+        if(!keepLiquidityPool) {
+            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
+            _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, address(amm));
+            amm.removeLiquidity(LiquidityPoolData(
+                _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
+                liquidityPoolAmount,
+                address(0),
+                true,
+                false,
+                from
+            ));
         }
-        INativeV1(_collection).burn(_wusdObjectId, toBurn);
-        _removeLiquidity(from, ammPosition, liquidityPoolPosition, liquidityPoolAmount, keepLiquidityPool);
     }
 
     function _rebalanceByDebt(address from, uint256 value, bytes memory payload) private {
         (, uint256 debt) = differences();
         require(value <= debt, "Cannot Burn this amount");
-        INativeV1(_collection).burn(_wusdObjectId, value);
         uint256 note = abi.decode(payload, (uint256));
-        WUSDExtension(_extension).mint(note == 2 ? _wusdNote2ObjectId : _wusdNote5ObjectId, value, from);
+        _safeApprove(_wusdInteroperableInterfaceAddress, _extension, INativeV1(_collection).toInteroperableInterfaceAmount(_wusdObjectId, value));
+        WUSDExtension(_extension).burnFor(note == 2 ? _wusdNote2ObjectId : _wusdNote5ObjectId, value, from);
     }
 
     function rebalanceByCredit() public {
         require(block.number >= (lastRebalanceByCreditBlock + rebalanceByCreditBlockInterval), "Unauthorized action");
         lastRebalanceByCreditBlock = block.number;
-        (uint256 credit, ) = differences();
-        WUSDExtension(_extension).mint(_wusdObjectId, credit, address(this));
+        uint256 credit = WUSDExtension(_extension).mintForRebalanceByCredit(_allowedAMMs);
         uint256 availableCredit = credit;
         uint256 reward = 0;
         if(_rebalanceByCreditPercentageForCaller > 0) {
@@ -377,7 +381,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         uint256[] memory amounts;
         address[] memory tokens;
         if(byLiquidityPool) {
-            _safeTransferFrom(liquidityPoolAddress, msg.sender, _extension, toMint = liquidityPoolAmount);
+            _safeTransferFrom(liquidityPoolAddress, msg.sender, address(this), toMint = liquidityPoolAmount);
         } else {
             IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
             (amounts, tokens) = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
@@ -391,11 +395,12 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
                 address(0),
                 true,
                 false,
-                _extension
+                address(this)
             ));
         }
 
-        WUSDExtension(_extension).mint(_wusdObjectId, _normalizeAndSumAmounts(ammPosition, liquidityPoolPosition, toMint), msg.sender);
+        _safeApprove(liquidityPoolAddress, _extension, toMint);
+        WUSDExtension(_extension).mintFor(_allowedAMMs[ammPosition].ammAddress, liquidityPoolAddress, toMint, msg.sender);
 
         for(uint256 i = 0; i < spent.length; i++) {
             uint256 difference = amounts[i] - spent[i];
@@ -403,48 +408,6 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
                 _safeTransfer(tokens[i], msg.sender, difference);
             }
         }
-    }
-
-    function _removeLiquidity(
-        address owner,
-        uint256 ammPosition,
-        uint256 liquidityPoolPosition,
-        uint256 liquidityPoolAmount,
-        bool keepLiquidityPool
-    )
-        private
-        _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
-    {
-        address[] memory tokenAddresses = new address[](1);
-        tokenAddresses[0] = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = liquidityPoolAmount;
-        address[] memory receivers = new address[](1);
-        receivers[0] = keepLiquidityPool ? owner : address(this);
-        WUSDExtension(_extension).send(tokenAddresses, amounts, receivers);
-        if(!keepLiquidityPool) {
-            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-            _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, address(amm));
-            amm.removeLiquidity(LiquidityPoolData(
-                _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
-                liquidityPoolAmount,
-                address(0),
-                true,
-                false,
-                owner
-            ));
-        }
-    }
-
-    function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount)
-        private
-        view
-        returns(uint256 amount) {
-            IERC20 liquidityPool = IERC20(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]);
-            (uint256[] memory amounts, address[] memory tokens) = IAMM(_allowedAMMs[ammPosition].ammAddress).byLiquidityPoolAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension));
-            for(uint256 i = 0; i < amounts.length; i++) {
-                amount += _normalizeTokenAmountToDefaultDecimals(tokens[i], amounts[i]);
-            }
     }
 
     function _checkAllowance(address tokenAddress, uint256 value, address operator) internal virtual {
@@ -505,6 +468,17 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
             return sender.transfer(balance);
         }
         _safeTransfer(tokenAddress, sender, balance);
+    }
+
+    function _normalizeAndSumAmounts(uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount)
+        private
+        view
+        returns(uint256 amount) {
+            IERC20 liquidityPool = IERC20(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition]);
+            (uint256[] memory amounts, address[] memory tokens) = IAMM(_allowedAMMs[ammPosition].ammAddress).byLiquidityPoolAmount(address(liquidityPool), liquidityPoolAmount != 0 ? liquidityPoolAmount : liquidityPool.balanceOf(_extension));
+            for(uint256 i = 0; i < amounts.length; i++) {
+                amount += _normalizeTokenAmountToDefaultDecimals(tokens[i], amounts[i]);
+            }
     }
 
     function _normalizeTokenAmountToDefaultDecimals(address tokenAddress, uint256 amount) internal virtual view returns(uint256) {
