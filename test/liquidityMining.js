@@ -512,6 +512,7 @@ describe("LiquidityMining", () => {
 
         await blockchainConnection.jumpToBlock(enterBlock, true);
         var result = await liquidityMiningContract.methods.openPosition(stake).send({...from, value: (stake.involvingETH && !stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
+        console.log(await web3.eth.getTransactionReceipt(result.transactionHash));
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
@@ -606,7 +607,7 @@ describe("LiquidityMining", () => {
         var rewardToGiveBack = web3.utils.toBN(utilities.toDecimals(actor.originalReward, 18)).sub(web3.utils.toBN(utilities.toDecimals(actor.expectedReward, 18))).add(penaltyFee).toString();
         expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(rewardToGiveBack)).toString();
 
-        var transaction = await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap, 10000).send({value : rewardToGiveBack, ...actor.from });
+        var transaction = await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap, web3.utils.toBN(position.liquidityPoolData.amount)).send({value : rewardToGiveBack, ...actor.from });
 
         rewardToken === utilities.voidEthereumAddress && (expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transaction))).toString());
         expectedRewardBalance = utilities.fromDecimals(expectedRewardBalance, rewardToken != utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -664,8 +665,8 @@ describe("LiquidityMining", () => {
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
         console.log(position);
-        var transaction = await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap, oneHundred).send(actor.from);
-
+        var transaction = await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap, web3.utils.toBN(position.liquidityPoolData.amount)).send(actor.from);
+        console.log(await web3.eth.getTransactionReceipt(transaction.transactionHash));
         rewardToken === utilities.voidEthereumAddress && (expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transaction))).toString());
         expectedRewardBalance = utilities.fromDecimals(expectedRewardBalance, rewardToken != utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
@@ -929,7 +930,7 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("cavicchioli should set a new staking position without a position token", () => createNewStakingPosition(actors.Cavicchioli));
+    it("cavicchioli should set a new staking position without a position token", async() => createNewStakingPosition(actors.Cavicchioli));
     it("should update liquidity mining setup at index 5", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length;

@@ -414,12 +414,12 @@ contract LiquidityMining is ILiquidityMining {
     /** @dev this function allows a extension to unlock its locked liquidity mining position receiving back its tokens or the lpt amount.
       * @param positionId liquidity mining position id.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
-      * @param liquidityPercentage percentage of liquidity that will be removed.
+      * @param removedLiquidity amount of liquidity that will be removed.
       */
-    function unlock(uint256 positionId, bool unwrapPair, uint256 liquidityPercentage) public payable byPositionOwner(positionId) {
-        liquidityPercentage = liquidityPercentage > ONE_HUNDRED ? ONE_HUNDRED : liquidityPercentage;
+    function unlock(uint256 positionId, bool unwrapPair, uint256 removedLiquidity) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        require(removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount, "Invalid removed liquidity");
         // check if wallet is withdrawing using a liquidity mining position token
         bool hasPositionItem = address(INativeV1(_positionTokenCollection).asInteroperable(positionId)) != address(0);
         // check if liquidity mining position is valid
@@ -441,11 +441,9 @@ contract LiquidityMining is ILiquidityMining {
                 ILiquidityMiningExtension(_extension).backToYou{value : rewardToGiveBack}(rewardToGiveBack);
             }
         }
-        if (hasPositionItem && liquidityPercentage == ONE_HUNDRED) {
+        if (hasPositionItem && removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount) {
             _burnPosition(positionId, msg.sender);
         }
-        uint256 removedLiquidity = (liquidityPercentage == ONE_HUNDRED) ? liquidityMiningPosition.liquidityPoolData.amount : (liquidityMiningPosition.liquidityPoolData.amount * ((liquidityPercentage * 1e18 ) / ONE_HUNDRED)) / 1e18;
-        require(removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount, "Invalid removed liquidity.");
         uint256 remainingLiquidity = liquidityMiningPosition.liquidityPoolData.amount - removedLiquidity;
         liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
         _exit(positionId, unwrapPair, true, remainingLiquidity);
@@ -454,23 +452,23 @@ contract LiquidityMining is ILiquidityMining {
     /** @dev this function allows a extension to withdraw its liquidity mining position using its liquidity mining position token or not.
       * @param positionId liquidity mining position id.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
-      * @param liquidityPercentage percentage of liquidity that will be removed (only free positions).
+      * @param removedLiquidity amount of liquidity that will be removed.
       */
-    function withdraw(uint256 positionId, bool unwrapPair, uint256 liquidityPercentage) public byPositionOwner(positionId) {
+    function withdraw(uint256 positionId, bool unwrapPair, uint256 removedLiquidity) public byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // calculate the correct liquidity percentage
-        liquidityPercentage = (liquidityPercentage > ONE_HUNDRED || !liquidityMiningPosition.free) ? ONE_HUNDRED : liquidityPercentage;
+        require(removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount, "Invalid removed liquidity");
         // check if wallet is withdrawing using a liquidity mining position token
         bool hasPositionItem = address(INativeV1(_positionTokenCollection).asInteroperable(positionId)) != address(0);
         // check if liquidity mining position is valid
         require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid liquidityMiningPosition");
         require(liquidityMiningPosition.free || liquidityMiningPosition.setupEndBlock <= block.number, "Invalid withdraw");
         require(!_positionRedeemed[positionId], "LiquidityMiningPosition already redeemed");
-        if(hasPositionItem && liquidityPercentage == ONE_HUNDRED) {
+        if(hasPositionItem && removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount) {
             _burnPosition(positionId, msg.sender);
         }
-        _withdraw(positionId, unwrapPair, liquidityMiningPosition.reward, false, liquidityPercentage);
+        _withdraw(positionId, unwrapPair, liquidityMiningPosition.reward, false, removedLiquidity);
         _positionRedeemed[positionId] = true;
     }
 
@@ -719,11 +717,10 @@ contract LiquidityMining is ILiquidityMining {
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
       * @param reward amount to withdraw.
       * @param isPartial if it's a partial withdraw or not.
-      * @param liquidityPercentage percentage of liquidity that will be removed (only free positions).
+      * @param removedLiquidity amount of liquidity that will be removed.
      */
-    function _withdraw(uint256 positionId, bool unwrapPair, uint256 reward, bool isPartial, uint256 liquidityPercentage) private {
+    function _withdraw(uint256 positionId, bool unwrapPair, uint256 reward, bool isPartial, uint256 removedLiquidity) private {
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        uint256 removedLiquidity = (liquidityPercentage == ONE_HUNDRED) ? liquidityMiningPosition.liquidityPoolData.amount : (liquidityMiningPosition.liquidityPoolData.amount * ((liquidityPercentage * 1e18 ) / ONE_HUNDRED)) / 1e18;
         require(removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount, "Invalid removed liquidity.");
         uint256 remainingLiquidity = liquidityMiningPosition.liquidityPoolData.amount - removedLiquidity;
         // rebalance setup, if free
