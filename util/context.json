@@ -2,6 +2,7 @@
     "ethItemOrchestratorAddress" : "0x12329b2F9e52C5D3422D6E6C026AA9D5b00CC075",
     "uniswapV2RouterAddress" : "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D",
     "uniswapV2FactoryAddress" : "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f",
+    "wethTokenAddress" : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     "buidlTokenAddress" : "0x7b123f53421b1bf8533339bfbdc7c98aa94163db",
     "usdcTokenAddress" : "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
     "usdtTokenAddress" : "0xdAC17F958D2ee523a2206206994597C13D831ec7",

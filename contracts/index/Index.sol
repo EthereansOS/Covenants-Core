@@ -41,6 +41,7 @@ contract Index is ERC1155Receiver {
                 }
             }
         }
+        require(_temporaryIndex[address(0)] || msg.value == 0, "eth not involved");
         INativeV1 theCollection = INativeV1(collection);
         (objectId, interoperableInterfaceAddress) = theCollection.mint((toMint == 0 ? 1 : toMint) * 1e18, name, symbol, uri, true);
         tokens[objectId] = _tokens;
@@ -58,14 +59,17 @@ contract Index is ERC1155Receiver {
 
     function mint(uint256 objectId, uint256 toMint, address receiver) public payable {
         require(toMint > 0, "toMint");
+        bool ethInvolved = false;
         for(uint256 i = 0; i < tokens[objectId].length; i++) {
             uint256 tokenValue = toMint * amounts[objectId][i];
             if(tokens[objectId][i] == address(0)) {
+                ethInvolved = true;
                  require(msg.value == tokenValue, "insufficient eth");
             } else {
                 _safeTransferFrom(tokens[objectId][i], msg.sender, address(this), tokenValue);
             }
         }
+        require(ethInvolved || msg.value == 0, "eth not involved");
         INativeV1 theCollection = INativeV1(collection);
         theCollection.mint(objectId, toMint * 1e18);
         _safeTransfer(address(theCollection.asInteroperable(objectId)), receiver == address(0) ? msg.sender : receiver, theCollection.toInteroperableInterfaceAmount(objectId, theCollection.balanceOf(address(this), objectId)));

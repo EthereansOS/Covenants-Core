@@ -186,7 +186,7 @@ abstract contract AMM is IAMM {
 
     function swapLiquidity(SwapData memory data) payable public virtual override returns(uint256 outputAmount) {
         ProcessedSwapData memory processedSwapData = _processSwapData(data);
-        _transferToMeAndCheckAllowance(processedSwapData.inputToken, processedSwapData.amount, processedSwapData.liquidityPoolOperator);
+        _transferToMeAndCheckAllowance(processedSwapData.inputToken == _ethereumAddress && processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken, processedSwapData.amount, processedSwapData.liquidityPoolOperator);
         outputAmount = _swapLiquidity(processedSwapData);
         _flushBack(processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken , processedSwapData.amount, 0);
     }
