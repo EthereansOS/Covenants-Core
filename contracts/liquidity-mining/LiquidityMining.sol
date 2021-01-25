@@ -63,6 +63,8 @@ contract LiquidityMining is ILiquidityMining {
             } catch {
                 revert("Not owned");
             }
+        } else {
+            require(_positioms[positionId].uniqueOwner == msg.sender, "Not owned");
         }
         _;
     }
@@ -135,101 +137,6 @@ contract LiquidityMining is ILiquidityMining {
             _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i].data, liquidityMiningSetups[i].add, liquidityMiningSetups[i].index);
         }
         _pinnedSetup(clearPinned, setPinned, pinnedIndex);
-    }
-
-    function _initLiquidityMiningSetups(bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) private {
-        LiquidityMiningSetup[] memory liquidityMiningSetups = abi.decode(liquidityMiningSetupsBytes, (LiquidityMiningSetup[]));
-        require(liquidityMiningSetups.length > 0, "invalid length");
-        for(uint256 i = 0; i < liquidityMiningSetups.length; i++) {
-            _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i], true, 0);
-        }
-        _pinnedSetup(false, setPinned, pinnedIndex);
-    }
-
-    function _setOrAddLiquidityMiningSetup(LiquidityMiningSetup memory data, bool add, uint256 index) private {
-        LiquidityMiningSetup memory liquidityMiningSetup = add ? data : _setups[index];
-        require(
-            data.ammPlugin != address(0) &&
-            (
-                (data.free && data.liquidityPoolTokenAddresses.length == 1) ||
-                (!data.free && data.liquidityPoolTokenAddresses.length > 0 && data.startBlock < data.endBlock)
-            ),
-            "Invalid setup configuration"
-        );
-        require(!add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
-        if(!add) {
-            liquidityMiningSetup.liquidityPoolTokenAddresses = data.liquidityPoolTokenAddresses;
-        }
-        address mainTokenAddress = add ? data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
-        address ammPlugin = add ? data.ammPlugin : liquidityMiningSetup.ammPlugin;
-        for(uint256 j = 0; j < data.liquidityPoolTokenAddresses.length; j++) {
-            (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(data.liquidityPoolTokenAddresses[j]);
-            bool found = false;
-            for(uint256 z = 0; z < tokenAddresses.length; z++) {
-                if(tokenAddresses[z] == mainTokenAddress) {
-                    found = true;
-                    break;
-                }
-            }
-            require(found, "No main token");
-        }
-        if (add) {
-            data.totalSupply = 0;
-            data.currentRewardPerBlock = data.free ? data.rewardPerBlock : 0;
-            // adding new liquidity mining setup
-            _setups.push(data);
-        } else {
-            if (liquidityMiningSetup.free) {
-                // update free liquidity mining setup reward per block
-                if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
-                    _rebalanceRewardPerBlock(index, liquidityMiningSetup.rewardPerBlock - data.rewardPerBlock, false);
-                } else {
-                    _rebalanceRewardPerBlock(index, data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock, true);
-                }
-                _setups[index].rewardPerBlock = data.rewardPerBlock;
-                _setups[index].currentRewardPerBlock = data.rewardPerBlock;
-            } else {
-                // update locked liquidity mining setup
-                _setups[index].rewardPerBlock = data.rewardPerBlock;
-                _setups[index].renewTimes = data.renewTimes;
-                _setups[index].penaltyFee = data.penaltyFee;
-            }
-        }
-    }
-
-    function _pinnedSetup(bool clearPinned, bool setPinned, uint256 pinnedIndex) private {
-        // if we're clearing the pinned setup we must also remove the excess reward per block
-        if (clearPinned) {
-            _hasPinned = false;
-            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
-        }
-        // check if we're updating the pinned setup
-        if (!clearPinned && setPinned) {
-            require(_setups[pinnedIndex].free, "Invalid pinned free setup");
-            uint256 oldBalancedRewardPerBlock;
-            // check if we already have a free pinned setup
-            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block (aka currentRewardPerBlock)
-                oldBalancedRewardPerBlock = _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].currentRewardPerBlock;
-                // remove it from the current pinned setup
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, false);
-            }
-            oldBalancedRewardPerBlock = 0;
-            for(uint256 i = 0; i < _setups.length; i++) {
-                if(_setups[i].free || _setups[i].rewardPerBlock == 0 || block.number < _setups[i].startBlock || block.number > _setups[i].endBlock) {
-                    continue;
-                }
-                oldBalancedRewardPerBlock += _setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock;
-            }
-            // update pinned setup index
-            _hasPinned = true;
-            _pinnedSetupIndex = pinnedIndex;
-            // update reward per token of new pinned setup by adding the old balanced reward per block, if there's some.
-            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, true);
-            }
-        }
     }
 
     /** Public methods. */
@@ -503,6 +410,118 @@ contract LiquidityMining is ILiquidityMining {
     }
 
     /** Private methods. */
+
+    /** @dev initializes the liquidity mining setups during the contract initialization.
+      * @param liquidityMiningSetupsBytes array of liquidity mining setups as bytes.
+      * @param setPinned if we are setting the pinned setup or not.
+      * @param pinnedIndex the pinned setup index.
+     */
+    function _initLiquidityMiningSetups(bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) private {
+        LiquidityMiningSetup[] memory liquidityMiningSetups = abi.decode(liquidityMiningSetupsBytes, (LiquidityMiningSetup[]));
+        require(liquidityMiningSetups.length > 0, "Invalid length");
+        for(uint256 i = 0; i < liquidityMiningSetups.length; i++) {
+            _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i], true, 0);
+        }
+        _pinnedSetup(false, setPinned, pinnedIndex);
+    }
+
+    /** @dev helper method that given a liquidity mining setup adds it to the _setups array or updates it.
+      * @param data new or updated liquidity mining setup.
+      * @param add if we are adding the setup or updating it.
+      * @param index liquidity mining setup index.
+     */
+    function _setOrAddLiquidityMiningSetup(LiquidityMiningSetup memory data, bool add, uint256 index) private {
+        LiquidityMiningSetup memory liquidityMiningSetup = add ? data : _setups[index];
+        require(
+            data.ammPlugin != address(0) &&
+            (
+                (data.free && data.liquidityPoolTokenAddresses.length == 1) ||
+                (!data.free && data.liquidityPoolTokenAddresses.length > 0 && data.startBlock < data.endBlock)
+            ),
+            "Invalid setup configuration"
+        );
+        require(!add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
+        if(!add) {
+            liquidityMiningSetup.liquidityPoolTokenAddresses = data.liquidityPoolTokenAddresses;
+        }
+        address mainTokenAddress = add ? data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
+        address ammPlugin = add ? data.ammPlugin : liquidityMiningSetup.ammPlugin;
+        for(uint256 j = 0; j < data.liquidityPoolTokenAddresses.length; j++) {
+            (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(data.liquidityPoolTokenAddresses[j]);
+            bool found = false;
+            for(uint256 z = 0; z < tokenAddresses.length; z++) {
+                if(tokenAddresses[z] == mainTokenAddress) {
+                    found = true;
+                    break;
+                }
+            }
+            require(found, "No main token");
+        }
+        if (add) {
+            data.totalSupply = 0;
+            data.currentRewardPerBlock = data.free ? data.rewardPerBlock : 0;
+            // adding new liquidity mining setup
+            _setups.push(data);
+        } else {
+            if (liquidityMiningSetup.free) {
+                // update free liquidity mining setup reward per block
+                if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
+                    _rebalanceRewardPerBlock(index, liquidityMiningSetup.rewardPerBlock - data.rewardPerBlock, false);
+                } else {
+                    _rebalanceRewardPerBlock(index, data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock, true);
+                }
+                _setups[index].rewardPerBlock = data.rewardPerBlock;
+                _setups[index].currentRewardPerBlock = data.rewardPerBlock;
+            } else {
+                // update locked liquidity mining setup
+                _setups[index].rewardPerBlock = data.rewardPerBlock;
+                _setups[index].renewTimes = data.renewTimes;
+                _setups[index].penaltyFee = data.penaltyFee;
+            }
+        }
+        // rebalance the pinned setup
+        rebalancePinnedSetup();
+    }
+
+    /** @dev helper function used to update or set the pinned free setup.
+      * @param clearPinned if we're clearing the pinned setup or not.
+      * @param setPinned if we're setting the pinned setup or not.
+      * @param pinnedIndex new pinned setup index.
+     */
+    function _pinnedSetup(bool clearPinned, bool setPinned, uint256 pinnedIndex) private {
+        // if we're clearing the pinned setup we must also remove the excess reward per block
+        if (clearPinned) {
+            _hasPinned = false;
+            _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
+            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
+        }
+        // check if we're updating the pinned setup
+        if (!clearPinned && setPinned) {
+            require(_setups[pinnedIndex].free, "Invalid pinned free setup");
+            uint256 oldBalancedRewardPerBlock;
+            // check if we already have a free pinned setup
+            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+                // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block (aka currentRewardPerBlock)
+                oldBalancedRewardPerBlock = _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].currentRewardPerBlock;
+                // remove it from the current pinned setup
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, false);
+            }
+            oldBalancedRewardPerBlock = 0;
+            for(uint256 i = 0; i < _setups.length; i++) {
+                if(_setups[i].free || _setups[i].rewardPerBlock == 0 || block.number < _setups[i].startBlock || block.number > _setups[i].endBlock) {
+                    continue;
+                }
+                oldBalancedRewardPerBlock += _setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock;
+            }
+            // update pinned setup index
+            _hasPinned = true;
+            _pinnedSetupIndex = pinnedIndex;
+            // update reward per token of new pinned setup by adding the old balanced reward per block, if there's some.
+            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, true);
+            }
+        }
+    }
 
     /** @dev function used to calculate the reward in a locked liquidity mining setup.
       * @param setup liquidity mining setup.
@@ -805,6 +824,11 @@ contract LiquidityMining is ILiquidityMining {
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
+    /** @dev calls the contract at the given location using the given payload and returns the returnData.
+      * @param location location to call.
+      * @param payload call payload.
+      * @return returnData call return data.
+     */
     function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
         assembly {
             let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
