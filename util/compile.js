@@ -3,6 +3,7 @@ var os = require('os');
 var fs = require("fs");
 var solidityManager = require('solc-vm/solc-manager');
 var solidityDownloader = require('solc-vm/solc-downloader');
+var glob = require("glob");
 var { exec } = require('child_process');
 
 function cleanOutput(text) {
@@ -24,28 +25,36 @@ function cleanOutput(text) {
     return output;
 }
 
-function findSolidityVersion() {
-    var solidityVersion = process.env.npm_package_config_solidityVersion;
-    if(!solidityVersion) {
-        var location = path.resolve(__dirname, "package.json");
-        while(!fs.existsSync(location)) {
-            location = path.resolve(path.dirname(location), "..", "package.json");
-        }
-        solidityVersion = process.env.npm_package_config_solidityVersion = JSON.parse(fs.readFileSync(location, "UTF-8")).config.solidityVersion;
+var solidityVersion = process.env.npm_package_config_solidityVersion;
+if(!solidityVersion) {
+    var location = path.resolve(__dirname, "package.json");
+    while(!fs.existsSync(location)) {
+        location = path.resolve(path.dirname(location), "..", "package.json");
     }
-    return solidityVersion;
+    solidityVersion = process.env.npm_package_config_solidityVersion = JSON.parse(fs.readFileSync(location, "UTF-8")).config.solidityVersion;
 }
 
-function findNodeModulesLocation() {
-    var location = path.resolve(__dirname, "node_modules");
-    while(!fs.existsSync(location)) {
-        location = path.resolve(path.dirname(location), "..", "node_modules");
-    }
-    return location.split("\\").join("/");
+var nodeModulesLocation = path.resolve(__dirname, "node_modules");
+while(!fs.existsSync(nodeModulesLocation)) {
+    nodeModulesLocation = path.resolve(path.dirname(nodeModulesLocation), "..", "node_modules");
 }
+nodeModulesLocation = nodeModulesLocation.split("\\").join("/");
+
+var importedNodeModulesContracts = new Promise(async function(ok) {
+    var locations = {};
+    await new Promise(function(end) {
+        glob(nodeModulesLocation + '/**/*.sol', {}, (err, files) => {
+            files.forEach(it => {
+                var name = it.split('\\').join('/').split(nodeModulesLocation).join('');
+                locations[name.substring(1, name.indexOf('/', 1) + 1)] = true;
+            });
+            end();
+        });
+    });
+    return ok(Object.keys(locations).map(it => `${it}=${nodeModulesLocation}/${it}`).join(' '));
+});
 
 module.exports = async function compile(file, contractName) {
-    var solidityVersion = findSolidityVersion();
     if (!solidityManager.hasBinaryVersion(solidityVersion)) {
         await new Promise(ok => solidityDownloader.downloadBinary(solidityVersion, ok));
     }
@@ -57,8 +66,8 @@ module.exports = async function compile(file, contractName) {
     var removeAtEnd = !fs.existsSync(location);
     removeAtEnd && fs.writeFileSync(location = path.join(os.tmpdir(), `${contractName}_${new Date().getTime()}.sol`).split('\\').join('/'), file);
 
-    return await new Promise(function(ok, ko) {
-        exec(`${solidityManager.getBinary(solidityVersion)} --optimize --allow-paths ${baseLocation},${findNodeModulesLocation()} --abi --bin ${location}`, (error, stdout, stderr) => {
+    return await new Promise(async function(ok, ko) {
+        exec(`${solidityManager.getBinary(solidityVersion)} ${await importedNodeModulesContracts} --optimize --abi --bin --allow-paths ${baseLocation} ${location}`, (error, stdout, stderr) => {
             try {
                 removeAtEnd && fs.unlinkSync(location);
             } catch(e) {
