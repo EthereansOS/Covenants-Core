@@ -376,7 +376,7 @@ contract LiquidityMining is ILiquidityMining {
             _burnPosition(positionId, msg.sender);
         }
         _withdraw(positionId, unwrapPair, liquidityMiningPosition.reward, false, removedLiquidity);
-        _positionRedeemed[positionId] = true;
+        _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount;
     }
 
     /** @dev this function allows any user to rebalance the pinned setup. */
@@ -490,7 +490,7 @@ contract LiquidityMining is ILiquidityMining {
      */
     function _pinnedSetup(bool clearPinned, bool setPinned, uint256 pinnedIndex) private {
         // if we're clearing the pinned setup we must also remove the excess reward per block
-        if (clearPinned) {
+        if (clearPinned && _hasPinned) {
             _hasPinned = false;
             _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
             _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
