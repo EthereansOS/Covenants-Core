@@ -64,7 +64,7 @@ contract LiquidityMining is ILiquidityMining {
                 revert("Not owned");
             }
         } else {
-            require(_positioms[positionId].uniqueOwner == msg.sender, "Not owned");
+            require(_positions[positionId].uniqueOwner == msg.sender, "Not owned");
         }
         _;
     }
@@ -441,9 +441,6 @@ contract LiquidityMining is ILiquidityMining {
             "Invalid setup configuration"
         );
         require(!add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
-        if(!add) {
-            liquidityMiningSetup.liquidityPoolTokenAddresses = data.liquidityPoolTokenAddresses;
-        }
         address mainTokenAddress = add ? data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
         address ammPlugin = add ? data.ammPlugin : liquidityMiningSetup.ammPlugin;
         for(uint256 j = 0; j < data.liquidityPoolTokenAddresses.length; j++) {
@@ -463,6 +460,7 @@ contract LiquidityMining is ILiquidityMining {
             // adding new liquidity mining setup
             _setups.push(data);
         } else {
+            _setups[index].liquidityPoolTokenAddresses = data.liquidityPoolTokenAddresses;
             if (liquidityMiningSetup.free) {
                 // update free liquidity mining setup reward per block
                 if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
