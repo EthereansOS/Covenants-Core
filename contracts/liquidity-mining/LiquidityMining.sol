@@ -135,6 +135,8 @@ contract LiquidityMining is ILiquidityMining {
             _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i].data, liquidityMiningSetups[i].add, liquidityMiningSetups[i].index);
         }
         _pinnedSetup(clearPinned, setPinned, pinnedIndex);
+        // rebalance the pinned setup
+        rebalancePinnedSetup();
     }
 
     /** Public methods. */
@@ -236,11 +238,15 @@ contract LiquidityMining is ILiquidityMining {
         } else {
             require(msg.value == 0, "ETH not involved");
         }
-
+        // if free we must rebalance and snapshot the state
+        if (liquidityMiningPosition.free) {
+            // rebalance the reward per token
+            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, false);
+        }
+        // calculate reward before adding liquidity pool data to the position
+        (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (_calculateFreeLiquidityMiningSetupReward(positionId), 0) : _calculateLockedLiquidityMiningSetupReward(_setups[liquidityMiningPosition.setupIndex], mainTokenAmount);
         // update the liquidity pool token amount
         liquidityMiningPosition.liquidityPoolData.amount += liquidityPoolData.amount;
-
-        (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (_calculateFreeLiquidityMiningSetupReward(positionId), 0) : _calculateLockedLiquidityMiningSetupReward(_setups[liquidityMiningPosition.setupIndex], mainTokenAmount);
         if (!liquidityMiningPosition.free) {
             // transfer the reward in advance to this contract
             ILiquidityMiningExtension(_extension).transferTo(newReward, address(this));
@@ -474,8 +480,6 @@ contract LiquidityMining is ILiquidityMining {
                 _setups[index].penaltyFee = data.penaltyFee;
             }
         }
-        // rebalance the pinned setup
-        rebalancePinnedSetup();
     }
 
     /** @dev helper function used to update or set the pinned free setup.
@@ -712,6 +716,7 @@ contract LiquidityMining is ILiquidityMining {
         if (remainingLiquidity == 0) {
             _positions[positionId] = _positions[0x0];
         } else {
+            liquidityMiningPosition.creationBlock = block.number;
             liquidityMiningPosition.liquidityPoolData.amount = remainingLiquidity;
         }
     }
@@ -740,8 +745,9 @@ contract LiquidityMining is ILiquidityMining {
         uint256 remainingLiquidity = liquidityMiningPosition.liquidityPoolData.amount - removedLiquidity;
         // rebalance setup, if free
         if (_setups[liquidityMiningPosition.setupIndex].free && !isPartial) {
-            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityMiningPosition.liquidityPoolData.amount, true);
+            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, true);
             reward = (reward == 0) ? _calculateFreeLiquidityMiningSetupReward(positionId) : reward;
+            _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
         }
         liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
         // transfer the reward
