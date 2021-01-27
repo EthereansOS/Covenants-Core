@@ -63,8 +63,6 @@ contract LiquidityMining is ILiquidityMining {
             } catch {
                 revert("Not owned");
             }
-        } else {
-            require(_positions[positionId].uniqueOwner == msg.sender, "Not owned");
         }
         _;
     }
@@ -280,6 +278,9 @@ contract LiquidityMining is ILiquidityMining {
             liquidityMiningPosition.setupStartBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
             liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock,
         "Invalid liquidity mining position");
+        try INativeV1(_positionTokenCollection).balanceOf(msg.sender, positionId) returns (uint256 balanceOf) {
+            require(balanceOf == 0, "Invalid liquidityMiningPosition");
+        } catch {}
         liquidityMiningPosition.uniqueOwner = to;
         emit Transfer(positionId, msg.sender, to);
     }
@@ -321,12 +322,10 @@ contract LiquidityMining is ILiquidityMining {
     /** @dev this function allows a extension to unlock its locked liquidity mining position receiving back its tokens or the lpt amount.
       * @param positionId liquidity mining position id.
       * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
-      * @param removedLiquidity amount of liquidity that will be removed.
       */
-    function unlock(uint256 positionId, bool unwrapPair, uint256 removedLiquidity) public payable byPositionOwner(positionId) {
+    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        require(removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount, "Invalid removed liquidity");
         // check if wallet is withdrawing using a liquidity mining position token
         bool hasPositionItem = address(INativeV1(_positionTokenCollection).asInteroperable(positionId)) != address(0);
         // check if liquidity mining position is valid
@@ -348,12 +347,10 @@ contract LiquidityMining is ILiquidityMining {
                 ILiquidityMiningExtension(_extension).backToYou{value : rewardToGiveBack}(rewardToGiveBack);
             }
         }
-        if (hasPositionItem && removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount) {
+        if (hasPositionItem) {
             _burnPosition(positionId, msg.sender);
         }
-        uint256 remainingLiquidity = liquidityMiningPosition.liquidityPoolData.amount - removedLiquidity;
-        liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
-        _exit(positionId, unwrapPair, true, remainingLiquidity);
+        _exit(positionId, unwrapPair, true, 0);
     }
 
     /** @dev this function allows a extension to withdraw its liquidity mining position using its liquidity mining position token or not.
@@ -553,7 +550,7 @@ contract LiquidityMining is ILiquidityMining {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
         for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
             if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
-                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] / 1e18) * liquidityMiningPosition.liquidityPoolData.amount;
+                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolData.amount) / 1e18;
             }
         }
     }
@@ -592,6 +589,7 @@ contract LiquidityMining is ILiquidityMining {
         bool involvingETH
     ) {
         require(request.amount > 0, "No amount");
+        involvingETH = request.amountIsLiquidityPool && request.involvingETH;
         // retrieve the values
         amm = IAMM(setup.ammPlugin);
         liquidityPoolAmount = request.amountIsLiquidityPool ? request.amount : 0;
@@ -747,6 +745,7 @@ contract LiquidityMining is ILiquidityMining {
         }
         liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
         // transfer the reward
+        require(reward > 0, "to mare roia");
         if (reward > 0) {
             if(!liquidityMiningPosition.free) {
                 _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);
