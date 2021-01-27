@@ -372,8 +372,8 @@ contract LiquidityMining is ILiquidityMining {
         if(hasPositionItem && removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount) {
             _burnPosition(positionId, msg.sender);
         }
-        _withdraw(positionId, unwrapPair, liquidityMiningPosition.reward, false, removedLiquidity);
         _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount;
+        _withdraw(positionId, unwrapPair, liquidityMiningPosition.reward, false, removedLiquidity);
     }
 
     /** @dev this function allows any user to rebalance the pinned setup. */
@@ -745,7 +745,6 @@ contract LiquidityMining is ILiquidityMining {
         }
         liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
         // transfer the reward
-        require(reward > 0, "to mare roia");
         if (reward > 0) {
             if(!liquidityMiningPosition.free) {
                 _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);

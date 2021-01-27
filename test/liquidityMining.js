@@ -64,9 +64,9 @@ describe("LiquidityMining", () => {
             rewardToken = new web3.eth.Contract(context.IERC20ABI, rewardTokenAddress);
             //rewardToken = utilities.voidEthereumAddress;
 
-            // mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
-            mainToken = utilities.voidEthereumAddress;
-            secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
+            mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
+            // mainToken = utilities.voidEthereumAddress;
+            secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
             liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : wethToken.options.address).call());
 
@@ -86,7 +86,8 @@ describe("LiquidityMining", () => {
             await initActor("Dino", accounts[8], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.007, false);
             await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.007, false, true);
             await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.5);
-            await initActor("Gallitto", accounts[11], 320, 340, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.5);
+            await initActor("Gallitto", accounts[11], 320, 340, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
+            await initActor("Cappello", accounts[12], 321, 341, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.0001, 0.5, 5);
 
         } catch (error) {
             console.error(error);
@@ -517,7 +518,7 @@ describe("LiquidityMining", () => {
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
-        console.log(position);
+        actor.position = position;
         actor.enterBlock = position.creationBlock;
         actor.positionId = positionId;
         var balance = 0;
@@ -642,12 +643,13 @@ describe("LiquidityMining", () => {
             assert.strictEqual(secondaryBalance, expectedSecondaryBalance);
         }
     };
-    async function withdrawStakingPosition(actor, liquidityPercentage) {
-        if (!liquidityPercentage) liquidityPercentage = oneHundred;
+    async function withdrawStakingPosition(actor, removedLiquidity) {
         if (actor.name !== 'Bob') {
             await blockchainConnection.jumpToBlock(actor.exitBlock, true);
         }
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
+        var removesAllLiquidity = !removedLiquidity;
+        if (!removedLiquidity) removedLiquidity = position.liquidityPoolData.amount;
 
         var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
@@ -675,11 +677,9 @@ describe("LiquidityMining", () => {
         var expectedMainBalance = web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString();
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
-
-        console.log(position);
-        console.log(`expected reward balance ${expectedRewardBalance}`);
-        var transaction = await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap, web3.utils.toBN(liquidityPercentage === oneHundred ? position.liquidityPoolData.amount : (position.liquidityPoolData.amount / oneHundred) * liquidityPercentage)).send(actor.from);
-        console.log(await web3.eth.getTransactionReceipt(transaction.transactionHash));
+        var transaction = await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap, web3.utils.toBN(removedLiquidity)).send(actor.from);
+        var updatedPosition = await liquidityMiningContract.methods.position(actor.positionId).call();
+        actor.position = updatedPosition;
         rewardToken === utilities.voidEthereumAddress && (expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transaction))).toString());
         expectedRewardBalance = utilities.fromDecimals(expectedRewardBalance, rewardToken != utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
@@ -692,6 +692,12 @@ describe("LiquidityMining", () => {
         var secondaryBalance = utilities.fromDecimals(secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
         await logData(actor.exitBlock);
+
+        if (!removesAllLiquidity) {
+            assert.strictEqual(position.liquidityPoolData.amount - removedLiquidity, parseInt(updatedPosition.liquidityPoolData.amount));
+        } else {
+            assert.strictEqual(parseInt(updatedPosition.liquidityPoolData.amount), 0);
+        }
         // await logSetups();
         assert.strictEqual(rewardBalance, expectedRewardBalance);
 
@@ -1049,7 +1055,7 @@ describe("LiquidityMining", () => {
             mintPositionToken: positionItem ? true : false,
             involvingETH
         };
-        await blockchainConnection.jumpToBlock(enterBlock, true);
+        
         var oldPosition = await liquidityMiningContract.methods.position(positionId).call();
         console.log(oldPosition);
         var transaction = await liquidityMiningContract.methods.addLiquidity(positionId, stake).send({...from, value: (stake.involvingETH && !stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
@@ -1085,5 +1091,19 @@ describe("LiquidityMining", () => {
     it("should allow cavicchioli to add liquidity to its position", () => addLiquidity(actors.Cavicchioli));
     it("should allow cavicchioli to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Cavicchioli));
     it("should allow gallitto to create a new position", () => createNewStakingPosition(actors.Gallitto));
-    it("should allow gallitto to withdraw 50% of the reward", () => withdrawStakingPosition(actors.Gallitto, oneHundred / 2));
+    it("should allow cappello to create a new position", () => createNewStakingPosition(actors.Cappello));
+    it("should allow gallitto to withdraw 50% of the liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolData.amount / 2));
+        actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
+    });
+    it("should allow cappello to withdraw 25% of the liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Cappello, parseInt(actors.Cappello.position.liquidityPoolData.amount / 4));
+        actors.Cappello.exitBlock = actors.Cappello.exitBlock + 20;
+    });
+    it("should allow cappello to withdraw the remaining 75% of liquidity pool token amount", () => withdrawStakingPosition(actors.Cappello));
+    it("should allow gallitto to withdraw 33% of the remaining liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolData.amount / 3));
+        actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
+    });
+    it("should allow gallitto to withdraw the remaining liquidity pool token amount", () => withdrawStakingPosition(actors.Gallitto));
 });
