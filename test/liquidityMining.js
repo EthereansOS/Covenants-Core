@@ -87,7 +87,7 @@ describe("LiquidityMining", () => {
             await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.007, false, true);
             await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.75);
             await initActor("Gallitto", accounts[11], 320, 340, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
-            await initActor("Cappello", accounts[12], 321, 341, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
+            await initActor("Cappello", accounts[12], 321, 341, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
 
         } catch (error) {
             console.error(error);
