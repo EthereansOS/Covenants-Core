@@ -426,6 +426,8 @@ contract LiquidityMining is ILiquidityMining {
             _setOrAddLiquidityMiningSetup(liquidityMiningSetups[i], true, 0);
         }
         _pinnedSetup(false, setPinned, pinnedIndex);
+        // rebalance the pinned setup
+        rebalancePinnedSetup();
     }
 
     /** @dev helper method that given a liquidity mining setup adds it to the _setups array or updates it.
