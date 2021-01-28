@@ -505,20 +505,9 @@ contract LiquidityMining is ILiquidityMining {
                 // remove it from the current pinned setup
                 _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, false);
             }
-            oldBalancedRewardPerBlock = 0;
-            for(uint256 i = 0; i < _setups.length; i++) {
-                if(_setups[i].free || _setups[i].rewardPerBlock == 0 || block.number < _setups[i].startBlock || block.number > _setups[i].endBlock) {
-                    continue;
-                }
-                oldBalancedRewardPerBlock += _setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock;
-            }
             // update pinned setup index
             _hasPinned = true;
             _pinnedSetupIndex = pinnedIndex;
-            // update reward per token of new pinned setup by adding the old balanced reward per block, if there's some.
-            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, true);
-            }
         }
     }
 
