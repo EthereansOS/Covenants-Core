@@ -32,30 +32,38 @@ describe("Index", () => {
             context.buidlTokenAddress,
             context.usdtTokenAddress,
             context.usdcTokenAddress,
-            context.daiTokenAddress
+            context.daiTokenAddress,
+            context.mkrTokenAddress
         ].map(it => new web3.eth.Contract(context.IERC20ABI, it));
 
-        await Promise.all(tokens.filter(it => it.options.address !== context.wethTokenAddress).map(it => buyForETH(it, buyForETHAmount, amm)));
+        await Promise.all(tokens.map(it => buyForETH(it, buyForETHAmount, amm)));
 
     });
 
     async function buyForETH(token, valuePlain, ammPlugin) {
+        var value = utilities.toDecimals(valuePlain.toString(), '18');
+        if (token.options.address === context.wethTokenAddress) {
+            return await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
+                to: context.wethTokenAddress,
+                value,
+                data: web3.utils.sha3("deposit()").substring(0, 10)
+            }));
+        }
         ammPlugin = ammPlugin || amm;
         var ethereumAddress = (await ammPlugin.methods.data().call())[0];
         var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
             ethereumAddress,
             token.options.address
         ]).call())[2];
-        var amount = utilities.toDecimals(valuePlain.toString(), '18');
         await ammPlugin.methods.swapLiquidity({
-            amount,
+            amount : value,
             enterInETH : true,
             exitInETH : false,
             liquidityPoolAddresses : [liquidityPoolAddress],
             paths : [token.options.address],
             inputToken : ethereumAddress,
             receiver : utilities.voidEthereumAddress
-        }).send(blockchainConnection.getSendingOptions({value : amount}));
+        }).send(blockchainConnection.getSendingOptions({value}));
     }
 
     it("Contract creation", async () => {

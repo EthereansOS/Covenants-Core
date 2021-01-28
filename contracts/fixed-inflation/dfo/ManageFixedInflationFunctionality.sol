@@ -34,7 +34,7 @@ contract ProposalCode {
                 token.mint(amountsToMint[i]);
                 proxy.flushToWallet(address(token), false, 0);
                 if(lastAmount > 0) {
-                    proxy.transfer(to, lastAmount, address(token));
+                    proxy.transfer(msg.sender, lastAmount, address(token));
                 }
             }
             proxy.transfer(to, transferAmounts[i] + amountsToMint[i], address(token));

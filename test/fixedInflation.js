@@ -104,13 +104,31 @@ describe("FixedInflation", () => {
     }
 
     async function buyForETH(token, amount, from) {
+        var value = utilities.toDecimals(amount.toString(), '18');
+        if (token.options.address === context.wethTokenAddress) {
+            return await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
+                to: token.options.address,
+                value,
+                data: web3.utils.sha3("deposit()").substring(0, 10)
+            }));
+        }
         var path = [
             wethToken.options.address,
             token.options.address
         ];
-        var value = utilities.toDecimals(amount.toString(), '18');
-        await uniswapV2Router.methods.swapExactETHForTokens("1", path, (from && (from.from || from)) || accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({from: (from && (from.from || from)) || accounts[0], value}));
-    };
+        await uniswapV2Router.methods.swapExactETHForTokens("1", path, (from && (from.from || from)) || accounts[0], parseInt((new Date().getTime() / 1000) + 1000)).send(blockchainConnection.getSendingOptions({ from: (from && (from.from || from)) || accounts[0], value }));
+    }
+
+    async function tokenName(token) {
+        try {
+            return await token.methods.name().call();
+        } catch (e) {}
+        var raw = await web3.eth.call({
+            to: token.options.address,
+            data: web3.utils.sha3("name()").substring(0, 10)
+        });
+        return web3.utils.toUtf8(raw);
+    }
 
     async function calculateTokenAmount(tokenAddress, tokenAmount, amountIsPercentage) {
         if(tokenAddress == utilities.voidEthereumAddress || amountIsPercentage) {

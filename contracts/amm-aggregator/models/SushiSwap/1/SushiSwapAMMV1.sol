@@ -13,7 +13,7 @@ contract SushiSwapAMMV1 is ISushiSwapAMMV1, AMM {
 
     address private immutable _factoryAddress;
 
-    constructor(address sushiSwapV2RouterAddress) AMM("SushiSwapAMM", 1, _wethAddress = IUniswapV2Router(_sushiSwapV2RouterAddress = sushiSwapV2RouterAddress).WETH(), 2, true) {
+    constructor(address sushiSwapV2RouterAddress) AMM("SushiSwap", 1, _wethAddress = IUniswapV2Router(_sushiSwapV2RouterAddress = sushiSwapV2RouterAddress).WETH(), 2, true) {
         _factoryAddress = IUniswapV2Router(sushiSwapV2RouterAddress).factory();
     }
 

@@ -13,7 +13,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
 
     address private immutable _factoryAddress;
 
-    constructor(address uniswapV2RouterAddress) AMM("UniswapV2AMM", 1, _wethAddress = IUniswapV2Router(_uniswapV2RouterAddress = uniswapV2RouterAddress).WETH(), 2, true) {
+    constructor(address uniswapV2RouterAddress) AMM("UniswapV2", 1, _wethAddress = IUniswapV2Router(_uniswapV2RouterAddress = uniswapV2RouterAddress).WETH(), 2, true) {
         _factoryAddress = IUniswapV2Router(uniswapV2RouterAddress).factory();
     }
 

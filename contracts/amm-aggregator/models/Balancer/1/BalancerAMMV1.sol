@@ -36,7 +36,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         return address(0);
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address) internal virtual override returns(uint256, uint256[] memory, address, address[] memory) {
         revert("Balancer");
     }
 

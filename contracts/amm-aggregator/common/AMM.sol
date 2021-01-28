@@ -127,7 +127,8 @@ abstract contract AMM is IAMM {
         }
         address liquidityPoolCreator = _getLiquidityPoolCreator(tokenAddresses, amounts, involvingETH);
         _transferToMeAndCheckAllowance(tokenAddresses, amounts, liquidityPoolCreator, involvingETH);
-        return _createLiquidityPoolAndAddLiquidity(tokenAddresses, amounts, involvingETH, liquidityPoolCreator, receiver);
+        (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens) = _createLiquidityPoolAndAddLiquidity(tokenAddresses, amounts, involvingETH, liquidityPoolCreator, receiver);
+        emit NewLiquidityPoolAddress(liquidityPoolAddress);
     }
 
     function addLiquidity(LiquidityPoolData memory data) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {

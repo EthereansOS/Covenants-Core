@@ -34,7 +34,7 @@ contract ProposalCode {
                 token.mint(value);
                 proxy.flushToWallet(erc20TokenAddress, false, 0);
                 if(lastAmount > 0) {
-                    proxy.transfer(to, lastAmount, address(token));
+                    proxy.transfer(msg.sender, lastAmount, address(token));
                 }
             }
             proxy.transfer(to, value, erc20TokenAddress);

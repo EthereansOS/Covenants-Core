@@ -6,6 +6,8 @@ import "./AMMData.sol";
 
 interface IAMM {
 
+    event NewLiquidityPoolAddress(address indexed);
+
     function info() external view returns(string memory name, uint256 version);
 
     function data() external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools);
