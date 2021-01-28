@@ -175,6 +175,8 @@ describe("LiquidityMining", () => {
             0,
             0,
             0,
+            0,
+            0,
             true,
             0,
             0
@@ -193,14 +195,14 @@ describe("LiquidityMining", () => {
             "uint256"
         ];
         var params = [
-            utilities.voidEthereumAddress,//liquidityMiningExtension.options.address,
+            liquidityMiningExtension.options.address,
             "0x",
             ethItemOrchestrator.options.address,
             "LiquidityMiningToken",
             "LMT",
             "google.com",
             rewardToken != utilities.voidEthereumAddress ? rewardToken.options.address : utilities.voidEthereumAddress,
-            abi.encode(["tuple(address,address[],address,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256)[]"], [setups]),
+            abi.encode(["tuple(address,address[],address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256)[]"], [setups]),
             false,
             0
         ];
@@ -400,7 +402,7 @@ describe("LiquidityMining", () => {
         expectedPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(expectedPinnedFreeSetupRewardPerBlock.add(web3.utils.toBN(pinnedFreeSetup.rewardPerBlock)).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
         if(rewardDestination === dfo.mvdWalletAddress) {
-            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
+            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
             var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 1);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
@@ -814,7 +816,7 @@ describe("LiquidityMining", () => {
         var liquidityMiningSetups = [longTerm3Setup];
 
         if(rewardDestination === dfo.mvdWalletAddress) {
-            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
+            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
             var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, false, 0);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
@@ -921,7 +923,7 @@ describe("LiquidityMining", () => {
         var liquidityMiningSetups = [newFreeSetup];
 
         if(rewardDestination === dfo.mvdWalletAddress) {
-            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
+            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
             var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, false, 0);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
@@ -967,7 +969,7 @@ describe("LiquidityMining", () => {
         };
 
         zeroBlock = (await web3.eth.getBlockNumber());
-        
+
         var longTerm5SetupStartBlock = zeroBlock;
         var longTerm5SetupDuration = 45;
         longTerm5SetupEndBlock = longTerm5SetupStartBlock + longTerm5SetupDuration;
@@ -992,11 +994,10 @@ describe("LiquidityMining", () => {
             add : true
         };
 
-
         var liquidityMiningSetups = [newFreeSetup, longTerm5Setup];
 
         if(rewardDestination === dfo.mvdWalletAddress) {
-            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${mainToken != utilities.voidEthereumAddress ? mainToken.options.address : utilities.voidEthereumAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
+            var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
             var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 1);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
