@@ -178,7 +178,7 @@ contract LiquidityMining is ILiquidityMining {
         uint256 reward;
         uint256 lockedRewardPerBlock;
         if (!chosenSetup.free) {
-            (reward, lockedRewardPerBlock) = _calculateLockedLiquidityMiningSetupReward(chosenSetup, mainTokenAmount);
+            (reward, lockedRewardPerBlock) = calculateLockedLiquidityMiningSetupReward(request.setupIndex, mainTokenAmount, false, 0);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
             ILiquidityMiningExtension(_extension).transferTo(reward, address(this));
             chosenSetup.currentRewardPerBlock += lockedRewardPerBlock;
@@ -244,7 +244,7 @@ contract LiquidityMining is ILiquidityMining {
             _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, false);
         }
         // calculate reward before adding liquidity pool data to the position
-        (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (_calculateFreeLiquidityMiningSetupReward(positionId), 0) : _calculateLockedLiquidityMiningSetupReward(_setups[liquidityMiningPosition.setupIndex], mainTokenAmount);
+        (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (calculateFreeLiquidityMiningSetupReward(positionId), 0) : calculateLockedLiquidityMiningSetupReward(liquidityMiningPosition.setupIndex, mainTokenAmount, false, 0);
         // update the liquidity pool token amount
         liquidityMiningPosition.liquidityPoolData.amount += liquidityPoolData.amount;
         if (!liquidityMiningPosition.free) {
@@ -309,7 +309,7 @@ contract LiquidityMining is ILiquidityMining {
             // check if reward is available
             require(liquidityMiningPosition.reward > 0, "No reward");
             // calculate the reward from the liquidity mining position creation block to the current block multiplied by the reward per block
-            uint256 reward = (block.number >= liquidityMiningPosition.setupEndBlock) ? liquidityMiningPosition.reward : ((block.number - liquidityMiningPosition.creationBlock) * liquidityMiningPosition.lockedRewardPerBlock);
+            (uint256 reward,) = calculateLockedLiquidityMiningSetupReward(0, 0, true, positionId);
             require(reward <= liquidityMiningPosition.reward, "Reward is bigger than expected");
             // remove the partial reward from the liquidity mining position total reward
             liquidityMiningPosition.reward = liquidityMiningPosition.reward - reward;
@@ -317,7 +317,7 @@ contract LiquidityMining is ILiquidityMining {
             _withdraw(positionId, false, reward, true, 0);
         } else {
             // withdraw the values
-            _withdraw(positionId, false, _calculateFreeLiquidityMiningSetupReward(positionId), true, 0);
+            _withdraw(positionId, false, calculateFreeLiquidityMiningSetupReward(positionId), true, 0);
             // update the liquidity mining position creation block to exclude all the rewarded blocks
             liquidityMiningPosition.creationBlock = block.number;
         }
@@ -409,6 +409,53 @@ contract LiquidityMining is ILiquidityMining {
         _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
         if (_hasPinned && _setups[_pinnedSetupIndex].free) {
             _rebalanceRewardPerBlock(_pinnedSetupIndex, amount, true);
+        }
+    }
+
+    /** @dev function used to calculate the reward in a locked liquidity mining setup.
+      * @param setupIndex liquidity mining setup index.
+      * @param mainTokenAmount amount of main token.
+      * @param isPartial if we're calculating a partial reward.
+      * @param positionId id of the position (used for the partial reward).
+      * @return reward total reward for the liquidity mining position extension.
+      * @return relativeRewardPerBlock returned for the pinned free setup balancing.
+     */
+    function calculateLockedLiquidityMiningSetupReward(uint256 setupIndex, uint256 mainTokenAmount, bool isPartial, uint256 positionId) public view returns(uint256 reward, uint256 relativeRewardPerBlock) {
+        if (isPartial) {
+            // retrieve the position
+            LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
+            // calculate the reward
+            reward = (block.number >= liquidityMiningPosition.setupEndBlock) ? liquidityMiningPosition.reward : ((block.number - liquidityMiningPosition.creationBlock) * liquidityMiningPosition.lockedRewardPerBlock);
+        } else {
+            LiquidityMiningSetup memory setup = _setups[setupIndex];
+            // check if main token amount is less than the stakeable liquidity
+            require(mainTokenAmount <= setup.maximumLiquidity - setup.currentStakedLiquidity, "Too much liquidity!");
+            uint256 remainingBlocks = block.number > setup.endBlock ? 0 : setup.endBlock - block.number;
+            // get amount of remaining blocks
+            require(remainingBlocks > 0, "Setup ended");
+            // get total reward still available (= 0 if rewardPerBlock = 0)
+            require(setup.rewardPerBlock * remainingBlocks > 0, "No rewards");
+            // calculate relativeRewardPerBlock
+            relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / setup.maximumLiquidity)) / 1e18;
+            // check if rewardPerBlock is greater than 0
+            require(relativeRewardPerBlock > 0, "relativeRewardPerBlock must be greater than 0");
+            // calculate reward by multiplying relative reward per block and the remaining blocks
+            reward = relativeRewardPerBlock * remainingBlocks;
+            // check if the reward is still available
+            require(relativeRewardPerBlock <= (setup.rewardPerBlock - setup.currentRewardPerBlock), "No availability");
+        }
+    }
+
+    /** @dev function used to calculate the reward in a free liquidity mining setup.
+      * @param positionId liquidity mining position id.
+      * @return reward total reward for the liquidity mining position extension.
+     */
+    function calculateFreeLiquidityMiningSetupReward(uint256 positionId) public view returns(uint256 reward) {
+        LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
+        for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
+            if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
+                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolData.amount) / 1e18;
+            }
         }
     }
 
@@ -511,57 +558,6 @@ contract LiquidityMining is ILiquidityMining {
             _hasPinned = true;
             _pinnedSetupIndex = pinnedIndex;
         }
-    }
-
-    /** @dev function used to calculate the reward in a locked liquidity mining setup.
-      * @param setup liquidity mining setup.
-      * @param mainTokenAmount amount of main token.
-      * @return reward total reward for the liquidity mining position extension.
-      * @return relativeRewardPerBlock returned for the pinned free setup balancing.
-     */
-    function _calculateLockedLiquidityMiningSetupReward(LiquidityMiningSetup storage setup, uint256 mainTokenAmount) private view returns(uint256 reward, uint256 relativeRewardPerBlock) {
-        // check if main token amount is less than the stakeable liquidity
-        require(mainTokenAmount <= setup.maximumLiquidity - setup.currentStakedLiquidity, "Too much liquidity!");
-        uint256 remainingBlocks = block.number > setup.endBlock ? 0 : setup.endBlock - block.number;
-        // get amount of remaining blocks
-        require(remainingBlocks > 0, "Setup ended");
-        // get total reward still available (= 0 if rewardPerBlock = 0)
-        require(setup.rewardPerBlock * remainingBlocks > 0, "No rewards");
-        // calculate relativeRewardPerBlock
-        relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / setup.maximumLiquidity)) / 1e18;
-        // check if rewardPerBlock is greater than 0
-        require(relativeRewardPerBlock > 0, "relativeRewardPerBlock must be greater than 0");
-        // calculate reward by multiplying relative reward per block and the remaining blocks
-        reward = relativeRewardPerBlock * remainingBlocks;
-        // check if the reward is still available
-        require(relativeRewardPerBlock <= (setup.rewardPerBlock - setup.currentRewardPerBlock), "No availability");
-    }
-
-    /** @dev function used to calculate the reward in a free liquidity mining setup.
-      * @param positionId wallet liquidity mining position id.
-      * @return reward total reward for the liquidity mining position extension.
-     */
-    function _calculateFreeLiquidityMiningSetupReward(uint256 positionId) public view returns(uint256 reward) {
-        LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
-        for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
-            if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
-                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolData.amount) / 1e18;
-            }
-        }
-    }
-
-    /** @dev returns true if the input token is in the tokens array, hence is an accepted one; false otherwise.
-      * @param tokens array of tokens addresses.
-      * @param token token address to check.
-      * @return true if token in tokens, false otherwise.
-      */
-    function _isAcceptedToken(address[] memory tokens, address token) private pure returns(bool) {
-        for (uint256 i = 0; i < tokens.length; i++) {
-            if (tokens[i] == token) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** @dev this function performs the transfer of the tokens that will be staked, interacting with the AMM plugin.
@@ -737,7 +733,7 @@ contract LiquidityMining is ILiquidityMining {
         // rebalance setup, if free
         if (_setups[liquidityMiningPosition.setupIndex].free && !isPartial) {
             _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, true);
-            reward = (reward == 0) ? _calculateFreeLiquidityMiningSetupReward(positionId) : reward;
+            reward = (reward == 0) ? calculateFreeLiquidityMiningSetupReward(positionId) : reward;
             _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
         }
         liquidityMiningPosition.liquidityPoolData.amount = removedLiquidity;
