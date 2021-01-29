@@ -32,6 +32,8 @@ interface IAMM {
     function removeLiquidity(LiquidityPoolData calldata data) external returns(uint256, uint256[] memory, address[] memory);
     function removeLiquidityBatch(LiquidityPoolData[] calldata data) external returns(uint256[] memory, uint256[][] memory, address[][] memory);
 
+    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata liquidityPoolAddresses, address[] calldata path) external view returns(uint256[] memory);
+
     function swapLiquidity(SwapData calldata data) external payable returns(uint256);
     function swapLiquidityBatch(SwapData[] calldata data) external payable returns(uint256[] memory);
 }

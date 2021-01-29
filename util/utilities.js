@@ -9,6 +9,8 @@ if (!String.prototype.format) {
 
 var voidEthereumAddress = "0x0000000000000000000000000000000000000000";
 
+var voidBytes32 = "0x0000000000000000000000000000000000000000000000000000000000000000";
+
 global.formatMoneyDecPlaces = 4;
 
 function fromDecimals(n, d, noFormat) {
@@ -160,6 +162,7 @@ function toEthereumSymbol(decimals) {
 
 module.exports = {
     voidEthereumAddress,
+    voidBytes32,
     fromDecimals,
     toDecimals,
     numberToString,

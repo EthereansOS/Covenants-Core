@@ -25,6 +25,8 @@ struct FixedInflationOperation {
     address ammPlugin;
     address[] liquidityPoolAddresses;
     address[] swapPath;
+    bool enterInETH;
+    bool exitInETH;
 
     address[] receivers;
     uint256[] receiversPercentages;

@@ -13,7 +13,7 @@ contract FixedInflation is IFixedInflation {
 
     event Entry(bytes32 indexed id);
 
-    uint256 public constant ONE_HUNDRED = 10000;
+    uint256 public constant ONE_HUNDRED = 1000000;
 
     address public _factory;
 
@@ -103,7 +103,7 @@ contract FixedInflation is IFixedInflation {
     function _collectFixedInflationOperationsTokens(FixedInflationOperation[] memory operations) private {
         for(uint256 i = 0; i < operations.length; i++) {
             FixedInflationOperation memory operation = operations[i];
-            _collectTokenData(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, operation.inputTokenAmountIsByMint);
+            _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, operation.inputTokenAmountIsByMint);
         }
     }
 
@@ -152,17 +152,27 @@ contract FixedInflation is IFixedInflation {
 
         uint256 inputReward = earnByInput ? _calculateRewardPercentage(amountIn, callerRewardPercentage) : 0;
 
+        (address ethereumAddress,,) = IAMM(operation.ammPlugin).data();
+
+        if(operation.exitInETH) {
+            operation.swapPath[operation.swapPath.length - 1] = ethereumAddress;
+        }
+
         address outputToken = operation.swapPath[operation.swapPath.length - 1];
 
         SwapData memory swapData = SwapData(
-            operation.inputTokenAddress == address(0),
-            outputToken == address(0),
+            operation.enterInETH,
+            operation.exitInETH,
             operation.liquidityPoolAddresses,
             operation.swapPath,
-            operation.inputTokenAddress,
+            operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
             amountIn - inputReward,
             address(this)
         );
+
+        if(swapData.inputToken != address(0) && !swapData.enterInETH) {
+            _safeApprove(swapData.inputToken, operation.ammPlugin, swapData.amount);
+        }
 
         uint256 amountOut;
         if(swapData.enterInETH) {
@@ -172,9 +182,9 @@ contract FixedInflation is IFixedInflation {
         }
 
         if(earnByInput) {
-            _transferTo(operation.inputTokenAddress, rewardReceiver, inputReward);
+            _transferTo(operation.enterInETH ? address(0) : operation.inputTokenAddress, rewardReceiver, inputReward);
         }
-        _transferTo(outputToken, amountOut, earnByInput ? address(0) : rewardReceiver, earnByInput ? 0 : callerRewardPercentage, operation.receivers, operation.receiversPercentages);
+        _transferTo(operation.exitInETH ? address(0) : outputToken, amountOut, earnByInput ? address(0) : rewardReceiver, earnByInput ? 0 : callerRewardPercentage, operation.receivers, operation.receiversPercentages);
     }
 
     function _calculateRewardPercentage(uint256 totalAmount, uint256 rewardPercentage) private pure returns (uint256) {
@@ -210,6 +220,11 @@ contract FixedInflation is IFixedInflation {
             return;
         }
         _safeTransfer(erc20TokenAddress, to, value);
+    }
+
+    function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) private {

@@ -59,6 +59,16 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         orderedTokens[1] = pair.token1();
     }
 
+    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata, address[] calldata path) view public virtual override returns(uint256[] memory) {
+        address[] memory realPath = new address[](path.length + 1);
+        realPath[0] = tokenAddress;
+        for(uint256 i = 0; i < path.length; i++) {
+            realPath[i + 1] = path[i];
+        }
+        return IUniswapV2Router(_uniswapV2RouterAddress).getAmountsOut(tokenAmount, realPath);
+    }
+
+
     function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
         return _uniswapV2RouterAddress;
     }
