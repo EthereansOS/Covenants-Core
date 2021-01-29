@@ -571,7 +571,7 @@ describe("AMM", () => {
         }
     });
 
-    async function swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne) {
+    async function swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle) {
 
         var inputToken = enterInETH ? amm.ethereumAddress : randomTokenAddress(amm.ethereumAddress);
 
@@ -582,6 +582,8 @@ describe("AMM", () => {
         var liquidityPoolAddress;
 
         while((liquidityPoolAddress = (await amm.contract.methods.byTokens([inputToken, otherToken = randomTokenAddress(inputToken)]).call())[2]) === utilities.voidEthereumAddress) {
+            console.log(otherToken);
+            await utilities.sleep();
         }
 
         var paths = [otherToken];
@@ -710,18 +712,22 @@ describe("AMM", () => {
                 await swapLiquidity(amm, accounts[1], true, false, true);
                 console.log("receiver path +: exitInETH");
                 await swapLiquidity(amm, accounts[1], false, true, true);
-                console.log("receiver path +: enterInETH exitInETH (must fail)");
+                console.log("receiver path +: enterInETH exitInETH");
                 await swapLiquidity(amm, accounts[1], true, true, true);
                 console.log("receiver path +: noEth");
                 await swapLiquidity(amm, accounts[1], false, false, true);
+                console.log("receiver path +: ethInTheMiddle");
+                await swapLiquidity(amm, accounts[1], false, false, true, true);
                 console.log("no receiver path +: enterInETH");
                 await swapLiquidity(amm, undefined, true, false, true);
                 console.log("no receiver path +: exitInETH");
                 await swapLiquidity(amm, undefined, false, true, true);
-                console.log("no receiver path +: enterInETH exitInETH (must fail)");
+                console.log("no receiver path +: enterInETH exitInETH");
                 await swapLiquidity(amm, undefined, true, true, true);
                 console.log("no receiver path +: noEth");
                 await swapLiquidity(amm, undefined, false, false, true);
+                console.log("no receiver path +: ethInTheMiddle");
+                await swapLiquidity(amm, undefined, false, false, true, true);
             } catch (e) {
                 throw e;
             }

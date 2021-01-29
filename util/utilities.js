@@ -112,6 +112,12 @@ function eliminateFloatingFinalZeroes(value, decSeparator) {
     return split[1].length === 0 ? split[0] : split.join(decSeparator);
 }
 
+function sleep(millis) {
+    return new Promise(function(ok) {
+        setTimeout(ok, millis || 300);
+    });
+}
+
 function toEthereumSymbol(decimals) {
     var symbols = {
         "noether": "0",
@@ -160,5 +166,6 @@ module.exports = {
     formatNumber,
     formatMoney,
     eliminateFloatingFinalZeroes,
-    toEthereumSymbol
+    toEthereumSymbol,
+    sleep
 }
