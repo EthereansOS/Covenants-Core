@@ -103,7 +103,7 @@ describe("LiquidityMining", () => {
             from : blockchainConnection.getSendingOptions({from : address}),
             enterBlock,
             exitBlock,
-            setupIndex : setupIndex + 1,
+            setupIndex : setupIndex + 2,
             liquidityPoolAddressIndex,
             unwrap,
             mainTokenAmountPlain,
@@ -180,6 +180,22 @@ describe("LiquidityMining", () => {
             true,
             0,
             0
+        ],
+        [
+            uniswapAMM.options.address,
+            [liquidityPool.options.address],
+            mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address,
+            0,
+            (await web3.eth.getBlockNumber()) + 10,
+            "500000000000000000",
+            0,
+            0,
+            0,
+            "10000000000000000000",
+            0,
+            false,
+            0,
+            0
         ]];
 
         var types = [
@@ -203,7 +219,7 @@ describe("LiquidityMining", () => {
             "google.com",
             rewardToken != utilities.voidEthereumAddress ? rewardToken.options.address : utilities.voidEthereumAddress,
             abi.encode(["tuple(address,address[],address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256)[]"], [setups]),
-            false,
+            true,
             0
         ];
 
@@ -226,6 +242,9 @@ describe("LiquidityMining", () => {
 
         assert.strictEqual(await liquidityMiningContract.methods._extension().call(), liquidityMiningExtension.options.address);
         assert.notStrictEqual(await liquidityMiningContract.methods._extension().call(), utilities.voidEthereumAddress);
+
+        var setups = await liquidityMiningContract.methods.setups().call();
+        assert.strictEqual(setups[0].rewardPerBlock, "500000000000000005");
 
         for(var actor of Object.values(actors)) {
             if (mainToken != utilities.voidEthereumAddress) await mainToken.methods.approve(liquidityMiningContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
@@ -403,7 +422,7 @@ describe("LiquidityMining", () => {
 
         if(rewardDestination === dfo.mvdWalletAddress) {
             var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
-            var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 1);
+            var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 2);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
         } else {
@@ -413,14 +432,14 @@ describe("LiquidityMining", () => {
                     index : data.index || 0,
                     data
                 }
-            }), false, true, 1).send(blockchainConnection.getSendingOptions());
+            }), false, true, 2).send(blockchainConnection.getSendingOptions());
         }
         assert.strictEqual((await liquidityMiningContract.methods.setups().call()).length, expectedLength);
 
         assert(await liquidityMiningContract.methods._hasPinned().call());
 
         var pinnedSetupIndex = await liquidityMiningContract.methods._pinnedSetupIndex().call();
-        assert.strictEqual(pinnedSetupIndex, "1");
+        assert.strictEqual(pinnedSetupIndex, "2");
 
         var setup = (await liquidityMiningContract.methods.setups().call())[pinnedSetupIndex];
         var currentPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(setup.rewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -934,19 +953,19 @@ describe("LiquidityMining", () => {
                     index : data.index || 0,
                     data
                 }
-            }), false, true, 1).send(blockchainConnection.getSendingOptions());
+            }), false, false, 0).send(blockchainConnection.getSendingOptions());
         }
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
     it("cavicchioli should set a new staking position without a position token", async() => createNewStakingPosition(actors.Cavicchioli));
-    it("should update liquidity mining setup at index 5", async () => {
+    it("should update liquidity mining setup at index 6", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
         var oldPinnedSetupIndex = await liquidityMiningContract.methods._pinnedSetupIndex().call();
         var oldPinnedSetup = (await liquidityMiningContract.methods.setups().call())[oldPinnedSetupIndex];
 
-        var setupIndex = 5;
+        var setupIndex = 6;
 
         var newFreeRewardPerBlockPlain = 0.5;
         var newFreeRewardPerBlock = utilities.toDecimals(newFreeRewardPerBlockPlain, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -998,7 +1017,7 @@ describe("LiquidityMining", () => {
 
         if(rewardDestination === dfo.mvdWalletAddress) {
             var liquidityMiningSetupsCode = liquidityMiningSetups.map((it, i) => `liquidityMiningSetups[${i}] = LiquidityMiningSetupConfiguration(${it.add || false}, ${it.index || it.setupIndex || 0}, LiquidityMiningSetup(${it.ammPlugin}, liquidityPoolTokenAddresses, ${it.mainTokenAddress}, ${it.startBlock}, ${it.endBlock}, ${it.rewardPerBlock}, ${it.currentRewardPerBlock}, ${it.totalSupply}, ${it.lastBlockUpdate}, ${it.maximumLiquidity}, ${it.currentStakedLiquidity}, ${it.free}, ${it.renewTimes}, ${it.penaltyFee}));`).join('\n        ');
-            var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 1);
+            var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 2);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
             var elapsedBlocks = (await web3.eth.getBlockNumber()) - zeroBlock - 1;
@@ -1011,12 +1030,12 @@ describe("LiquidityMining", () => {
                     index : data.index || data.setupIndex || 0,
                     data
                 }
-            }), false, true, 1).send(blockchainConnection.getSendingOptions());
+            }), false, true, 2).send(blockchainConnection.getSendingOptions());
         }
         await logSetups();
         var newPinnedIndex = await liquidityMiningContract.methods._pinnedSetupIndex().call();
         var newPinnedSetup = (await liquidityMiningContract.methods.setups().call())[newPinnedIndex];
-        assert.strictEqual(parseInt(newPinnedIndex), 1);
+        assert.strictEqual(parseInt(newPinnedIndex), 2);
 
         var setup = (await liquidityMiningContract.methods.setups().call())[setupIndex];
         assert.strictEqual(setup.rewardPerBlock, newFreeSetup.rewardPerBlock);
