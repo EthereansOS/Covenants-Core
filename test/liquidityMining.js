@@ -1001,6 +1001,9 @@ describe("LiquidityMining", () => {
             var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetLiquidityMiningSetupsProposal.sol'), 'UTF-8').format(liquidityPool.options.address, liquidityMiningSetups.length, liquidityMiningSetupsCode, liquidityMiningExtension.options.address, false, true, 1);
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
+            var elapsedBlocks = (await web3.eth.getBlockNumber()) - zeroBlock - 1;
+            console.log(`${elapsedBlocks} - ${await web3.eth.getBlockNumber()}`);
+            actors.Cavicchioli.expectedReward -= (actors.Cavicchioli.expectedPinnedFreeRewardPerBlock * elapsedBlocks);
         } else {
             await liquidityMiningExtension.methods.setLiquidityMiningSetups(liquidityMiningSetups.map(data => {
                 return {
