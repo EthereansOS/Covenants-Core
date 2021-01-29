@@ -91,14 +91,14 @@ describe("Index", () => {
 
         var tokenAddresses = tokens.map(it => it.options ? it.options.address : it);
 
-        var transaction = await indexContract.methods.mint(name, symbol, uri, tokenAddresses, amounts, amountToMint || 0, accounts[0]).send(blockchainConnection.getSendingOptions({value : ethInvolved ? parseInt(amounts[tokenAddresses.indexOf(utilities.voidEthereumAddress)]) * (amountToMint || 0) : 0}));
+        var transaction = await indexContract.methods.mint(name, symbol, uri, tokenAddresses, amounts, utilities.toDecimals(amountToMint || 0, 18), accounts[0]).send(blockchainConnection.getSendingOptions({value : ethInvolved ? parseInt(amounts[tokenAddresses.indexOf(utilities.voidEthereumAddress)]) * (amountToMint || 0) : 0}));
 
         transaction = await web3.eth.getTransactionReceipt(transaction.transactionHash);
         var event = web3.utils.sha3("NewIndex(uint256,address,address,uint256)");
         var objectId = transaction.logs.filter(it => it.topics[0] === event)[0].topics[1];
         objectId = web3.eth.abi.decodeParameter("uint256", objectId);
 
-        var data = await indexContract.methods.info(objectId).call();
+        var data = await indexContract.methods.info(objectId, 0).call();
 
         assert.strictEqual(JSON.stringify(data[0]), JSON.stringify(tokenAddresses));
         assert.strictEqual(JSON.stringify(data[1]), JSON.stringify(amounts));
@@ -130,16 +130,18 @@ describe("Index", () => {
         return objectIds;
     }
 
-    it("Index creation", () => newIndex("Maralla", "Mulino", "google.com", tokens.map(it => it.options.address === context.wethTokenAddress ? utilities.voidEthereumAddress : it), tokens.map(() => 4), 5));
+    it("Index creation", () => newIndex("Maralla", "Mulino", "google.com", tokens.map(it => it.options.address === context.wethTokenAddress ? utilities.voidEthereumAddress : it), tokens.map(() => 4), 6.05));
 
     it("Mint more", async () => {
         var objectId = (await getObjectIds())[0];
         var amountToMint = 3;
+        amountToMint = utilities.toDecimals(amountToMint, 18);
+        var oneHundred = web3.utils.toBN(1e18);
         var receiver = accounts[1];
         var balanceOfBefore = await indexCollection.methods.balanceOf(receiver, objectId).call();
-        var balanceOfExpected = web3.utils.toBN(balanceOfBefore).add(web3.utils.toBN(utilities.toDecimals(amountToMint, 18))).toString();
+        var balanceOfExpected = web3.utils.toBN(balanceOfBefore).add(web3.utils.toBN(amountToMint)).toString();
 
-        var data = await indexContract.methods.info(objectId).call();
+        var data = await indexContract.methods.info(objectId, 0).call();
 
         var retrievedTokens = data[0];
         var originalAmounts = data[1];
@@ -147,7 +149,7 @@ describe("Index", () => {
         var amounts = [];
         for(var i in retrievedTokens) {
             var token = retrievedTokens[i] === utilities.voidEthereumAddress ? retrievedTokens[i] : new web3.eth.Contract(context.IERC20ABI, retrievedTokens[i]);
-            amounts.push(web3.utils.toBN(originalAmounts[i]).mul(web3.utils.toBN(amountToMint)).toString());
+            amounts.push(web3.utils.toBN(originalAmounts[i]).mul(web3.utils.toBN(amountToMint)).div(oneHundred).toString());
             try {
                 token.methods && await token.methods.approve(indexContract.options.address, amounts[i]).send(blockchainConnection.getSendingOptions());
             } catch(e) {
@@ -165,7 +167,7 @@ describe("Index", () => {
 
         var expectedAmount = web3.utils.toBN(await indexCollection.methods.balanceOf(accounts[0], objectId).call()).sub(web3.utils.toBN(amountToBurn)).toString();
 
-        var data = await indexContract.methods.info(objectId).call();
+        var data = await indexContract.methods.info(objectId, 0).call();
         var retrievedTokens = data[0];
         var originalAmounts = data[1];
 
@@ -192,7 +194,7 @@ describe("Index", () => {
         assert.strictEqual(await indexCollection.methods.balanceOf(accounts[0], objectId).call(), expectedAmount);
     }
 
-    it("Burn some", async () => await burn((await getObjectIds())[0], 2.38, accounts[2]));
+    it("Burn some", async () => await burn((await getObjectIds())[0], 0.00001, accounts[2]));
 
     it("Multiple Burn", async () => {
 
@@ -201,7 +203,7 @@ describe("Index", () => {
         var amountToBurn = utilities.toDecimals(utilities.formatMoney(Math.random(), 6), 18);
 
         var tkns = tokens.filter(it => it.options.address !== context.wethTokenAddress);
-        await newIndex("Gneppo", "Gnappo", "google.com", tkns, tkns.map(() => utilities.formatMoney(Math.random(), 6)), 5);
+        await newIndex("Gneppo", "Gnappo", "google.com", tkns, tkns.map(() => utilities.formatMoney(Math.random(), 6)), 9);
 
         var objectIds = await getObjectIds();
 
@@ -210,7 +212,7 @@ describe("Index", () => {
         var tokenValues = {}
 
         for(var objectId of objectIds) {
-            var data = await indexContract.methods.info(objectId).call();
+            var data = await indexContract.methods.info(objectId, 0).call();
             var retrievedTokens = data[0];
             var originalAmounts = data[1];
 

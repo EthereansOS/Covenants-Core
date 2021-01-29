@@ -22,18 +22,24 @@ contract Index is ERC1155Receiver {
         (collection,) = IEthItemOrchestrator(ethItemOrchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, uri, address(this), ""), "");
     }
 
-    function info(uint256 objectId) public view returns(address[] memory, uint256[] memory) {
-        return (tokens[objectId], amounts[objectId]);
+    function info(uint256 objectId, uint256 value) public view returns(address[] memory _tokens, uint256[] memory _amounts) {
+        uint256 amount = value == 0 ? 1e18 : value;
+        _tokens = tokens[objectId];
+        _amounts = new uint256[](_tokens.length);
+        for(uint256 i = 0; i < _amounts.length; i++) {
+            _amounts[i] = (amounts[objectId][i] * amount) / 1e18;
+        }
     }
 
-    function mint(string memory name, string memory symbol, string memory uri, address[] memory _tokens, uint256[] memory _amounts, uint256 toMint, address receiver) public payable returns(uint256 objectId, address interoperableInterfaceAddress) {
+    function mint(string memory name, string memory symbol, string memory uri, address[] memory _tokens, uint256[] memory _amounts, uint256 value, address receiver) public payable returns(uint256 objectId, address interoperableInterfaceAddress) {
         require(_tokens.length > 0 && _tokens.length == _amounts.length, "invalid length");
         for(uint256 i = 0; i < _tokens.length; i++) {
             require(!_temporaryIndex[_tokens[i]], "already done");
             require(_amounts[i] > 0, "amount");
             _temporaryIndex[_tokens[i]] = true;
-            uint256 tokenValue = toMint == 0 ? 0 : toMint * _amounts[i];
-            if(tokenValue > 0) {
+            if(value > 0) {
+                uint256 tokenValue = (_amounts[i] * value) / 1e18;
+                require(tokenValue > 0, "Insufficient balance");
                 if(_tokens[i] == address(0)) {
                     require(msg.value == tokenValue, "insufficient eth");
                 } else {
@@ -43,10 +49,10 @@ contract Index is ERC1155Receiver {
         }
         require(_temporaryIndex[address(0)] || msg.value == 0, "eth not involved");
         INativeV1 theCollection = INativeV1(collection);
-        (objectId, interoperableInterfaceAddress) = theCollection.mint((toMint == 0 ? 1 : toMint) * 1e18, name, symbol, uri, true);
+        (objectId, interoperableInterfaceAddress) = theCollection.mint(value == 0 ? 1e18 : value, name, symbol, uri, true);
         tokens[objectId] = _tokens;
         amounts[objectId] = _amounts;
-        if(toMint == 0) {
+        if(value == 0) {
             theCollection.burn(objectId, theCollection.balanceOf(address(this), objectId));
         } else {
             _safeTransfer(interoperableInterfaceAddress, receiver == address(0) ? msg.sender : receiver, theCollection.toInteroperableInterfaceAmount(objectId, theCollection.balanceOf(address(this), objectId)));
@@ -57,11 +63,12 @@ contract Index is ERC1155Receiver {
         }
     }
 
-    function mint(uint256 objectId, uint256 toMint, address receiver) public payable {
-        require(toMint > 0, "toMint");
+    function mint(uint256 objectId, uint256 value, address receiver) public payable {
+        require(value > 0, "value");
         bool ethInvolved = false;
         for(uint256 i = 0; i < tokens[objectId].length; i++) {
-            uint256 tokenValue = toMint * amounts[objectId][i];
+            uint256 tokenValue = (amounts[objectId][i] * value) / 1e18;
+            require(tokenValue > 0, "Insufficient balance");
             if(tokens[objectId][i] == address(0)) {
                 ethInvolved = true;
                  require(msg.value == tokenValue, "insufficient eth");
@@ -71,7 +78,7 @@ contract Index is ERC1155Receiver {
         }
         require(ethInvolved || msg.value == 0, "eth not involved");
         INativeV1 theCollection = INativeV1(collection);
-        theCollection.mint(objectId, toMint * 1e18);
+        theCollection.mint(objectId, value);
         _safeTransfer(address(theCollection.asInteroperable(objectId)), receiver == address(0) ? msg.sender : receiver, theCollection.toInteroperableInterfaceAmount(objectId, theCollection.balanceOf(address(this), objectId)));
     }
 
