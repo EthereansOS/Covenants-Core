@@ -166,6 +166,7 @@ describe("LiquidityMining", () => {
         await dfoManager.finalizeProposal(dfo, proposal);
 
         var transaction = await liquidityMiningFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());
+
         var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
         var clonedDefaultLiquidityMiningAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
 
@@ -230,9 +231,11 @@ describe("LiquidityMining", () => {
         var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
 
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
+        console.log('here 4');
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
         var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address,bytes)"))[0].topics[1]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
+        console.log('here 5');
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
         oneHundred = await liquidityMiningContract.methods.ONE_HUNDRED().call();
 
@@ -276,7 +279,7 @@ describe("LiquidityMining", () => {
                 0,
                 1
             ]];
-            await liquidityMiningContract.methods.init(accounts[0], "0x", ethItemOrchestrator.options.address, "TestCollection1", "TSTC", "test", ethItemOrchestrator.options.address,
+            await liquidityMiningContract.methods.init(accounts[0], "0x", ethItemOrchestrator.options.address, ethItemOrchestrator.options.address,
             abi.encode(["tuple(address,address[],address,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256)[]"], [setups]),
             false,
             0).send(blockchainConnection.getSendingOptions());
@@ -670,7 +673,9 @@ describe("LiquidityMining", () => {
         }
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
         var removesAllLiquidity = !removedLiquidity;
-        if (removesAllLiquidity) removedLiquidity = position.liquidityPoolData.amount;
+        if (removesAllLiquidity) { 
+            removedLiquidity = position.liquidityPoolData.amount;
+        }
 
         var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
@@ -698,7 +703,21 @@ describe("LiquidityMining", () => {
         var expectedMainBalance = web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString();
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
+        
+        if (!removesAllLiquidity || actor.hasPartiallyWithdrawn) {
+            if (!actor.hasPartiallyWithdrawn) {
+                actor.hasPartiallyWithdrawn = true;
+            } else {
+                var calculatedFreeReward = await liquidityMiningContract.methods.calculateFreeLiquidityMiningSetupReward(actor.positionId, true).call();
+                console.log(`calculated free reward ${calculatedFreeReward}`);
+                console.log(`reward balance ${rewardBalance}`);
+                expectedRewardBalance = web3.utils.toBN(rewardBalance).add(web3.utils.toBN(calculatedFreeReward)).toString();
+                console.log(`expected reward balance ${expectedRewardBalance}`);
+            }
+        }
+        
         var transaction = await liquidityMiningContract.methods.withdraw(actor.positionId, actor.unwrap, web3.utils.toBN(removedLiquidity)).send(actor.from);
+        
         console.log(`withdraw block ${await web3.eth.getBlockNumber()}`);
         var updatedPosition = await liquidityMiningContract.methods.position(actor.positionId).call();
         actor.position = updatedPosition;
@@ -846,7 +865,7 @@ describe("LiquidityMining", () => {
                     index : data.index || 0,
                     data
                 }
-            }), false, true, 1).send(blockchainConnection.getSendingOptions());
+            }), false, false, 0).send(blockchainConnection.getSendingOptions());
         }
 
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
