@@ -165,6 +165,10 @@ describe("LiquidityMining", () => {
         var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
         await dfoManager.finalizeProposal(dfo, proposal);
 
+        var transaction = await liquidityMiningFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());
+        var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
+        var clonedDefaultLiquidityMiningAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
+
         var setups = [[
             uniswapAMM.options.address,
             [liquidityPool.options.address],
@@ -202,30 +206,26 @@ describe("LiquidityMining", () => {
             "address",
             "bytes",
             "address",
-            "string",
-            "string",
-            "string",
+//            "string[]",
             "address",
             "bytes",
             "bool",
             "uint256"
         ];
         var params = [
-            liquidityMiningExtension.options.address,
+            clonedDefaultLiquidityMiningAddress,//liquidityMiningExtension.options.address,
             "0x",
             ethItemOrchestrator.options.address,
-            "LiquidityMiningToken",
-            "LMT",
-            "google.com",
+//            ["LiquidityMiningToken", "LMT", "google.com"],
             rewardToken != utilities.voidEthereumAddress ? rewardToken.options.address : utilities.voidEthereumAddress,
             abi.encode(["tuple(address,address[],address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256)[]"], [setups]),
             true,
             0
         ];
 
-        byMint = (params[0] !== utilities.voidEthereumAddress && (rewardToken.options && rewardToken.options.address === dfo.votingTokenAddress)) || false;
+        byMint = (params[0] !== clonedDefaultLiquidityMiningAddress && (rewardToken.options && rewardToken.options.address === dfo.votingTokenAddress)) || false;
 
-        params[1] = liquidityMiningExtension.methods.init(byMint, params[0] === utilities.voidEthereumAddress ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
+        params[1] = liquidityMiningExtension.methods.init(byMint, params[0] === clonedDefaultLiquidityMiningAddress ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
 
         var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
 
@@ -236,9 +236,9 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
         oneHundred = await liquidityMiningContract.methods.ONE_HUNDRED().call();
 
-        params[0] === utilities.voidEthereumAddress && (liquidityMiningExtension = new web3.eth.Contract(LiquidityMiningExtension.abi, await liquidityMiningContract.methods._extension().call()));
+        params[0] === clonedDefaultLiquidityMiningAddress && (liquidityMiningExtension = new web3.eth.Contract(LiquidityMiningExtension.abi, await liquidityMiningContract.methods._extension().call()));
 
-        rewardDestination = params[0] === utilities.voidEthereumAddress ? liquidityMiningExtension.options.address : rewardDestination;
+        rewardDestination = params[0] === clonedDefaultLiquidityMiningAddress ? liquidityMiningExtension.options.address : rewardDestination;
 
         assert.strictEqual(await liquidityMiningContract.methods._extension().call(), liquidityMiningExtension.options.address);
         assert.notStrictEqual(await liquidityMiningContract.methods._extension().call(), utilities.voidEthereumAddress);

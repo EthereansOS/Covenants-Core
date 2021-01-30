@@ -71,6 +71,13 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
         emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtensionAddress);
     }
 
+    /** @dev utlity method to clone default extension
+     * @return clonedExtension the address of the actually-cloned liquidity mining extension
+     */
+    function cloneLiquidityMiningDefaultExtension() public override returns(address clonedExtension) {
+        emit ExtensionCloned(clonedExtension = _clone(liquidityMiningDefaultExtension));
+    }
+
     /** @dev this function deploys a new LiquidityMining contract and calls the encoded function passed as data.
      * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
      * @return contractAddress new liquidity mining contract address.

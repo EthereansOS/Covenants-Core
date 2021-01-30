@@ -69,32 +69,18 @@ contract LiquidityMining is ILiquidityMining {
 
     /** Public extension methods. */
 
-    /** @dev function called by the factory contract to initialize a new clone.
-      * @param extension liquidity mining contract extension (a wallet or an extension).
-      * @param extensionInitData encoded call function of the extension (used from an extension).
-      * @param orchestrator ethItemOrchestrator address.
-      * @param name ethItem liquidity mining position token name.
-      * @param symbol ethitem liquidity mining position token symbol.
-      * @param collectionUri ethItem liquidity mining position token uri.
-      * @param rewardTokenAddress the address of the reward token.
-     */
-    function init(address extension, bytes memory extensionInitData, address orchestrator, string memory name, string memory symbol, string memory collectionUri, address rewardTokenAddress, bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) public returns(bytes memory extensionReturnCall) {
-        require(
-            _factory == address(0),
-            "Already initialized"
-        );
+    function init(address extension, bytes memory extensionInitData, address orchestrator, address rewardTokenAddress, bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) public returns(bytes memory extensionReturnCall) {
+        require(_factory == address(0), "Already initialized");
+        require((_extension = extension) != address(0), "extension");
         _factory = msg.sender;
-        _extension = extension;
-        if(_extension == address(0)) {
-            _extension = _clone(ILiquidityMiningFactory(_factory).liquidityMiningDefaultExtension());
-        }
-        _rewardTokenAddress = rewardTokenAddress;
-        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, false, collectionUri, address(this), ""), "");
+        emit RewardToken(_rewardTokenAddress = rewardTokenAddress);
         if (keccak256(extensionInitData) != keccak256("")) {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
+        //require((_orchestrator = orchestrator) != address(0), "orchestrator");
+        //require((_itemData = itemData).length == 6, "length");
+        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "a", "b", false, "c", address(this), ""), "");
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
-        emit RewardToken(_rewardTokenAddress);
     }
 
     /** @dev allows this contract to receive eth. */
@@ -828,27 +814,6 @@ contract LiquidityMining is ILiquidityMining {
             returndatacopy(returnDataPayloadStart, 0, size)
             mstore(0x40, add(returnDataPayloadStart, size))
             switch result case 0 {revert(returnDataPayloadStart, size)}
-        }
-    }
-
-    /** @dev clones the input contract address and returns the copied contract address.
-     * @param original address of the original contract.
-     * @return copy copied contract address.
-     */
-    function _clone(address original) private returns (address copy) {
-        assembly {
-            mstore(
-                0,
-                or(
-                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
-                    mul(original, 0x1000000000000000000)
-                )
-            )
-            copy := create(0, 0, 32)
-            switch extcodesize(copy)
-                case 0 {
-                    invalid()
-                }
         }
     }
 }
