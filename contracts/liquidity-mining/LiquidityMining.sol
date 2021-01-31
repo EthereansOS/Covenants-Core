@@ -388,14 +388,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 amount += (_setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock);
             // this is a locked setup that has expired
             } else if (block.number >= _setups[i].endBlock) {
+                _finishedLockedSetups[_setups[i].objectId] = true;
                 // check if the setup is renewable
                 if (_setups[i].renewTimes > 0) {
                     _setups[i].renewTimes -= 1;
                     // if it is, we renew it and add the reward per block
                     _renewSetup(i);
                     amount += _setups[i].rewardPerBlock;
-                } else {
-                    _finishedLockedSetups[_setups[i].objectId] = true;
                 }
             }
         }
@@ -642,6 +641,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         positionCollection.burn(objectId, amount);
     }
 
+    /** @dev helper function used to remove liquidity from a free position or to burn item liquidity tokens and retrieve their content.
+      * @param positionId id of the position.
+      * @param objectId object id related to the item liquidity tokens to burn.
+      * @param setupIndex index of the setup related to the item liquidity tokens.
+      * @param unwrapPair whether to unwrap the liquidity pool tokens or not.
+      * @param isUnlock if we're removing liquidity from an unlock method or not.
+     */
     function _removeLiquidity(uint256 positionId, uint256 objectId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         LiquidityPoolData memory lpData = LiquidityPoolData(
@@ -732,6 +738,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         _setups[setupIndex].endBlock = block.number + 1 + duration;
         _setups[setupIndex].currentRewardPerBlock = 0;
         _setups[setupIndex].currentStakedLiquidity = 0;
+        _setups[setupIndex].objectId = 0;
     }
 
     /** @dev function used to rebalance the reward per block in the given free liquidity mining setup.
