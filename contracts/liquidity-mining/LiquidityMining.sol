@@ -324,6 +324,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // rebalance setup
             _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, true);
             reward = calculateFreeLiquidityMiningSetupReward(positionId, false);
+            require(reward > 0, "No reward?");
         }
         // transfer the reward
         if (reward > 0) {
@@ -365,6 +366,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         } else {
             _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount;
             withdrawReward(positionId);
+            if (liquidityMiningPosition.free) {
+                _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
+            }
         }
         _removeLiquidity(positionId, objectId, setupIndex, unwrapPair, removedLiquidity, false);
     }
@@ -638,7 +642,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     function _removeLiquidity(uint256 positionId, uint256 objectId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        LiquidityPoolData memory lpData;
+        LiquidityPoolData memory lpData = LiquidityPoolData(
+            _setups[setupIndex].liquidityPoolTokenAddress,
+            removedLiquidity,
+            _setups[setupIndex].mainTokenAddress,
+            true,
+            _setups[setupIndex].involvingETH,
+            msg.sender
+        );
         uint256 remainingLiquidity;
         // we are removing liquidity using the setup items
         if (positionId != 0) {
@@ -651,15 +662,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             lpData = liquidityMiningPosition.liquidityPoolData;
             // update the lp data
             lpData.amount = removedLiquidity;
-        } else {
-            lpData = LiquidityPoolData(
-                _setups[setupIndex].liquidityPoolTokenAddress,
-                removedLiquidity,
-                _setups[setupIndex].mainTokenAddress,
-                true,
-                _setups[setupIndex].involvingETH,
-                msg.sender
-            );
         }
         // retrieve fee stuff
         (uint256 exitFeePercentage, address exitFeeWallet) = ILiquidityMiningFactory(_factory).feePercentageInfo();

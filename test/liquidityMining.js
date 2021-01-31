@@ -83,9 +83,9 @@ describe("LiquidityMining", () => {
             await initActor("Orbulo", accounts[5], 210, 250, 0, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.0001, 0.150, 6, 0, false);
             await initActor("Frank", accounts[6], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.243, 0.315, 0.007, false);
             await initActor("Vasapower", accounts[7], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.243, 0.315, 0.007, false);
-            await initActor("Dino", accounts[8], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.007, false);
-            await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.007, false, true);
-            await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.75);
+            await initActor("Dino", accounts[8], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.28, 0.006999, false);
+            await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.28, 0.006999, false, true);
+            await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.25);
             await initActor("Gallitto", accounts[11], 320, 340, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
             await initActor("Cappello", accounts[12], 321, 341, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
 
@@ -558,6 +558,9 @@ describe("LiquidityMining", () => {
             assert.strictEqual(parseInt(balance), 1);
         }
 
+        actor.hasLiquidityItems = !setup.free;
+        actor.hasPositionOwnership = true;
+        console.log(`expected reward is ${expectedReward}`);
         !position.free && assert.strictEqual(utilities.fromDecimals(position.lockedRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), utilities.formatMoney(expectedRewardPerBlock));
         !position.free && assert.strictEqual(utilities.fromDecimals(position.reward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), utilities.formatMoney(expectedReward));
 
@@ -728,7 +731,8 @@ describe("LiquidityMining", () => {
             if (!setup.free) {
                 var transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
             }
-            var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrapPair, removedLiquidity).send(actor.from);    
+            console.log(`withdrawing ${actor.name} position:`, actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity)
+            var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity).send(actor.from);    
         }
         
         console.log('liquidity withdrawn');
@@ -889,15 +893,21 @@ describe("LiquidityMining", () => {
     });
     it("frank should set a new staking position with a position token", () => createNewStakingPosition(actors.Frank));
     it("dino should set a new staking position without a position token", () => createNewStakingPosition(actors.Dino));
-    it("frank should transfer its position token to vasapower", async () => {
-        await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, actors.Frank.positionId, 1, 0x0).send(actors.Frank.from);
+    it("frank should transfer its item tokens to vasapower", async () => {
+        var setups = await liquidityMiningContract.methods.setups().call()
+        var objectId = setups[actors.Frank.setupIndex].objectId;
+        var frankBalance = await positionTokenCollection.methods.balanceOf(actors.Frank.address, objectId).call();
+        await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, objectId, frankBalance, 0x0).send(actors.Frank.from);
 
+        /*
         actors.Vasapower.positionId = actors.Frank.positionId;
         actors.Vasapower.positionId = actors.Frank.positionId;
         actors.Vasapower.enterBlock = actors.Frank.enterBlock;
         actors.Vasapower.expectedRewardPerBlock = actors.Frank.expectedRewardPerBlock;
-        var vasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, actors.Vasapower.positionId).call();
-        assert.strictEqual(parseInt(vasapowerBalance), 1);
+        */
+        var vasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, objectId).call();
+        assert.strictEqual(vasapowerBalance, frankBalance);
+        actors.Frank.transferedLiquidity = true;
     });
     it("dino should transfer its position ownership to ale", async () => {
         var result = await liquidityMiningContract.methods.transfer(actors.Ale.address, actors.Dino.positionId).send(actors.Dino.from);
@@ -908,16 +918,32 @@ describe("LiquidityMining", () => {
         actors.Ale.expectedRewardPerBlock = actors.Dino.expectedRewardPerBlock;
         var position = await liquidityMiningContract.methods._positions(actors.Ale.positionId).call();
         assert.strictEqual(actors.Ale.address, position.uniqueOwner);
+        actors.Ale = { ...actors.Dino, address: actors.Ale.address, name: actors.Ale.name };
+
+        var setups = await liquidityMiningContract.methods.setups().call()
+        var objectId = setups[actors.Dino.position.setupIndex].objectId;
+        var dinoBalance = await positionTokenCollection.methods.balanceOf(actors.Dino.address, objectId).call();
+        await positionTokenCollection.methods.safeTransferFrom(actors.Dino.address, actors.Ale.address, objectId, dinoBalance, 0x0).send(actors.Dino.from);
+
+        /*
+        actors.Vasapower.positionId = actors.Frank.positionId;
+        actors.Vasapower.positionId = actors.Frank.positionId;
+        actors.Vasapower.enterBlock = actors.Frank.enterBlock;
+        actors.Vasapower.expectedRewardPerBlock = actors.Frank.expectedRewardPerBlock;
+        */
+        var aleBalance = await positionTokenCollection.methods.balanceOf(actors.Ale.address, objectId).call();
+        assert.strictEqual(aleBalance, dinoBalance);
+        actors.Dino.transferedLiquidity = true;
     });
-    it("vasapower should partial reward without unwrapping the pair", async () => {
-        var actor = actors.Vasapower;
+    it("frank should partial reward without unwrapping the pair", async () => {
+        var actor = actors.Frank;
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
         var blockNumber = ((await web3.eth.getBlockNumber()) + 1) - actor.enterBlock;
         var expectedReward = utilities.toDecimals(actor.expectedRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
         expectedReward = web3.utils.toBN(expectedReward).mul(web3.utils.toBN(blockNumber.toString())).toString();
         var expectedBalanceOf = web3.utils.toBN(expectedReward).add(web3.utils.toBN(balanceOf)).toString();
 
-        var transaction = await liquidityMiningContract.methods.partialReward(actor.positionId).send(actor.from);
+        var transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
 
         rewardToken === utilities.voidEthereumAddress && (expectedBalanceOf = web3.utils.toBN(expectedBalanceOf).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transaction))).toString());
         expectedBalanceOf = utilities.fromDecimals(expectedBalanceOf, rewardToken != utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -928,10 +954,16 @@ describe("LiquidityMining", () => {
         assert.strictEqual(balanceOf, expectedBalanceOf);
 
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
-        actors.Vasapower.partialReward = true;
+        actors.Frank.partialReward = true;
     });
-    it("vasapower should unlock without unwrapping the pair", () => unlockStakingPosition(actors.Vasapower));
-    it("should allow ale to add liquidity to its position", () => addLiquidity(actors.Ale));
+    it("should allow frank to add liquidity to its position", () => addLiquidity(actors.Frank));
+    it("frank should not be able to unlock without unwrapping the pair", async () => {
+        try {
+            unlockStakingPosition(actors.Frank);
+        } catch (error) {
+            console.log(error);
+        }
+    });
     it("should not allow dino to withdraw unwrapping the pair", async () => {
         try {
             await withdrawStakingPosition(actors.Dino);
@@ -946,6 +978,7 @@ describe("LiquidityMining", () => {
             await withdrawStakingPosition(actors.Bob);
             assert(false);
         } catch (e) {
+            console.log(e.message);
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("not owned"), -1);
         }
     });
@@ -1103,7 +1136,7 @@ describe("LiquidityMining", () => {
 
         var ammPlugin = new web3.eth.Contract(UniswapV2AMMV1.abi, setup.ammPlugin);
 
-        var liquidityPoolTokenAddress = setup.liquidityPoolTokenAddresses[liquidityPoolAddressIndex];
+        var liquidityPoolTokenAddress = setup.liquidityPoolTokenAddress;
 
         var tokens = (await uniswapAMM.methods.byLiquidityPool(liquidityPool.options.address).call())[2];
 
@@ -1148,14 +1181,11 @@ describe("LiquidityMining", () => {
             setupIndex,
             secondaryTokenAddress: secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : utilities.voidEthereumAddress,
             liquidityPoolTokenAmount,
-            liquidityPoolAddressIndex,
             mainTokenAmount,
             amount : amountIsLiquidityPool ? liquidityPoolTokenAmount : mainTokenAmount,
             amountIsLiquidityPool : amountIsLiquidityPool || false,
             secondaryTokenAmount,
             positionOwner: utilities.voidEthereumAddress,
-            mintPositionToken: positionItem ? true : false,
-            involvingETH
         };
         
         var oldPosition = await liquidityMiningContract.methods.position(positionId).call();
