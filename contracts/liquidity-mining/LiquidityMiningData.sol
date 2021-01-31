@@ -12,7 +12,8 @@ struct LiquidityMiningSetupConfiguration {
 // liquidity mining setup struct
 struct LiquidityMiningSetup {
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-    address[] liquidityPoolTokenAddresses; // address of the liquidity pool token
+    uint256 objectId; // items object id for the liquidity pool token.
+    address liquidityPoolTokenAddress; // address of the liquidity pool token
     address mainTokenAddress; // eg. buidl address.
     uint256 startBlock; // liquidity mining setup start block (used only if free is false).
     uint256 endBlock; // liquidity mining setup end block (used only if free is false).
@@ -25,6 +26,7 @@ struct LiquidityMiningSetup {
     bool free; // if the setup is a free liquidity mining setup or a locked one.
     uint256 renewTimes; // if the locked setup is renewable or if it's one time (used only if free is false).
     uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
+    bool involvingETH; // if the setup involves ETH or not.
 }
 
 // position struct
@@ -43,10 +45,7 @@ struct LiquidityMiningPosition {
 // stake data struct
 struct LiquidityMiningPositionRequest {
     uint256 setupIndex; // index of the chosen setup.
-    uint256 liquidityPoolAddressIndex; // address of the secondary token.
     uint256 amount; // amount of main token.
     bool amountIsLiquidityPool; //true if user wants to directly share the liquidity pool token amount, false to add liquidity to AMM
     address positionOwner; // position extension or address(0) [msg.sender].
-    bool mintPositionToken; // if the position will be represented by a minted item or not.
-    bool involvingETH; // whether eth is involved in the request or not.
 }

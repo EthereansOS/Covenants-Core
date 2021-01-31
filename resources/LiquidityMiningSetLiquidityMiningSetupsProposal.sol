@@ -21,11 +21,9 @@ contract ProposalCode {
     }
 
     function callOneTime(address) public {
-        address[] memory liquidityPoolTokenAddresses = new address[](1);
-        liquidityPoolTokenAddresses[0] = {0};
-        LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[]({1});
-        {2}
-        ILiquidityMiningExtension({3}).setLiquidityMiningSetups(liquidityMiningSetups, {4}, {5}, {6});
+        LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups = new LiquidityMiningSetupConfiguration[]({0});
+        {1}
+        ILiquidityMiningExtension({2}).setLiquidityMiningSetups(liquidityMiningSetups, {3}, {4}, {5});
     }
 }
 
@@ -42,12 +40,13 @@ struct LiquidityMiningSetupConfiguration {
 // liquidity mining setup struct
 struct LiquidityMiningSetup {
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-    address[] liquidityPoolTokenAddresses; // address of the liquidity pool token
+    uint256 objectId; // items object id for the liquidity pool token.
+    address liquidityPoolTokenAddress; // address of the liquidity pool token
     address mainTokenAddress; // eg. buidl address.
     uint256 startBlock; // liquidity mining setup start block (used only if free is false).
     uint256 endBlock; // liquidity mining setup end block (used only if free is false).
     uint256 rewardPerBlock; // liquidity mining setup reward per single block.
-    uint256 currentRewardPerBlock; // liquidity mining setup current reward per single block (used only if free is false).
+    uint256 currentRewardPerBlock; // liquidity mining setup current reward per single block.
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
     uint256 lastBlockUpdate; // number of the block where an update was triggered.
     uint256 maximumLiquidity; // maximum liquidity stakeable in the contract (used only if free is false).
@@ -55,4 +54,5 @@ struct LiquidityMiningSetup {
     bool free; // if the setup is a free liquidity mining setup or a locked one.
     uint256 renewTimes; // if the locked setup is renewable or if it's one time (used only if free is false).
     uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
+    bool involvingETH; // if the setup involves ETH or not.
 }
