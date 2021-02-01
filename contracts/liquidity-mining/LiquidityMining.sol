@@ -20,6 +20,10 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     event RewardToken(address indexed rewardTokenAddress);
     // new liquidity mining position event
     event Transfer(uint256 indexed positionId, address indexed from, address indexed to);
+    // event that tracks involved tokens for this contract
+    event SetupToken(address indexed mainToken, address indexed involvedToken);
+    // event that tracks farm tokens
+    event FarmToken(uint256 indexed objectId, address indexed liquidityPoolToken, uint256 setupIndex, uint256 endBlock);
 
     // factory address that will create clones of this contract
     address public _factory;
@@ -27,8 +31,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     address public _extension;
     // address of the reward token
     address public override _rewardTokenAddress;
-    // liquidityMiningPosition token collection
-    address public _positionTokenCollection;
+    // liquidity farm token collection
+    address public _liquidityFarmTokenCollection;
     // array containing all the currently available liquidity mining setups
     LiquidityMiningSetup[] private _setups;
     // mapping containing all the positions
@@ -43,6 +47,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     mapping(uint256 => uint256) public _partiallyRedeemed;
     // mapping containing whether a locked setup has ended or not and has been used for the rebalance
     mapping(uint256 => bool) public _finishedLockedSetups;
+    // mapping containing object id to setup index
+    mapping(uint256 => uint256) private _objectIdSetup;
     // pinned setup index
     bool public _hasPinned;
     uint256 public _pinnedSetupIndex;
@@ -73,7 +79,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
         //require((_orchestrator = orchestrator) != address(0), "orchestrator");
         //require((_itemData = itemData).length == 6, "length");
-        (_positionTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "a", "b", false, "c", address(this), ""), "");
+        (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", false, ILiquidityMiningFactory(_factory).liquidityFarmTokenCollectionURI(), address(this), ""), "");
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
     }
 
@@ -171,7 +177,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             setupStartBlock : chosenSetup.startBlock,
             setupEndBlock : chosenSetup.endBlock,
             free : chosenSetup.free,
-            liquidityPoolData: liquidityPoolData,
+            liquidityPoolTokenAmount: liquidityPoolData.amount,
             reward: reward,
             lockedRewardPerBlock: lockedRewardPerBlock,
             creationBlock: block.number
@@ -230,7 +236,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // calculate reward before adding liquidity pool data to the position
         (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (calculateFreeLiquidityMiningSetupReward(positionId, false), 0) : calculateLockedLiquidityMiningSetupReward(liquidityMiningPosition.setupIndex, mainTokenAmount, false, 0);
         // update the liquidity pool token amount
-        liquidityMiningPosition.liquidityPoolData.amount += liquidityPoolData.amount;
+        liquidityMiningPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
         if (!liquidityMiningPosition.free) {
             // transfer the reward in advance to this contract
             ILiquidityMiningExtension(_extension).transferTo(newReward, address(this));
@@ -262,7 +268,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         require(
-            liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0) &&
+            // liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0) &&
             to != address(0) &&
             liquidityMiningPosition.setupStartBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
             liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock,
@@ -279,7 +285,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
+        // require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
         require(!liquidityMiningPosition.free && liquidityMiningPosition.setupEndBlock >= block.number, "Invalid unlock");
         require(!_positionRedeemed[positionId], "Already redeemed");
         uint256 rewardToGiveBack = _partiallyRedeemed[positionId];
@@ -296,8 +302,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 ILiquidityMiningExtension(_extension).backToYou{value : rewardToGiveBack}(rewardToGiveBack);
             }
         }
-        _burnLiquidity(_setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.liquidityPoolData.amount);
-        _removeLiquidity(positionId, _setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.setupIndex, unwrapPair, liquidityMiningPosition.liquidityPoolData.amount, true);
+        _burnLiquidity(_setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.liquidityPoolTokenAmount);
+        _removeLiquidity(positionId, _setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.setupIndex, unwrapPair, liquidityMiningPosition.liquidityPoolTokenAmount, true);
     }
 
     /** @dev this function allows a user to withdraw the reward.
@@ -307,7 +313,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
-        require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
+        // require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
         uint256 reward = liquidityMiningPosition.reward;
         if (!liquidityMiningPosition.free) {
             // check if reward is available
@@ -348,29 +354,34 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
-    function withdrawLiquidity(uint256 positionId, uint256 objectId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity) public {
+    /** @dev allows the withdrawal of the liquidity from a position or from the item tokens.
+      * @param positionId id of the position.
+      * @param objectId object id of the item token to burn.
+      * @param unwrapPair if the liquidity pool tokens will be unwrapped or not.
+      * @param removedLiquidity amount of liquidity to remove.
+     */
+    function withdrawLiquidity(uint256 positionId, uint256 objectId, bool unwrapPair, uint256 removedLiquidity) public {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        uint256 setupIndex = objectId != 0 ? getObjectIdSetupIndex(objectId) : liquidityMiningPosition.setupIndex;
         require(positionId != 0 || (_setups[setupIndex].objectId == objectId || _finishedLockedSetups[objectId]), "Invalid position");
         // current owned liquidity
         require(
             (
                 liquidityMiningPosition.free && 
-                removedLiquidity <= liquidityMiningPosition.liquidityPoolData.amount &&
-                !_positionRedeemed[positionId] &&
-                liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0)
-            ) || (positionId == 0 && INativeV1(_positionTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity), "Invalid withdraw");
+                removedLiquidity <= liquidityMiningPosition.liquidityPoolTokenAmount &&
+                !_positionRedeemed[positionId]
+                // && liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0)
+            ) || (positionId == 0 && INativeV1(_liquidityFarmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity), "Invalid withdraw");
         // check if liquidity mining position is valid
         require(liquidityMiningPosition.free || (_setups[setupIndex].endBlock <= block.number || _finishedLockedSetups[objectId]), "Invalid withdraw");
         // burn the liquidity in the locked setup
         if (positionId == 0) {
             _burnLiquidity(objectId, removedLiquidity);
         } else {
-            _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolData.amount;
+            _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolTokenAmount;
             withdrawReward(positionId);
-            if (liquidityMiningPosition.free) {
-                _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
-            }
+            _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
         }
         _removeLiquidity(positionId, objectId, setupIndex, unwrapPair, removedLiquidity, false);
     }
@@ -446,13 +457,22 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
         for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
             if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
-                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolData.amount) / 1e18;
+                reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolTokenAmount) / 1e18;
             }
         }
         if (isExt) {
             uint256 rpt = (((block.number - _setups[liquidityMiningPosition.setupIndex].lastBlockUpdate + 1) * _setups[liquidityMiningPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[liquidityMiningPosition.setupIndex].totalSupply;
-            reward += (rpt * liquidityMiningPosition.liquidityPoolData.amount) / 1e18;
+            reward += (rpt * liquidityMiningPosition.liquidityPoolTokenAmount) / 1e18;
         }
+    }
+
+    /** @dev returns the setup index for the given objectId.
+      * @param objectId farm token object id.
+      * @return setupIndex index of the setup.
+     */
+    function getObjectIdSetupIndex(uint256 objectId) public view returns (uint256 setupIndex) {
+        require(address(INativeV1(_liquidityFarmTokenCollection).asInteroperable(objectId)) != address(0), "Invalid objectId");
+        setupIndex = _objectIdSetup[objectId];
     }
 
     /** Private methods. */
@@ -496,7 +516,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         for(uint256 z = 0; z < tokenAddresses.length; z++) {
             if(tokenAddresses[z] == mainTokenAddress) {
                 found = true;
-                break;
+            } else {
+                emit SetupToken(mainTokenAddress, tokenAddresses[z]);
             }
         }
         require(found, "No main token");
@@ -561,15 +582,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
       * @return mainTokenAmount amount of main token staked.
       * @return involvingETH if the inputed flag is consistent.
      */
-    function _transferToMeAndCheckAllowance(
-        LiquidityMiningSetup memory setup,
-        LiquidityMiningPositionRequest memory request
-    ) private returns(
-        IAMM amm,
-        uint256 liquidityPoolAmount,
-        uint256 mainTokenAmount,
-        bool involvingETH
-    ) {
+    function _transferToMeAndCheckAllowance(LiquidityMiningSetup memory setup, LiquidityMiningPositionRequest memory request) private returns(IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) {
         require(request.amount > 0, "No amount");
         involvingETH = request.amountIsLiquidityPool && setup.involvingETH;
         // retrieve the values
@@ -615,30 +628,32 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** @dev mints a new PositionToken inside the collection for the given wallet.
       * @param uniqueOwner liquidityMiningPosition token extension.
-      * @param amount amount of to mint for a position token.
+      * @param amount amount of to mint for a farm token.
       * @param setupIndex index of the setup.
       * @return objectId new liquidityMiningPosition token object id.
      */
     function _mintLiquidity(address uniqueOwner, uint256 amount, uint256 setupIndex) private returns(uint256 objectId) {
         if (_setups[setupIndex].objectId == 0) {
-            (objectId,) = INativeV1(_positionTokenCollection).mint(amount, "UNIFI PositionToken", "UPT", "google.com", true);
+            (objectId,) = INativeV1(_liquidityFarmTokenCollection).mint(amount, "Covenants Farming Liquidity", "fLP", ILiquidityMiningFactory(_factory).liquidityFarmTokenURI(), true);
+            emit FarmToken(objectId, _setups[setupIndex].liquidityPoolTokenAddress, setupIndex, _setups[setupIndex].endBlock);
+            _objectIdSetup[objectId] = setupIndex;
             _setups[setupIndex].objectId = objectId;
         } else {
-            INativeV1(_positionTokenCollection).mint(_setups[setupIndex].objectId, amount);
+            INativeV1(_liquidityFarmTokenCollection).mint(_setups[setupIndex].objectId, amount);
         }
-        INativeV1(_positionTokenCollection).safeTransferFrom(address(this), uniqueOwner, _setups[setupIndex].objectId, amount, "");
+        INativeV1(_liquidityFarmTokenCollection).safeTransferFrom(address(this), uniqueOwner, _setups[setupIndex].objectId, amount, "");
     }
 
-    /** @dev burns a PositionToken from the collection.
+    /** @dev burns a farm token from the collection.
       * @param objectId object id where to burn liquidity.
       * @param amount amount of liquidity to burn.
       */
     function _burnLiquidity(uint256 objectId, uint256 amount) private {
-        INativeV1 positionCollection = INativeV1(_positionTokenCollection);
-        // transfer the liquidity mining position token to this contract
-        positionCollection.safeTransferFrom(msg.sender, address(this), objectId, amount, "");
-        // burn the liquidity mining position token
-        positionCollection.burn(objectId, amount);
+        INativeV1 tokenCollection = INativeV1(_liquidityFarmTokenCollection);
+        // transfer the liquidity mining farm token to this contract
+        tokenCollection.safeTransferFrom(msg.sender, address(this), objectId, amount, "");
+        // burn the liquidity mining farm token
+        tokenCollection.burn(objectId, amount);
     }
 
     /** @dev helper function used to remove liquidity from a free position or to burn item liquidity tokens and retrieve their content.
@@ -663,13 +678,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         if (positionId != 0) {
             // update the setup index
             setupIndex = liquidityMiningPosition.setupIndex;
-            remainingLiquidity = liquidityMiningPosition.liquidityPoolData.amount - removedLiquidity;
+            remainingLiquidity = liquidityMiningPosition.liquidityPoolTokenAmount - removedLiquidity;
             // update the receiver
-            liquidityMiningPosition.liquidityPoolData.receiver = liquidityMiningPosition.uniqueOwner;
+            // liquidityMiningPosition.liquidityPoolData.receiver = liquidityMiningPosition.uniqueOwner;
             // set the lp data to the position one
-            lpData = liquidityMiningPosition.liquidityPoolData;
+            // lpData = liquidityMiningPosition.liquidityPoolData;
             // update the lp data
-            lpData.amount = removedLiquidity;
+            // lpData.amount = removedLiquidity;
         }
         // retrieve fee stuff
         (uint256 exitFeePercentage, address exitFeeWallet) = ILiquidityMiningFactory(_factory).feePercentageInfo();
@@ -724,7 +739,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             } else {
                 // update the creation block and amount
                 liquidityMiningPosition.creationBlock = block.number;
-                liquidityMiningPosition.liquidityPoolData.amount = remainingLiquidity;
+                liquidityMiningPosition.liquidityPoolTokenAmount = remainingLiquidity;
             }
         }
     }
@@ -820,11 +835,15 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
+    /** @dev function used to receive batch of erc1155 tokens. */
     function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public override returns(bytes4) {
+        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
         return this.onERC1155BatchReceived.selector;
     }
 
+    /** @dev function used to receive erc1155 tokens. */
     function onERC1155Received(address, address, uint256, uint256, bytes memory) public override returns(bytes4) {
+        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
         return this.onERC1155Received.selector;
     }
 

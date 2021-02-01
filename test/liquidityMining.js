@@ -157,7 +157,7 @@ describe("LiquidityMining", () => {
 
         var liquidityMiningDefaultExtensionModel = await new web3.eth.Contract(LiquidityMiningDefaultExtension.abi).deploy({data : LiquidityMiningDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
 
-        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0]}).send(blockchainConnection.getSendingOptions());
+        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com"]}).send(blockchainConnection.getSendingOptions());
 
         liquidityMiningExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
 
@@ -545,6 +545,7 @@ describe("LiquidityMining", () => {
 
         await blockchainConnection.jumpToBlock(enterBlock, true);
         var result = await liquidityMiningContract.methods.openPosition(stake).send({...from, value: (stake.involvingETH && !stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
+        console.log(result);
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
@@ -604,7 +605,7 @@ describe("LiquidityMining", () => {
     });
     async function unlockStakingPosition(actor, dontPassReward) {
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
-        var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
+        var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolTokenAmount);
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         if(parseInt(exitFee) > 0) {
             exitFee = web3.utils.toBN(exitFee);
@@ -684,10 +685,10 @@ describe("LiquidityMining", () => {
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
         var removesAllLiquidity = removedLiquidity === undefined;
         if (removesAllLiquidity) { 
-            removedLiquidity = position.liquidityPoolData.amount;
+            removedLiquidity = position.liquidityPoolTokenAmount;
         }
 
-        var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolData.amount);
+        var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolTokenAmount);
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         if(parseInt(exitFee) > 0) {
             exitFee = web3.utils.toBN(exitFee);
@@ -732,9 +733,9 @@ describe("LiquidityMining", () => {
                 var transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
             }
             console.log(`withdrawing ${actor.name} position:`, actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity)
-            var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity).send(actor.from);    
+            var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
         } else {
-            var transaction = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity).send(actor.from);    
+            var transaction = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
 
         }
         
@@ -754,9 +755,9 @@ describe("LiquidityMining", () => {
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
 
         if (!removesAllLiquidity) {
-            assert.strictEqual(position.liquidityPoolData.amount - removedLiquidity, parseInt(updatedPosition.liquidityPoolData.amount));
+            assert.strictEqual(position.liquidityPoolTokenAmount - removedLiquidity, parseInt(updatedPosition.liquidityPoolTokenAmount));
         } else {
-            assert.strictEqual(parseInt(updatedPosition.liquidityPoolData.amount), 0);
+            assert.strictEqual(parseInt(updatedPosition.liquidityPoolTokenAmount), 0);
         }
         assert.strictEqual(rewardBalance, expectedRewardBalance);
 
@@ -1228,16 +1229,16 @@ describe("LiquidityMining", () => {
     it("should allow gallitto to create a new position", () => createNewStakingPosition(actors.Gallitto));
     it("should allow cappello to create a new position", () => createNewStakingPosition(actors.Cappello));
     it("should allow gallitto to withdraw 50% of the liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolData.amount / 2));
+        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolTokenAmount / 2));
         actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
     });
     it("should allow cappello to withdraw 25% of the liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Cappello, parseInt(actors.Cappello.position.liquidityPoolData.amount / 4));
+        await withdrawStakingPosition(actors.Cappello, parseInt(actors.Cappello.position.liquidityPoolTokenAmount / 4));
         actors.Cappello.exitBlock = actors.Cappello.exitBlock + 20;
     });
     it("should allow cappello to withdraw the remaining 75% of liquidity pool token amount", () => withdrawStakingPosition(actors.Cappello));
     it("should allow gallitto to withdraw 33% of the remaining liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolData.amount / 3));
+        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolTokenAmount / 3));
         actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
     });
     it("should allow gallitto to withdraw the remaining liquidity pool token amount", () => withdrawStakingPosition(actors.Gallitto));

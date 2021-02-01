@@ -36,7 +36,8 @@ struct LiquidityMiningPosition {
     uint256 setupStartBlock; // liquidity mining setup start block (used only if free is false).
     uint256 setupEndBlock; // liquidity mining setup end block (used only if free is false).
     bool free; // if the setup is a free liquidity mining setup or a locked one.
-    LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
+    // LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
+    uint256 liquidityPoolTokenAmount;
     uint256 reward; // position reward.
     uint256 lockedRewardPerBlock; // position locked reward per block.
     uint256 creationBlock; // block when this position was created.

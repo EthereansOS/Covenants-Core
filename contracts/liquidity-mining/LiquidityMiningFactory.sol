@@ -8,30 +8,29 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
 
     // liquidity mining contract implementation address
     address public liquidityMiningImplementationAddress;
-
     // liquidity mining default extension
     address public override liquidityMiningDefaultExtension;
-
     // double proxy address of the linked DFO
     address public _doubleProxy;
-
     // linked DFO exit fee
     uint256 private _feePercentage;
-
+    // liquidity mining collection uri
+    string public liquidityFarmTokenCollectionURI;
+    // liquidity mining farm token uri
+    string public liquidityFarmTokenURI;
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningDeployed(address indexed liquidityMiningAddress, address indexed sender, bytes liquidityMiningInitResultData);
-
     // event that tracks logic contract address change
     event LiquidityMiningLogicSet(address indexed newAddress);
-
     // event that tracks default extension contract address change
     event LiquidityMiningDefaultExtensionSet(address indexed newAddress);
-
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage) {
+    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage, string liquidityFarmTokenCollectionUri, string liquidityFarmTokenUri) {
         _doubleProxy = doubleProxy;
+        liquidityFarmTokenCollectionURI = liquidityFarmTokenCollectionUri;
+        liquidityFarmTokenURI = liquidityFarmTokenUri;
         emit LiquidityMiningLogicSet(liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress);
         emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtension);
         emit FeePercentageSet(_feePercentage = feePercentage);
@@ -69,6 +68,20 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
      */
     function updateDefaultExtensionAddress(address _liquidityMiningDefaultExtensionAddress) public onlyDFO {
         emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtensionAddress);
+    }
+
+    /** @dev allows the factory owner to update the liquidity farm token collection uri.
+     * @param liquidityFarmTokenCollectionUri new liquidity farm token collection uri.
+     */
+    function updateLiquidityFarmTokenCollectionURI(string liquidityFarmTokenCollectionUri) public onlyDFO {
+        liquidityFarmTokenCollectionURI = liquidityFarmTokenCollectionUri;
+    }
+
+    /** @dev allows the factory owner to update the liquidity farm token collection uri.
+     * @param liquidityFarmTokenUri new liquidity farm token collection uri.
+     */
+    function updateLiquidityFarmTokenURI(string liquidityFarmTokenUri) public onlyDFO {
+        liquidityFarmTokenURI = liquidityFarmTokenUri;
     }
 
     /** @dev utlity method to clone default extension
@@ -111,6 +124,11 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
         }
     }
 
+    /** @dev calls the contract at the given location using the given payload and returns the returnData.
+      * @param location location to call.
+      * @param payload call payload.
+      * @return returnData call return data.
+     */
     function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
         assembly {
             let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
