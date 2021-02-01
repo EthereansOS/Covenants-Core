@@ -8,5 +8,6 @@ interface ILiquidityMiningFactory {
     function feePercentageInfo() external view returns (uint256, address);
     function liquidityMiningDefaultExtension() external view returns(address);
     function cloneLiquidityMiningDefaultExtension() external returns(address);
-
+    function getLiquidityFarmTokenCollectionURI() external view returns (string memory);
+    function getLiquidityFarmTokenURI() external view returns (string memory);
 }

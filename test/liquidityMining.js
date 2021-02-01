@@ -157,7 +157,7 @@ describe("LiquidityMining", () => {
 
         var liquidityMiningDefaultExtensionModel = await new web3.eth.Contract(LiquidityMiningDefaultExtension.abi).deploy({data : LiquidityMiningDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
 
-        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com"]}).send(blockchainConnection.getSendingOptions());
+        liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
 
         liquidityMiningExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
 

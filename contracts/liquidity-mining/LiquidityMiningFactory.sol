@@ -27,7 +27,7 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage, string liquidityFarmTokenCollectionUri, string liquidityFarmTokenUri) {
+    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage, string memory liquidityFarmTokenCollectionUri, string memory liquidityFarmTokenUri) {
         _doubleProxy = doubleProxy;
         liquidityFarmTokenCollectionURI = liquidityFarmTokenCollectionUri;
         liquidityFarmTokenURI = liquidityFarmTokenUri;
@@ -73,15 +73,29 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     /** @dev allows the factory owner to update the liquidity farm token collection uri.
      * @param liquidityFarmTokenCollectionUri new liquidity farm token collection uri.
      */
-    function updateLiquidityFarmTokenCollectionURI(string liquidityFarmTokenCollectionUri) public onlyDFO {
+    function updateLiquidityFarmTokenCollectionURI(string memory liquidityFarmTokenCollectionUri) public onlyDFO {
         liquidityFarmTokenCollectionURI = liquidityFarmTokenCollectionUri;
     }
 
     /** @dev allows the factory owner to update the liquidity farm token collection uri.
      * @param liquidityFarmTokenUri new liquidity farm token collection uri.
      */
-    function updateLiquidityFarmTokenURI(string liquidityFarmTokenUri) public onlyDFO {
+    function updateLiquidityFarmTokenURI(string memory liquidityFarmTokenUri) public onlyDFO {
         liquidityFarmTokenURI = liquidityFarmTokenUri;
+    }
+
+    /** @dev returns the liquidity farm token collection uri.
+      * @return liquidity farm token collection uri.
+     */
+    function getLiquidityFarmTokenCollectionURI() public override view returns (string memory) {
+        return liquidityFarmTokenCollectionURI;
+    }
+
+    /** @dev returns the liquidity farm token uri.
+      * @return liquidity farm token uri.
+     */
+    function getLiquidityFarmTokenURI() public override view returns (string memory) {
+        return liquidityFarmTokenURI;
     }
 
     /** @dev utlity method to clone default extension

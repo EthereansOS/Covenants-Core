@@ -79,7 +79,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
         //require((_orchestrator = orchestrator) != address(0), "orchestrator");
         //require((_itemData = itemData).length == 6, "length");
-        (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", false, ILiquidityMiningFactory(_factory).liquidityFarmTokenCollectionURI(), address(this), ""), "");
+        (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", false, ILiquidityMiningFactory(_factory).getLiquidityFarmTokenCollectionURI(), address(this), ""), "");
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
     }
 
@@ -634,7 +634,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
      */
     function _mintLiquidity(address uniqueOwner, uint256 amount, uint256 setupIndex) private returns(uint256 objectId) {
         if (_setups[setupIndex].objectId == 0) {
-            (objectId,) = INativeV1(_liquidityFarmTokenCollection).mint(amount, "Covenants Farming Liquidity", "fLP", ILiquidityMiningFactory(_factory).liquidityFarmTokenURI(), true);
+            (objectId,) = INativeV1(_liquidityFarmTokenCollection).mint(amount, "Covenants Farming Liquidity", "fLP", ILiquidityMiningFactory(_factory).getLiquidityFarmTokenURI(), true);
             emit FarmToken(objectId, _setups[setupIndex].liquidityPoolTokenAddress, setupIndex, _setups[setupIndex].endBlock);
             _objectIdSetup[objectId] = setupIndex;
             _setups[setupIndex].objectId = objectId;
