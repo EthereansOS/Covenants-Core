@@ -7,7 +7,7 @@ import "../../../common/AMM.sol";
 
 contract BalancerAMMV1 is IBalancerAMMV1, AMM {
 
-    uint public constant BONE              = 10**18;
+    uint public constant BONE = 10**18;
 
     constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
     }

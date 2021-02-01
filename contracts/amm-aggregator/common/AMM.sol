@@ -144,18 +144,16 @@ abstract contract AMM is IAMM {
         liquidityPoolTokens = new address[][](data.length);
         ProcessedLiquidityPoolData[] memory processedLiquidityPoolDataArray = new ProcessedLiquidityPoolData[](data.length);
         for(uint256 i = 0; i < data.length; i++) {
-            processedLiquidityPoolDataArray[i] = _processLiquidityPoolData(data[i]);
-            _collect(liquidityPoolTokens[i] = processedLiquidityPoolDataArray[i].liquidityPoolTokens, processedLiquidityPoolDataArray[i].tokensAmounts, processedLiquidityPoolDataArray[i].liquidityPoolOperator, processedLiquidityPoolDataArray[i].involvingETH);
-        }
-        _transferToMeAndCheckAllowance();
-        uint256[] memory collected = new uint256[](_tokensToTransfer.length);
-        for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
-            (liquidityPoolAmounts[i], tokensAmounts[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
-            for(uint256 z = 0; z < tokensAmounts[i].length; z++) {
-                collected[_tokenIndex[liquidityPoolTokens[i][z]]] += tokensAmounts[i][z];
+            liquidityPoolTokens[i] = (processedLiquidityPoolDataArray[i] = _processLiquidityPoolData(data[i])).liquidityPoolTokens;
+            for(uint256 z = 0; z < liquidityPoolTokens[i].length; z++) {
+                _collect(liquidityPoolTokens[i][z], processedLiquidityPoolDataArray[i].tokensAmounts[z], processedLiquidityPoolDataArray[i].liquidityPoolOperator, processedLiquidityPoolDataArray[i].involvingETH);
             }
         }
-        _flushBackAndClear(collected);
+        _transferToMeAndCheckAllowance();
+        for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
+            (liquidityPoolAmounts[i], tokensAmounts[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
+        }
+        _flushBackAndClear();
     }
 
     function removeLiquidity(LiquidityPoolData memory data) public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
@@ -177,12 +175,29 @@ abstract contract AMM is IAMM {
             _collect(processedLiquidityPoolDataArray[i].liquidityPoolAddress, processedLiquidityPoolDataArray[i].liquidityPoolAmount, processedLiquidityPoolDataArray[i].liquidityPoolOperator, false);
         }
         _transferToMeAndCheckAllowance();
-        uint256[] memory collected = new uint256[](_tokensToTransfer.length);
         for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
             (liquidityPoolAmounts[i], tokensAmounts[i]) = _removeLiquidity(processedLiquidityPoolDataArray[i]);
-            collected[_tokenIndex[processedLiquidityPoolDataArray[i].liquidityPoolAddress]] += liquidityPoolAmounts[i];
         }
-        _flushBackAndClear(collected);
+        _flushBackAndClear();
+    }
+
+    function toString(uint _i) public pure returns(string memory) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint j = _i;
+        uint len;
+        while (j != 0) {
+            len++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(len);
+        uint k = len - 1;
+        while (_i != 0) {
+            bstr[k--] = byte(uint8(48 + _i % 10));
+            _i /= 10;
+        }
+        return string(bstr);
     }
 
     function swapLiquidity(SwapData memory data) payable public virtual override returns(uint256 outputAmount) {
@@ -203,7 +218,7 @@ abstract contract AMM is IAMM {
         for(uint256 i = 0; i < data.length; i++) {
             outputAmounts[i] = _swapLiquidity(processedSwapDatas[i]);
         }
-        _flushBackAndClear(new uint256[](0));
+        _flushBackAndClear();
     }
 
     function _getLiquidityPoolOperator(address liquidityPoolAddress, address[] memory liquidityPoolTokens) internal virtual view returns(address);
@@ -229,9 +244,12 @@ abstract contract AMM is IAMM {
             (liquidityPoolAmount, tokensAmounts, liquidityPoolTokens) = byTokenAmount(data.liquidityPoolAddress, data.tokenAddress, data.amount);
         }
         bool involvingETH = data.involvingETH;
-        for(uint256 i = 0; i < liquidityPoolTokens.length; i++) {
-            if(liquidityPoolTokens[i] == address(0)) {
-                involvingETH = true;
+        if(_ethereumAddress == address(0)) {
+            involvingETH = false;
+            for(uint256 i = 0; i < liquidityPoolTokens.length; i++) {
+                if(liquidityPoolTokens[i] == address(0)) {
+                    involvingETH = true;
+                }
             }
         }
         return ProcessedLiquidityPoolData(
@@ -261,12 +279,6 @@ abstract contract AMM is IAMM {
         );
     }
 
-    function _collect(address[] memory tokenAddresses, uint256[] memory tokensAmounts, address operator, bool involvingETH) private {
-        for(uint256 i = 0; i < tokenAddresses.length; i++) {
-            _collect(tokenAddresses[i], tokensAmounts[i], operator, involvingETH);
-        }
-    }
-
     function _collect(address tokenAddress, uint256 tokenAmount, address operator, bool involvingETH) private {
         address realTokenAddress = involvingETH && tokenAddress == _ethereumAddress ? address(0) : tokenAddress;
         uint256 position = _tokenIndex[realTokenAddress];
@@ -291,7 +303,7 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function _flushBackAndClear(uint256[] memory collectedAmounts) private {
+    function _flushBackAndClear() private {
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
             delete _tokenIndex[_tokensToTransfer[i]];
             _flushBack(_tokensToTransfer[i]);

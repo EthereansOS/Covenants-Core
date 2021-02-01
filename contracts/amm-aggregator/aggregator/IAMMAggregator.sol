@@ -1,19 +1,28 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
+pragma abicoder v2;
 
-interface IEthFinanceAMMAggregatorOrchestrator {
+import "../common/IAMM.sol";
 
-    /**
-     * @dev GET - The DoubleProxy of the DFO linked to this Contract
-     */
+interface IAMMAggregator is IAMM {
+
     function doubleProxy() external view returns (address);
 
-    /**
-     * @dev SET - The DoubleProxy of the DFO linked to this Contract
-     * It can be done only through a Proposal in the Linked DFO
-     * @param newDoubleProxy the new DoubleProxy address
-     */
     function setDoubleProxy(address newDoubleProxy) external;
+
+    function amms() external view returns (address[] memory);
+
+    function remove(uint256) external;
+
+    function add(address[] calldata) external;
+
+    function findByLiquidityPool(address liquidityPoolAddress) external view returns(uint256, uint256[] memory, address[] memory, address);
+
+    function info(address liquidityPoolAddress) external view returns(string memory name, uint256 version, address amm);
+
+    function data(address liquidityPoolAddress) external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, address amm);
+
+    event AMM(address indexed amm, string name, uint256 version);
 }
 
 interface IDoubleProxy {
