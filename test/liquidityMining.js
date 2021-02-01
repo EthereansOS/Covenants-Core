@@ -296,7 +296,7 @@ describe("LiquidityMining", () => {
         assert.strictEqual(factoryAddress, liquidityMiningFactory.options.address);
     });
     it("should retrieve the position token collection", async() => {
-        positionTokenCollection = await liquidityMiningContract.methods._positionTokenCollection().call();
+        positionTokenCollection = await liquidityMiningContract.methods._liquidityFarmTokenCollection().call();
         assert.notStrictEqual(positionTokenCollection, utilities.voidEthereumAddress);
         positionTokenCollection = new web3.eth.Contract(context.ethItemNativeABI, positionTokenCollection);
     });
