@@ -13,7 +13,7 @@ contract FixedInflation is IFixedInflation {
 
     event Entry(bytes32 indexed id);
 
-    uint256 public constant ONE_HUNDRED = 1000000;
+    uint256 public constant ONE_HUNDRED = 1e18;
 
     address public _factory;
 

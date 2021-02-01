@@ -153,10 +153,10 @@ contract SushiSwapAMMV1 is ISushiSwapAMMV1, AMM {
     }
 
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
-        address[] memory path = new address[](data.paths.length + 1);
+        address[] memory path = new address[](data.path.length + 1);
         path[0] = data.enterInETH ? _wethAddress : data.inputToken;
-        for(uint256 i = 0; i < data.paths.length; i++) {
-            path[i + 1] = data.paths[i];
+        for(uint256 i = 0; i < data.path.length; i++) {
+            path[i + 1] = data.path[i];
         }
         if(data.exitInETH) {
             path[path.length - 1] = _wethAddress;

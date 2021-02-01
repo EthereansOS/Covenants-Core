@@ -14,7 +14,7 @@ struct SwapData {
     bool enterInETH;
     bool exitInETH;
     address[] liquidityPoolAddresses;
-    address[] paths;
+    address[] path;
     address inputToken;
     uint256 amount;
     address receiver;

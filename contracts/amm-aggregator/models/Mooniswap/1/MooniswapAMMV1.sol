@@ -122,20 +122,20 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
         outputAmount = data.amount;
         for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
-            address inputToken = i == 0 ? data.inputToken : data.paths[i - 1];
+            address inputToken = i == 0 ? data.inputToken : data.path[i - 1];
             if(inputToken != _ethereumAddress) {
                 _safeApprove(inputToken, data.liquidityPoolAddresses[i], outputAmount);
             }
             if(inputToken == _ethereumAddress) {
-                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap{value : outputAmount}(inputToken, data.paths[i], outputAmount, 1, address(0));
+                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap{value : outputAmount}(inputToken, data.path[i], outputAmount, 0, address(0));
             } else {
-                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap(inputToken, data.paths[i], outputAmount, 1, address(0));
+                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap(inputToken, data.path[i], outputAmount, 0, address(0));
             }
         }
-        if(data.paths[data.paths.length - 1] == _ethereumAddress) {
+        if(data.path[data.path.length - 1] == _ethereumAddress) {
             payable(data.receiver).transfer(outputAmount);
         } else {
-            _safeTransfer(data.paths[data.paths.length - 1], data.receiver, outputAmount);
+            _safeTransfer(data.path[data.path.length - 1], data.receiver, outputAmount);
         }
     }
 }

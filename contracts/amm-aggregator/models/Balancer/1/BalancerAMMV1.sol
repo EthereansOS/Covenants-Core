@@ -7,6 +7,8 @@ import "../../../common/AMM.sol";
 
 contract BalancerAMMV1 is IBalancerAMMV1, AMM {
 
+    uint public constant BONE              = 10**18;
+
     constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
     }
 
@@ -28,6 +30,22 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         }
     }
 
+    function calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure override returns(uint256) {
+        return bmul(bdiv(numerator, denominator), amount);
+    }
+
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) view public virtual override(IAMM, AMM) returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+
+        uint256 numerator = liquidityPoolAmount;
+        uint256 denominator;
+
+        (denominator, tokensAmounts, liquidityPoolTokens) = byLiquidityPool(liquidityPoolAddress);
+
+        for(uint256 i = 0; i < tokensAmounts.length; i++) {
+            tokensAmounts[i] = bmul(bdiv(numerator, denominator), tokensAmounts[i]);
+        }
+    }
+
     function byTokens(address[] memory) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
         return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
     }
@@ -39,11 +57,15 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
             BPool bPool = BPool(liquidityPoolAddresses[i]);
             address tokenIn = i == 0 ? tokenAddress : path[i - 1];
             tokenIn = tokenIn == address(0) ? _ethereumAddress : tokenIn;
-            address tokenOut = path[i];
-            tokenOut = tokenOut == address(0) ? _ethereumAddress : tokenOut;
-            uint256 numerator = bPool.getSpotPrice(tokenIn, tokenOut);
-            uint256 denominator = bPool.getBalance(tokenOut);
-            realAmounts[i + 1] = (realAmounts[i] * numerator) / denominator;
+            address tokenOut = path[i] == address(0) ? _ethereumAddress : path[i];
+            realAmounts[i + 1] = bPool.calcOutGivenIn(
+                IERC20(tokenIn).balanceOf(liquidityPoolAddresses[i]),
+                bPool.getNormalizedWeight(tokenIn),
+                IERC20(tokenOut).balanceOf(liquidityPoolAddresses[i]),
+                bPool.getNormalizedWeight(tokenOut),
+                realAmounts[i],
+                bPool.getSwapFee()
+            );
         }
     }
 
@@ -59,10 +81,8 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
             if(data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress) {
                 IWETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
-                _safeApprove(_ethereumAddress, data.liquidityPoolAddress, data.tokensAmounts[i]);
-            } else {
-                _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
             }
+            _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
         }
         BPool(data.liquidityPoolAddress).joinPool(liquidityPoolAmount = data.liquidityPoolAmount, tokensAmounts = data.tokensAmounts);
         _safeTransfer(data.liquidityPoolAddress, data.receiver, liquidityPoolAmount);
@@ -88,16 +108,41 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         }
         outputAmount = data.amount;
         for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
-            address inputToken = i == 0 ? data.enterInETH ? _ethereumAddress : data.inputToken : data.paths[i - 1];
+            address inputToken = i == 0 ? data.enterInETH ? _ethereumAddress : data.inputToken : data.path[i - 1];
             _safeApprove(inputToken, data.liquidityPoolAddresses[i], outputAmount);
-            address outputToken = i != data.liquidityPoolAddresses.length - 1 || !data.exitInETH ? data.paths[i] : _ethereumAddress;
+            address outputToken = i != data.liquidityPoolAddresses.length - 1 || !data.exitInETH ? data.path[i] : _ethereumAddress;
             (outputAmount, ) = BPool(data.liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, 1, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         }
         if(data.exitInETH) {
             IWETH(_ethereumAddress).withdraw(outputAmount);
             payable(data.receiver).transfer(outputAmount);
         } else {
-            _safeTransfer(data.paths[data.paths.length - 1], data.receiver, outputAmount);
+            _safeTransfer(data.path[data.path.length - 1], data.receiver, outputAmount);
         }
+    }
+
+    function bmul(uint a, uint b)
+        internal pure
+        returns (uint)
+    {
+        uint c0 = a * b;
+        require(a == 0 || c0 / a == b, "ERR_MUL_OVERFLOW");
+        uint c1 = c0 + (BONE / 2);
+        require(c1 >= c0, "ERR_MUL_OVERFLOW");
+        uint c2 = c1 / BONE;
+        return c2;
+    }
+
+    function bdiv(uint a, uint b)
+        internal pure
+        returns (uint)
+    {
+        require(b != 0, "ERR_DIV_ZERO");
+        uint c0 = a * BONE;
+        require(a == 0 || c0 / a == BONE, "ERR_DIV_INTERNAL"); // bmul overflow
+        uint c1 = c0 + (b / 2);
+        require(c1 >= c0, "ERR_DIV_INTERNAL"); //  badd require
+        uint c2 = c1 / b;
+        return c2;
     }
 }

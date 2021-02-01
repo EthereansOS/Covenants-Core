@@ -39,8 +39,11 @@ describe("AMM", () => {
             mooniswap: { contract: await new web3.eth.Contract(AMMs.Mooniswap.abi).deploy({ data: AMMs.Mooniswap.bin, arguments: [context.mooniswapFactoryAddress] }).send(blockchainConnection.getSendingOptions()) },
             uniswap,
             sushiSwap: { contract: await new web3.eth.Contract(AMMs.SushiSwap.abi).deploy({ data: AMMs.SushiSwap.bin, arguments: [context.sushiSwapRouterAddress] }).send(blockchainConnection.getSendingOptions()) },
-            //balancer: { contract: await new web3.eth.Contract(AMMs.Balancer.abi).deploy({ data: AMMs.Balancer.bin, arguments: [context.wethTokenAddress] }).send(blockchainConnection.getSendingOptions()) }
+            balancer: { contract: await new web3.eth.Contract(AMMs.Balancer.abi).deploy({ data: AMMs.Balancer.bin, arguments: [context.wethTokenAddress] }).send(blockchainConnection.getSendingOptions()) }
         }
+
+        amms.balancer && (amms.balancer.doubleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x8a649274e4d777ffc6851f13d23a86bbfa2f2fbf"));
+        amms.balancer && (amms.balancer.multipleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x9b208194acc0a8ccb2a8dcafeacfbb7dcc093f81"));
 
         await Promise.all(Object.values(amms).map(amm => amm.contract.methods.data().call().then(data => {
             amm.ethereumAddress = data[0];
@@ -57,14 +60,23 @@ describe("AMM", () => {
             context.chainLinkTokenAddress,
             context.usdcTokenAddress,
             context.daiTokenAddress,
-            context.mkrTokenAddress
+            context.mkrTokenAddress,
+            context.balTokenAddress
         ].map(it => new web3.eth.Contract(context.IERC20ABI, it));
 
         await Promise.all(tokens.map(it => buyForETH(it, buyForETHAmount, uniswap.contract)));
 
         for (var amm of Object.values(amms)) {
-            amm.liquidityPoolAddress = await addLiquidity(amm, accounts[0], true, false, amm.doubleTokenLiquidityPoolAddress);
-            amm.liquidityPoolAddressETH = await addLiquidity(amm, accounts[0], true, true, amm.doubleTokenLiquidityPoolAddress);
+            amm.toBuy = 300;
+            try {
+                await addLiquidity(amm, accounts[0], true, false, amm.doubleTokenLiquidityPoolAddress);
+            } catch(e) {
+            }
+            try {
+                amm.name.toLowerCase().indexOf("balancer") === -1 && await addLiquidity(amm, accounts[0], true, true, amm.doubleTokenLiquidityPoolAddress);
+            } catch(e) {
+            }
+            delete amm.toBuy;
         }
     });
 
@@ -88,24 +100,35 @@ describe("AMM", () => {
             enterInETH: true,
             exitInETH: false,
             liquidityPoolAddresses: [liquidityPoolAddress],
-            paths: [token.options.address],
+            path: [token.options.address],
             inputToken: ethereumAddress,
             receiver: utilities.voidEthereumAddress
         }).send(blockchainConnection.getSendingOptions({ value }));
     }
 
     async function tokenData(token, method) {
-        if (!token.options) {
-            return "ETH";
-        }
         try {
             return await token.methods[method]().call();
-        } catch (e) {}
-        var raw = await web3.eth.call({
-            to: token.options.address,
-            data: web3.utils.sha3(`${method}()`).substring(0, 10)
-        });
-        return web3.utils.toUtf8(raw);
+        } catch (e) {
+        }
+        var name;
+        try {
+            var to = token.options ? token.options.address : token;
+            var raw = await web3.eth.call({
+                to,
+                data: web3.utils.sha3(`${method}()`).substring(0, 10)
+            });
+            name = web3.utils.toUtf8(raw);
+        } catch(e) {
+            name = "";
+        }
+        name = name.trim();
+        if(name) {
+            return name;
+        }
+        if (!token.options || !token.options.address) {
+            return "ETH";
+        }
     }
 
     function randomTokenAddress(notThese) {
@@ -145,18 +168,69 @@ describe("AMM", () => {
         return tokenAddress === (dfo = dfo || {}).votingTokenAddress ? dfo.votingToken : tokens.filter(it => it.options.address === tokenAddress)[0];
     }
 
-    function assertstrictEqual(actual, expected) {
-        var difference = 0.0005;
+    function assertstrictEqual(actual, expected, difference) {
+        difference = difference || 0.0005;
         try {
             assert.strictEqual(actual, expected);
         } catch (e) {
             var diff = Math.abs(utilities.formatNumber(actual) - utilities.formatNumber(expected));
-            console.error(`Diff of ${diff}: ${actual} - ${expected}`);
+            console.error(`Diff of ${diff} of ${difference}: ${actual} - ${expected}`);
             if (diff > difference) {
                 throw e;
             }
         }
     }
+
+    it("swapLiquidity", async() => {
+        for (amm of Object.values(amms)) {
+            try {
+                console.log("\n=== " + amm.name + " ===");
+                console.log("receiver path 1: enterInETH");
+                await swapLiquidity(amm, accounts[1], true);
+                console.log("receiver path 1: exitInETH");
+                await swapLiquidity(amm, accounts[1], false, true);
+                console.log("receiver path 1: enterInETH exitInETH (must fail)");
+                await swapLiquidity(amm, accounts[1], true, true);
+                console.log("receiver path 1: noEth");
+                await swapLiquidity(amm, accounts[1]);
+                console.log("no receiver path 1: enterInETH");
+                await swapLiquidity(amm, undefined, true);
+                console.log("no receiver path 1: exitInETH");
+                await swapLiquidity(amm, undefined, false, true);
+                console.log("no receiver path 1: enterInETH exitInETH (must fail)");
+                await swapLiquidity(amm, undefined, true, true);
+                console.log("no receiver path 1: noEth");
+                await swapLiquidity(amm);
+
+                console.log("receiver path +: enterInETH");
+                await swapLiquidity(amm, accounts[1], true, false, true);
+                console.log("receiver path +: exitInETH");
+                await swapLiquidity(amm, accounts[1], false, true, true);
+                console.log("receiver path +: enterInETH exitInETH");
+                await swapLiquidity(amm, accounts[1], true, true, true);
+                if(amm.name.toLowerCase().indexOf('balancer') === -1) {
+                    console.log("receiver path +: noEth");
+                    await swapLiquidity(amm, accounts[1], false, false, true);
+                    console.log("receiver path +: ethInTheMiddle");
+                    await swapLiquidity(amm, accounts[1], false, false, true, true);
+                }
+                console.log("no receiver path +: enterInETH");
+                await swapLiquidity(amm, undefined, true, false, true);
+                console.log("no receiver path +: exitInETH");
+                await swapLiquidity(amm, undefined, false, true, true);
+                console.log("no receiver path +: enterInETH exitInETH");
+                await swapLiquidity(amm, undefined, true, true, true);
+                if(amm.name.toLowerCase().indexOf('balancer') === -1) {
+                    console.log("no receiver path +: noEth");
+                    await swapLiquidity(amm, undefined, false, false, true);
+                    console.log("no receiver path +: ethInTheMiddle");
+                    await swapLiquidity(amm, undefined, false, false, true, true);
+                }
+            } catch (e) {
+                throw e;
+            }
+        }
+    });
 
     async function createLiquidityPoolAndAddLiquidityNoPool(amm, receiver, existing, ethereum, moreThan2) {
         receiver = receiver || utilities.voidEthereumAddress;
@@ -241,6 +315,7 @@ describe("AMM", () => {
 
         var liquidityPoolDecimals = await liquidityPool.methods.decimals().call();
         assertstrictEqual(utilities.fromDecimals(await liquidityPool.methods.balanceOf(realReceiver).call(), liquidityPoolDecimals), expectedLiquidityPoolAmount);
+        await nothingInContracts(amm.contract.options.address);
     }
 
     it("createLiquidityPoolAndAddLiquidity", async() => {
@@ -286,7 +361,7 @@ describe("AMM", () => {
                     await createLiquidityPoolAndAddLiquidityNoPool(amm, undefined, true, true, true);
                 }
             } catch (e) {
-                if(e.message.indexOf("VM Exception") === -1) {
+                if (e.message.indexOf("VM Exception") === -1) {
                     throw e;
                 }
                 console.error(e.message);
@@ -328,14 +403,24 @@ describe("AMM", () => {
 
         var token = getToken(tokenAddresses[byLP ? 0 : tokenIndex], ethereum, amm.ethereumAddress);
         var decimals = token ? await token.methods.decimals().call() : 18;
-        var data = await amm.contract.methods.byTokenAmount(liquidityPoolAddress, tokenAddresses[byLP ? 0 : tokenIndex], utilities.toDecimals(300, decimals)).call();
+        var data = await amm.contract.methods.byTokenAmount(liquidityPoolAddress, tokenAddresses[byLP ? 0 : tokenIndex], utilities.toDecimals(amm.toBuy || randomPlainAmount(), decimals)).call();
         var liquidityPoolAmount = data[0];
         var amounts = data[1];
         tokenAddresses = data[2];
 
         if (byLP) {
+            console.log(liquidityPoolAmount, amounts);
             var data = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
             amounts = data[0];
+        }
+
+        console.log(liquidityPoolAmount, amounts);
+
+        if(liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
+            if(!amm.hasUniqueLiquidityPools) {
+                return;
+            }
+            return await addLiquidity(amm, receiver, byLP, ethereum);
         }
 
         var expectedLiquidityPoolAmount = web3.utils.toBN(liquidityPoolAmount).add(web3.utils.toBN(await liquidityPool.methods.balanceOf(realReceiver).call())).toString();
@@ -367,6 +452,8 @@ describe("AMM", () => {
         }
 
         var transaction = await amm.contract.methods.addLiquidity(liquidityPoolData).send(blockchainConnection.getSendingOptions({ value: ethereumAmount }));
+        amm.liquidityPoolAddress = amm.liquidityPoolAddress || ethereum ? undefined : liquidityPoolAddress;
+        amm.liquidityPoolAddressETH = amm.liquidityPoolAddressETH || !ethereum ? undefined : liquidityPoolAddress;
         var transactionFee = await blockchainConnection.calculateTransactionFee(transaction);
 
         for (var i in tokenAddresses) {
@@ -376,12 +463,11 @@ describe("AMM", () => {
                 expectedSenderAmounts[i] = web3.utils.toBN(expectedSenderAmounts[i]).sub(web3.utils.toBN(transactionFee)).toString();
             }
             var actualSenderBalance = token ? await token.methods.balanceOf(accounts[0]).call() : await web3.eth.getBalance(accounts[0]);
-            assertstrictEqual(utilities.fromDecimals(actualSenderBalance, decimals), utilities.fromDecimals(expectedSenderAmounts[i], decimals));
+            assertstrictEqual(utilities.fromDecimals(actualSenderBalance, decimals), utilities.fromDecimals(expectedSenderAmounts[i], decimals), 0.0009);
         }
 
         assertstrictEqual(utilities.fromDecimals(await liquidityPool.methods.balanceOf(realReceiver).call(), liquidityPoolDecimals), expectedLiquidityPoolAmount);
-
-        return liquidityPoolAddress;
+        await nothingInContracts(amm.contract.options.address);
     }
 
     it("addLiquidity", async() => {
@@ -389,17 +475,17 @@ describe("AMM", () => {
             try {
                 console.log(amm.name);
                 console.log("receiver by LP Amount");
-                await addLiquidity(amm, accounts[1], true, amm.doubleTokenLiquidityPoolAddress);
+                await addLiquidity(amm, accounts[1], true, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver by token amount 4 all tokens");
-                await addLiquidity(amm, accounts[1], false, amm.doubleTokenLiquidityPoolAddress);
+                await addLiquidity(amm, accounts[1], false, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver by LP Amount involving eth");
                 await addLiquidity(amm, accounts[1], true, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver token amount 4 all tokens involving eth");
                 await addLiquidity(amm, accounts[1], false, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by LP Amount");
-                await addLiquidity(amm, undefined, true, amm.doubleTokenLiquidityPoolAddress);
+                await addLiquidity(amm, undefined, true, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by token amount 4 all tokens");
-                await addLiquidity(amm, undefined, false, amm.doubleTokenLiquidityPoolAddress);
+                await addLiquidity(amm, undefined, false, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by LP Amount involving eth");
                 await addLiquidity(amm, undefined, true, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver token amount 4 all tokens involving eth");
@@ -407,24 +493,24 @@ describe("AMM", () => {
 
                 if (amm.maxTokensPerLiquidityPool == 0) {
                     console.log("receiver by LP Amount with more than 2 tokens");
-                    await addLiquidity(amm, accounts[1], true, amm.multipleTokenLiquidityPoolAddress);
+                    await addLiquidity(amm, accounts[1], true, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver by token amount 4 all tokens with more than 2 tokens");
-                    await addLiquidity(amm, accounts[1], false, amm.multipleTokenLiquidityPoolAddress);
+                    await addLiquidity(amm, accounts[1], false, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver by LP Amount involving eth with more than 2 tokens");
                     await addLiquidity(amm, accounts[1], true, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver token amount 4 all tokens involving eth with more than 2 tokens");
                     await addLiquidity(amm, accounts[1], false, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by LP Amount with more than 2 tokens");
-                    await addLiquidity(amm, undefined, true, amm.multipleTokenLiquidityPoolAddress);
+                    await addLiquidity(amm, undefined, true, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by token amount 4 all tokens with more than 2 tokens");
-                    await addLiquidity(amm, undefined, false, amm.multipleTokenLiquidityPoolAddress);
+                    await addLiquidity(amm, undefined, false, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by LP Amount involving eth with more than 2 tokens");
                     await addLiquidity(amm, undefined, true, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver token amount 4 all tokens involving eth with more than 2 tokens");
                     await addLiquidity(amm, undefined, false, true, amm.multipleTokenLiquidityPoolAddress);
                 }
             } catch (e) {
-                if(e.message.indexOf("VM Exception") === -1) {
+                if (e.message.indexOf("VM Exception") === -1) {
                     throw e;
                 }
                 console.error(e.message);
@@ -432,9 +518,9 @@ describe("AMM", () => {
         }
     });
 
-    async function removeLiquidity(amm, receiver, byLP, ethereum, liquidityPoolAddress, tokenIndex) {
+    async function removeLiquidity(amm, receiver, byLP, ethereum, oldLiquidityPoolAddress, tokenIndex) {
 
-        liquidityPoolAddress = ethereum ? amm.liquidityPoolAddressETH : amm.liquidityPoolAddress;
+        var liquidityPoolAddress = oldLiquidityPoolAddress ? oldLiquidityPoolAddress : ethereum ? amm.liquidityPoolAddressETH : amm.liquidityPoolAddress;
 
         var tokenAddresses = !liquidityPoolAddress ? undefined : (await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call())[2];
 
@@ -455,7 +541,7 @@ describe("AMM", () => {
 
         if (!byLP && isNaN(tokenIndex)) {
             for (var i in tokenAddresses) {
-                await addLiquidity(amm, receiver, byLP, ethereum, liquidityPoolAddress, utilities.formatNumber(i));
+                await removeLiquidity(amm, receiver, byLP, ethereum, oldLiquidityPoolAddress, utilities.formatNumber(i));
             }
             return;
         }
@@ -481,6 +567,14 @@ describe("AMM", () => {
             var data = await amm.contract.methods.byTokenAmount(liquidityPoolAddress, tokenAddresses[byLP ? 0 : tokenIndex], amounts[byLP ? 0 : tokenIndex]).call();
             liquidityPoolAmount = data[0];
             amounts = data[1];
+        }
+
+        if(liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
+            /*if(!amm.hasUniqueLiquidityPools) {
+                return;
+            }
+            return await removeLiquidity(amm, receiver, byLP, ethereum);*/
+            return;
         }
 
         var expectedLiquidityPoolAmount = web3.utils.toBN(await liquidityPool.methods.balanceOf(accounts[0]).call()).sub(web3.utils.toBN(liquidityPoolAmount)).toString();
@@ -521,6 +615,7 @@ describe("AMM", () => {
         }
 
         assertstrictEqual(utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), liquidityPoolDecimals), expectedLiquidityPoolAmount);
+        await nothingInContracts(amm.contract.options.address);
     }
 
     it("removeLiquidity", async() => {
@@ -528,17 +623,17 @@ describe("AMM", () => {
             try {
                 console.log(amm.name);
                 console.log("receiver by LP Amount");
-                await removeLiquidity(amm, accounts[1], true, amm.doubleTokenLiquidityPoolAddress);
+                await removeLiquidity(amm, accounts[1], true, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver by token amount 4 all tokens");
-                await removeLiquidity(amm, accounts[1], false, amm.doubleTokenLiquidityPoolAddress);
+                await removeLiquidity(amm, accounts[1], false, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver by LP Amount involving eth");
                 await removeLiquidity(amm, accounts[1], true, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("receiver token amount 4 all tokens involving eth");
                 await removeLiquidity(amm, accounts[1], false, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by LP Amount");
-                await removeLiquidity(amm, undefined, true, amm.doubleTokenLiquidityPoolAddress);
+                await removeLiquidity(amm, undefined, true, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by token amount 4 all tokens");
-                await removeLiquidity(amm, undefined, false, amm.doubleTokenLiquidityPoolAddress);
+                await removeLiquidity(amm, undefined, false, false, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver by LP Amount involving eth");
                 await removeLiquidity(amm, undefined, true, true, amm.doubleTokenLiquidityPoolAddress);
                 console.log("no receiver token amount 4 all tokens involving eth");
@@ -546,24 +641,24 @@ describe("AMM", () => {
 
                 if (amm.maxTokensPerLiquidityPool == 0) {
                     console.log("receiver by LP Amount with more than 2 tokens");
-                    await removeLiquidity(amm, accounts[1], true, amm.multipleTokenLiquidityPoolAddress);
+                    await removeLiquidity(amm, accounts[1], true, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver by token amount 4 all tokens with more than 2 tokens");
-                    await removeLiquidity(amm, accounts[1], false, amm.multipleTokenLiquidityPoolAddress);
+                    await removeLiquidity(amm, accounts[1], false, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver by LP Amount involving eth with more than 2 tokens");
                     await removeLiquidity(amm, accounts[1], true, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("receiver token amount 4 all tokens involving eth with more than 2 tokens");
                     await removeLiquidity(amm, accounts[1], false, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by LP Amount with more than 2 tokens");
-                    await removeLiquidity(amm, undefined, true, amm.multipleTokenLiquidityPoolAddress);
+                    await removeLiquidity(amm, undefined, true, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by token amount 4 all tokens with more than 2 tokens");
-                    await removeLiquidity(amm, undefined, false, amm.multipleTokenLiquidityPoolAddress);
+                    await removeLiquidity(amm, undefined, false, false, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver by LP Amount involving eth with more than 2 tokens");
                     await removeLiquidity(amm, undefined, true, true, amm.multipleTokenLiquidityPoolAddress);
                     console.log("no receiver token amount 4 all tokens involving eth with more than 2 tokens");
                     await removeLiquidity(amm, undefined, false, true, amm.multipleTokenLiquidityPoolAddress);
                 }
             } catch (e) {
-                if(e.message.indexOf("VM Exception") === -1) {
+                if (e.message.indexOf("VM Exception") === -1) {
                     throw e;
                 }
                 console.error(e.message);
@@ -573,39 +668,76 @@ describe("AMM", () => {
 
     async function swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle) {
 
-        var inputToken;
-        var otherToken;
-        var liquidityPoolAddress;
-
-        while((liquidityPoolAddress = (await amm.contract.methods.byTokens([
-            inputToken = enterInETH ? amm.ethereumAddress : randomTokenAddress(amm.ethereumAddress), 
-            otherToken = randomTokenAddress([inputToken, amm.ethereumAddress])]).call())[2]) === utilities.voidEthereumAddress) {
+        var liquidityPoolAddress = !moreThanOne ? amm.doubleTokenLiquidityPoolAddress : amm.multipleTokenLiquidityPoolAddress;
+        if (amm.maxTokensPerLiquidityPool === 0 && enterInETH && exitInETH) {
+            return;
         }
 
-        var paths = [otherToken];
+        var inputToken;
+        var paths;
+        var liquidityPoolAddresses;
 
-        var liquidityPoolAddresses = [liquidityPoolAddress];
+        if (!liquidityPoolAddress) {
+            var otherToken;
+            while ((liquidityPoolAddress = (await amm.contract.methods.byTokens([
+                    inputToken = enterInETH ? amm.ethereumAddress : randomTokenAddress(amm.ethereumAddress),
+                    otherToken = randomTokenAddress([inputToken, amm.ethereumAddress])
+                ]).call())[2]) === utilities.voidEthereumAddress) {}
 
-        if(moreThanOne) {
-            var length = randomPlainAmount(4);
-            var position = 0;
-            for(var i = 0; i < length; i++) {
-                while((liquidityPoolAddress = (await amm.contract.methods.byTokens([
-                    paths[position], 
-                    otherToken = randomTokenAddress(paths.slice(0, position + 1))]).call())[2]) === utilities.voidEthereumAddress) {
+            paths = [otherToken];
+
+            liquidityPoolAddresses = [liquidityPoolAddress];
+
+            if (moreThanOne) {
+                var length = randomPlainAmount(4);
+                var position = 0;
+                for (var i = 0; i < length; i++) {
+                    var times = 0;
+                    while (true) {
+                        otherToken = randomTokenAddress(paths.slice(0, position + 1));
+                        if(otherToken !== inputToken && paths.indexOf(otherToken) === -1) {
+                            if((liquidityPoolAddress = (await amm.contract.methods.byTokens([
+                                    paths[position],
+                                    otherToken
+                            ]).call())[2]) !== utilities.voidEthereumAddress) {
+                                break;
+                            }
+                        }
+                        if (times++ >= 5) {
+                            return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
+                        }
+                    }
+                    paths.push(otherToken);
+                    liquidityPoolAddresses.push(liquidityPoolAddress);
+                    position++;
                 }
-                paths.push(otherToken);
-                liquidityPoolAddresses.push(liquidityPoolAddress);
-                position++;
+            }
+
+            if (exitInETH) {
+                paths[paths.length - 1] = amm.ethereumAddress;
+                liquidityPoolAddresses[liquidityPoolAddresses.length - 1] = (await amm.contract.methods.byTokens([moreThanOne ? paths[paths.length - 2] : inputToken, paths[paths.length - 1]]).call())[2];
+            }
+        } else {
+            var lpTokens = (await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call())[2];
+            var nonEthToken = lpTokens.filter(it => it !== amm.ethereumAddress)[0];
+            inputToken = enterInETH || !exitInETH ? amm.ethereumAddress : nonEthToken;
+            paths = [enterInETH || !exitInETH ? nonEthToken : amm.ethereumAddress];
+            liquidityPoolAddresses = [liquidityPoolAddress];
+            if(amm.maxTokensPerLiquidityPool === 0 && moreThanOne) {
+                liquidityPoolAddresses.push(liquidityPoolAddresses[0]);
+                var thirdToken = lpTokens.filter(it => it !== amm.ethereumAddress && it !== paths[0])[0];
+                enterInETH && paths.push(thirdToken);
+                exitInETH && paths.unshift(thirdToken);
             }
         }
 
-        if(exitInETH) {
-            paths[paths.length - 1] = amm.ethereumAddress;
-            liquidityPoolAddresses[liquidityPoolAddresses.length - 1] = (await amm.contract.methods.byTokens([inputToken, paths[paths.length - 1]]).call())[2];
+        if(enterInETH && !exitInETH && paths[paths.length - 1] === context.wethTokenAddress) {
+            return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
         }
 
-        console.log(paths, liquidityPoolAddresses);
+        if(enterInETH && exitInETH && (paths.slice(0, paths.length - 1).indexOf(amm.ethereumAddress) !== -1 || paths.slice(0, paths.length - 1).indexOf(utilities.voidEthereumAddress) !== -1)) {
+            return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
+        }
 
         var token = inputToken !== utilities.voidEthereumAddress && tokens.filter(it => it.options.address === inputToken)[0];
         var decimals = !token ? 18 : await token.methods.decimals().call();
@@ -618,7 +750,9 @@ describe("AMM", () => {
         var amount = utilities.toDecimals(amountPlain, decimals);
 
         var expectedSenderBalance = !enterInETH ? await token.methods.balanceOf(accounts[0]).call() : await web3.eth.getBalance(accounts[0]);
-        expectedSenderBalance = web3.utils.toBN(expectedSenderBalance).sub(web3.utils.toBN(amount)).toString();
+        if (accounts[0] !== realReceiver) {
+            expectedSenderBalance = web3.utils.toBN(expectedSenderBalance).sub(web3.utils.toBN(amount)).toString();
+        }
 
         receiver = receiver || utilities.voidEthereumAddress;
         var realReceiver = receiver === utilities.voidEthereumAddress ? accounts[0] : receiver;
@@ -626,14 +760,44 @@ describe("AMM", () => {
         var outputAmount;
         try {
             outputAmount = await amm.contract.methods.getSwapOutput(inputToken, amount, liquidityPoolAddresses, paths).call();
-        } catch(e) {
-            if(enterInETH && exitInETH && paths.length === 1) {
+        } catch (e) {
+            if (enterInETH && exitInETH && paths.length === 1) {
                 return console.error(e.message);
+            }
+            if (e.message.toLowerCase().indexOf("identical_addresses") !== -1 || e.message.toLowerCase().indexOf("insufficient_input_amount") !== -1) {
+                return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
             }
             throw e;
         }
 
         outputAmount = outputAmount[outputAmount.length - 1];
+        if (outputAmount === '0') {
+            return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
+        }
+
+        var before = {};
+        before[accounts[0]] = await totalSum(accounts[0]);
+        if (realReceiver !== accounts[0]) {
+            before[realReceiver] = await totalSum(realReceiver);
+        }
+        var totals = {};
+        var entries = Object.values(before);
+        var toCheck = [utilities.voidEthereumAddress];
+        toCheck.push(...tokens.map(it => it));
+        for (var toCheckToken of toCheck) {
+            var address = toCheckToken.options ? toCheckToken.options.address : toCheckToken;
+            totals[address] = totals[address] || '0';
+            for (var entry of entries) {
+                var amnt = entry[address];
+                amnt && (totals[address] = web3.utils.toBN(totals[address]).add(web3.utils.toBN(amnt)).toString());
+            }
+            if (address === (enterInETH ? utilities.voidEthereumAddress : inputToken)) {
+                (totals[address] = web3.utils.toBN(totals[address]).sub(web3.utils.toBN(amount)).toString());
+            }
+            if (address === (exitInETH ? utilities.voidEthereumAddress : lastTokenAddress)) {
+                (totals[address] = web3.utils.toBN(totals[address]).add(web3.utils.toBN(outputAmount)).toString());
+            }
+        }
 
         var expectedReceiverBalance = !exitInETH ? await lastToken.methods.balanceOf(realReceiver).call() : await web3.eth.getBalance(realReceiver);
         expectedReceiverBalance = web3.utils.toBN(expectedReceiverBalance).add(web3.utils.toBN(outputAmount)).toString();
@@ -641,10 +805,10 @@ describe("AMM", () => {
         var swapData = {
             amount,
             inputToken,
-            paths,
+            path : paths,
             liquidityPoolAddresses,
             receiver,
-            enterInETH : enterInETH || false,
+            enterInETH: enterInETH || false,
             exitInETH: exitInETH || false
         }
 
@@ -652,69 +816,100 @@ describe("AMM", () => {
 
         var transaction;
         try {
-            transaction = await amm.contract.methods.swapLiquidity(swapData).send(blockchainConnection.getSendingOptions({value : enterInETH ? amount : '0'}));
-        } catch(e) {
-            if(enterInETH && exitInETH && paths.length === 1) {
+            transaction = await amm.contract.methods.swapLiquidity(swapData).send(blockchainConnection.getSendingOptions({ value: enterInETH ? amount : '0' }));
+            var names = [];
+            for(var i in paths) {
+                if((i = parseInt(i)) === paths.length - 1) {
+                    break;
+                }
+                var adr = paths[i];
+                var tkn = adr === utilities.voidEthereumAddress ? adr : new web3.eth.Contract(context.IERC20ABI, adr);
+                names.push(await tokenData(tkn, "symbol"));
+            }
+            console.log(`swapped ${amountPlain} ${await tokenData(enterInETH ? utilities.voidEthereumAddress : token, "symbol")} -> ${names.length === 0 ? "" : (names.join(' -> ') + " -> ")}${utilities.fromDecimals(outputAmount, lastDecimals)} ${await tokenData(exitInETH ? utilities.voidEthereumAddress : lastToken, "symbol")}`);
+        } catch (e) {
+            if (enterInETH && exitInETH && paths.length === 1) {
                 return console.error(e.message);
+            }
+            if (e.message.toLowerCase().indexOf("identical_addresses") !== -1 || e.message.toLowerCase().indexOf("insufficient_input_amount") !== -1) {
+                return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
             }
             throw e;
         }
 
         var transactionFee = await blockchainConnection.calculateTransactionFee(transaction);
-        if(enterInETH) {
+        if (enterInETH) {
             expectedSenderBalance = web3.utils.toBN(expectedSenderBalance).sub(web3.utils.toBN(transactionFee)).toString();
+            if (accounts[0] === realReceiver) {
+                expectedReceiverBalance = web3.utils.toBN(expectedReceiverBalance).sub(web3.utils.toBN(transactionFee)).toString();
+            }
         }
+
         expectedSenderBalance = utilities.fromDecimals(expectedSenderBalance, decimals);
         expectedReceiverBalance = utilities.fromDecimals(expectedReceiverBalance, lastDecimals);
 
-        assertstrictEqual(utilities.fromDecimals(!enterInETH ? await token.methods.balanceOf(accounts[0]).call() : await web3.eth.getBalance(accounts[0]), decimals), expectedSenderBalance);
-        assertstrictEqual(utilities.fromDecimals(!exitInETH ? await lastToken.methods.balanceOf(realReceiver).call() : await web3.eth.getBalance(realReceiver), lastDecimals), expectedReceiverBalance);
-    }
+        var actualSenderBalance = utilities.fromDecimals(!enterInETH ? await token.methods.balanceOf(accounts[0]).call() : await web3.eth.getBalance(accounts[0]), decimals);
 
-    it("swapLiquidity", async() => {
-        for (amm of Object.values(amms)) {
+        assertstrictEqual(actualSenderBalance, expectedSenderBalance, (accounts[0] === realReceiver && (enterInETH || exitInETH || ethInTheMiddle || inputToken === paths[paths.length - 1]) ? amountPlain : 0));
+
+        var actualReceiverBalance = utilities.fromDecimals(!exitInETH ? await lastToken.methods.balanceOf(realReceiver).call() : await web3.eth.getBalance(realReceiver), lastDecimals);
+
+        await nothingInContracts(amm.contract.options.address);
+
+        try {
+            assert(utilities.formatNumber(actualReceiverBalance.split(',').join('')) >= utilities.formatNumber(expectedReceiverBalance.split(',').join('')) - (accounts[0] === realReceiver && (enterInETH || exitInETH || ethInTheMiddle || inputToken === paths[paths.length - 1]) ? amountPlain : 0));
+        } catch (e) {
+            console.error(amountPlain);
+            console.error(actualReceiverBalance, expectedReceiverBalance);
+            console.error(e.message);
+            //throw e;
+        }
+
+        var after = {};
+        after[accounts[0]] = await totalSum(accounts[0]);
+        if (realReceiver !== accounts[0]) {
+            after[realReceiver] = await totalSum(realReceiver);
+        }
+        var actuals = {};
+        var entries = Object.values(after);
+        var toCheck = [utilities.voidEthereumAddress];
+        toCheck.push(...tokens.map(it => it));
+        totals[utilities.voidEthereumAddress] = web3.utils.toBN(totals[utilities.voidEthereumAddress]).sub(web3.utils.toBN(transactionFee)).toString();
+        for (var toCheckToken of toCheck) {
+            var address = toCheckToken.options ? toCheckToken.options.address : toCheckToken;
+            var dec = toCheckToken.methods ? await toCheckToken.methods.decimals().call() : 18;
+            actuals[address] = actuals[address] || '0';
+            for (var entry of entries) {
+                var amnt = entry[address];
+                amnt && (actuals[address] = web3.utils.toBN(actuals[address]).add(web3.utils.toBN(amnt)).toString());
+            }
             try {
-                console.log("\n=== " + amm.name + " ===");
-                console.log("receiver path 1: enterInETH");
-                await swapLiquidity(amm, accounts[1], true);
-                console.log("receiver path 1: exitInETH");
-                await swapLiquidity(amm, accounts[1], false, true);
-                console.log("receiver path 1: enterInETH exitInETH (must fail)");
-                await swapLiquidity(amm, accounts[1], true, true);
-                console.log("receiver path 1: noEth");
-                await swapLiquidity(amm, accounts[1]);
-                console.log("no receiver path 1: enterInETH");
-                await swapLiquidity(amm, undefined, true);
-                console.log("no receiver path 1: exitInETH");
-                await swapLiquidity(amm, undefined, false, true);
-                console.log("no receiver path 1: enterInETH exitInETH (must fail)");
-                await swapLiquidity(amm, undefined, true, true);
-                console.log("no receiver path 1: noEth");
-                await swapLiquidity(amm);
-
-                console.log("receiver path +: enterInETH");
-                await swapLiquidity(amm, accounts[1], true, false, true);
-                console.log("receiver path +: exitInETH");
-                await swapLiquidity(amm, accounts[1], false, true, true);
-                console.log("receiver path +: enterInETH exitInETH");
-                await swapLiquidity(amm, accounts[1], true, true, true);
-                console.log("receiver path +: noEth");
-                await swapLiquidity(amm, accounts[1], false, false, true);
-                console.log("receiver path +: ethInTheMiddle");
-                await swapLiquidity(amm, accounts[1], false, false, true, true);
-                console.log("no receiver path +: enterInETH");
-                await swapLiquidity(amm, undefined, true, false, true);
-                console.log("no receiver path +: exitInETH");
-                await swapLiquidity(amm, undefined, false, true, true);
-                console.log("no receiver path +: enterInETH exitInETH");
-                await swapLiquidity(amm, undefined, true, true, true);
-                console.log("no receiver path +: noEth");
-                await swapLiquidity(amm, undefined, false, false, true);
-                console.log("no receiver path +: ethInTheMiddle");
-                await swapLiquidity(amm, undefined, false, false, true, true);
+                assertstrictEqual(utilities.fromDecimals(actuals[address], dec), utilities.fromDecimals(totals[address], dec), 0.0009);
             } catch (e) {
-                throw e;
+                console.error(await tokenData(toCheckToken, "symbol"), utilities.fromDecimals(actuals[address], dec), utilities.fromDecimals(totals[address], dec), e.message);
             }
         }
-    });
+    }
+
+    async function nothingInContracts(address) {
+        var toCheck = [utilities.voidEthereumAddress];
+        toCheck.push(...tokens.map(it => it));
+        for (var tkn of toCheck) {
+            try {
+                assert.strictEqual(tkn === utilities.voidEthereumAddress ? await web3.eth.getBalance(address) : await tkn.methods.balanceOf(address).call(), '0');
+            } catch (e) {
+                console.error(`MONEY - ${await tokenData(tkn, 'symbol')} - ${address} - ${e.message}`);
+            }
+        }
+    }
+
+    async function totalSum(address) {
+        var data = {};
+        var toCheck = [utilities.voidEthereumAddress];
+        toCheck.push(...tokens.map(it => it));
+        for (var token of toCheck) {
+            data[token.options ? token.options.address : token] = token === utilities.voidEthereumAddress ? await web3.eth.getBalance(address) : await token.methods.balanceOf(address).call();
+        }
+        return data;
+    }
 });

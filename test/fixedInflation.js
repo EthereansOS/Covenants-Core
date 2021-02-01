@@ -65,11 +65,24 @@ describe("FixedInflation", () => {
             context.usdcTokenAddress,
             context.daiTokenAddress,
             context.mkrTokenAddress,
-            context.buidlTokenAddress
+            context.buidlTokenAddress,
+            context.balTokenAddress
         ].map(it => new web3.eth.Contract(context.IERC20ABI, it));
 
         await Promise.all(tokens.map(it => buyForETH(it, ethToSpend, uniswapAMM)));
     });
+
+    async function nothingInContracts(address) {
+        var toCheck = [utilities.voidEthereumAddress];
+        toCheck.push(...tokens.map(it => it));
+        for (var tkn of toCheck) {
+            try {
+                assert.strictEqual(tkn === utilities.voidEthereumAddress ? await web3.eth.getBalance(address) : await tkn.methods.balanceOf(address).call(), '0');
+            } catch (e) {
+                console.error(`MONEY - ${await tokenData(tkn, 'symbol')} - ${address} - ${e.message}`);
+            }
+        }
+    }
 
     async function buyForETH(token, amount, ammPlugin) {
         var value = utilities.toDecimals(amount.toString(), '18');
@@ -91,7 +104,7 @@ describe("FixedInflation", () => {
             enterInETH: true,
             exitInETH: false,
             liquidityPoolAddresses: [liquidityPoolAddress],
-            paths: [token.options.address],
+            path: [token.options.address],
             inputToken: ethereumAddress,
             receiver: utilities.voidEthereumAddress
         }).send(blockchainConnection.getSendingOptions({ value }));
@@ -449,6 +462,10 @@ describe("FixedInflation", () => {
             }]
         }];
 
+        global.totalSupply = await (new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress).methods.totalSupply().call());
+        global.perc = await calculatePercentage(global.totalSupply , 1500000000000);
+        global.expectedSupply = web3.utils.toBN(global.totalSupply).add(web3.utils.toBN(global.perc)).toString();
+
         var entries = "";
         var operations = "";
         var functions = "";
@@ -524,5 +541,7 @@ describe("FixedInflation", () => {
         balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);
 
         assert.strictEqual(balanceOfAfter, balanceOfExpected);*/
+
+        await nothingInContracts(fixedInflation.options.address);
     });
 });

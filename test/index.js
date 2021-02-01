@@ -60,7 +60,7 @@ describe("Index", () => {
             enterInETH : true,
             exitInETH : false,
             liquidityPoolAddresses : [liquidityPoolAddress],
-            paths : [token.options.address],
+            path : [token.options.address],
             inputToken : ethereumAddress,
             receiver : utilities.voidEthereumAddress
         }).send(blockchainConnection.getSendingOptions({value}));

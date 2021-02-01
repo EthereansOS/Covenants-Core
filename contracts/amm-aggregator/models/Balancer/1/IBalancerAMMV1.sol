@@ -74,6 +74,28 @@ interface BPool {
         external view
         returns (address);
 
+    function calcOutGivenIn(
+        uint tokenBalanceIn,
+        uint tokenWeightIn,
+        uint tokenBalanceOut,
+        uint tokenWeightOut,
+        uint tokenAmountIn,
+        uint swapFee
+    )
+        external pure
+        returns (uint tokenAmountOut);
+
+    function calcInGivenOut(
+        uint tokenBalanceIn,
+        uint tokenWeightIn,
+        uint tokenBalanceOut,
+        uint tokenWeightOut,
+        uint tokenAmountOut,
+        uint swapFee
+    )
+        external pure
+        returns (uint tokenAmountIn);
+
     function setSwapFee(uint swapFee)
         external;
 
