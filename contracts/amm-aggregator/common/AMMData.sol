@@ -2,12 +2,12 @@
 pragma solidity ^0.7.6;
 
 struct LiquidityPoolData {
-    address liquidityPoolAddress; // setup
-    uint256 amount; // posizione
-    address tokenAddress; // setup
-    bool amountIsLiquidityPool; // true
-    bool involvingETH; // setup
-    address receiver; // msg.sender (free == uniqueOwner)
+    address liquidityPoolAddress;
+    uint256 amount;
+    address tokenAddress;
+    bool amountIsLiquidityPool;
+    bool involvingETH;
+    address receiver;
 }
 
 struct SwapData {
