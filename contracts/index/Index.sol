@@ -6,8 +6,11 @@ pragma abicoder v2;
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/ERC1155Receiver.sol";
+import "./util/DFOHub.sol";
 
 contract Index is ERC1155Receiver {
+
+    address public _doubleProxy;
 
     mapping(address => bool) _temporaryIndex;
 
@@ -18,8 +21,22 @@ contract Index is ERC1155Receiver {
     mapping(uint256 => address[]) public tokens;
     mapping(uint256 => uint256[]) public amounts;
 
-    constructor(address ethItemOrchestrator, string memory name, string memory symbol, string memory uri) {
+    constructor(address doubleProxy, address ethItemOrchestrator, string memory name, string memory symbol, string memory uri) {
+        _doubleProxy = doubleProxy;
         (collection,) = IEthItemOrchestrator(ethItemOrchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", name, symbol, true, uri, address(this), ""), "");
+    }
+
+    modifier onlyDFO() {
+        require(IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(msg.sender), "Unauthorized");
+        _;
+    }
+
+    function setDoubleProxy(address newDoubleProxy) public onlyDFO {
+        _doubleProxy = newDoubleProxy;
+    }
+
+    function setCollectionUri(string memory uri) public onlyDFO {
+        INativeV1(collection).setUri(uri);
     }
 
     function info(uint256 objectId, uint256 value) public view returns(address[] memory _tokens, uint256[] memory _amounts) {

@@ -17,10 +17,13 @@ describe("Index", () => {
     var buyForETHAmount = 100;
     var tokens;
     var amm;
+    var dfo;
 
     before(async() => {
 
         await blockchainConnection.init;
+
+        dfo = await dfoManager.createDFO("MyName", "MySymbol", 10000000, 100, 10);
 
         Index = await compile('index/Index');
         var UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
@@ -67,11 +70,28 @@ describe("Index", () => {
     }
 
     it("Contract creation", async () => {
-        indexContract = await new web3.eth.Contract(Index.abi).deploy({data : Index.bin, arguments : [context.ethItemOrchestratorAddress, "Index", "IDX", "google.com"]}).send(blockchainConnection.getSendingOptions());
+        indexContract = await new web3.eth.Contract(Index.abi).deploy({data : Index.bin, arguments : [dfo.doubleProxyAddress, context.ethItemOrchestratorAddress, "Index", "IDX", "google.com"]}).send(blockchainConnection.getSendingOptions());
         indexCollection = new web3.eth.Contract(context.ethItemNativeABI, await indexContract.methods.collection().call());
 
         assert.notStrictEqual(indexContract.options.address, utilities.voidEthereumAddress);
         assert.notStrictEqual(indexCollection.options.address, utilities.voidEthereumAddress);
+    });
+
+    it("Change URI", async () => {
+        var collectionAddress = await indexContract.methods.collection().call();
+        var collection = new web3.eth.Contract(context.ethItemNativeABI, collectionAddress);
+        assert.strictEqual(await collection.methods.uri().call(), "google.com");
+        var newUri = "mino.com";
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/IndexSetCollectionURI.sol'), 'UTF-8').format(indexContract.options.address, newUri);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        assert.strictEqual(await collection.methods.uri().call(), newUri);
+        try {
+            await indexContract.methods.setCollectionUri("mauro.eth").send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
+        }
     });
 
     async function newIndex(name, symbol, uri, tokens, amountsPlain, amountToMint) {
