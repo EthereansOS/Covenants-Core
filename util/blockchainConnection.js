@@ -43,10 +43,14 @@ module.exports = {
         await this.fastForward(blocks);
     },
     async calculateTransactionFee(txn) {
-        var transactionHash = txn.transactionHash || txn;
-        var transactionReceipt = await web3.eth.getTransactionReceipt(transactionHash);
-        var transaction = await web3.eth.getTransaction(transactionHash);
-        var cost = web3.utils.toBN(transactionReceipt.gasUsed).mul(web3.utils.toBN(transaction.gasPrice));
-        return cost.toString();
+        try {
+            var transactionHash = txn.transactionHash || txn;
+            var transactionReceipt = await web3.eth.getTransactionReceipt(transactionHash);
+            var transaction = await web3.eth.getTransaction(transactionHash);
+            var cost = web3.utils.toBN(transactionReceipt.gasUsed).mul(web3.utils.toBN(transaction.gasPrice));
+            return cost.toString();
+        } catch (error) {
+            return '0';
+        }
     }
 }
