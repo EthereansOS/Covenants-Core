@@ -135,7 +135,7 @@ abstract contract AMM is IAMM {
         ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, data.involvingETH);
         (liquidityPoolAmount, tokensAmounts) = _addLiquidity(processedLiquidityPoolData);
-        _flushBack(liquidityPoolTokens, processedLiquidityPoolData.involvingETH);
+        _flushBack(liquidityPoolTokens);
     }
 
     function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
@@ -150,6 +150,7 @@ abstract contract AMM is IAMM {
             }
         }
         _transferToMeAndCheckAllowance();
+        _collect(_ethereumAddress, 0, address(0), false);
         for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
             (liquidityPoolAmounts[i], tokensAmounts[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
         }
@@ -179,25 +180,6 @@ abstract contract AMM is IAMM {
             (liquidityPoolAmounts[i], tokensAmounts[i]) = _removeLiquidity(processedLiquidityPoolDataArray[i]);
         }
         _flushBackAndClear();
-    }
-
-    function toString(uint _i) public pure returns(string memory) {
-        if (_i == 0) {
-            return "0";
-        }
-        uint j = _i;
-        uint len;
-        while (j != 0) {
-            len++;
-            j /= 10;
-        }
-        bytes memory bstr = new bytes(len);
-        uint k = len - 1;
-        while (_i != 0) {
-            bstr[k--] = byte(uint8(48 + _i % 10));
-            _i /= 10;
-        }
-        return string(bstr);
     }
 
     function swapLiquidity(SwapData memory data) payable public virtual override returns(uint256 outputAmount) {
@@ -233,7 +215,7 @@ abstract contract AMM is IAMM {
 
     function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address operator, address receiver) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens);
 
-    function _processLiquidityPoolData(LiquidityPoolData memory data) private view returns(ProcessedLiquidityPoolData memory) {
+    function _processLiquidityPoolData(LiquidityPoolData memory data) internal view returns(ProcessedLiquidityPoolData memory) {
         require(data.amount > 0, "Zero amount");
         uint256[] memory tokensAmounts;
         address[] memory liquidityPoolTokens;
@@ -263,7 +245,7 @@ abstract contract AMM is IAMM {
         );
     }
 
-    function _processSwapData(SwapData memory data) private view returns(ProcessedSwapData memory) {
+    function _processSwapData(SwapData memory data) internal view returns(ProcessedSwapData memory) {
         require(data.amount > 0, "Zero amount");
         require(data.path.length > 0 && data.liquidityPoolAddresses.length == data.path.length, "Invalid length");
         ( , ,address[] memory liquidityPoolTokens) = this.byLiquidityPool(data.liquidityPoolAddresses[0]);
@@ -291,10 +273,15 @@ abstract contract AMM is IAMM {
         _tokenAmounts[position] = _tokenAmounts[position] + tokenAmount;
     }
 
-    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator, bool involvingETH) private {
+    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator, bool involvingETH) internal {
         for(uint256 i = 0; i < tokens.length; i++) {
             _transferToMeAndCheckAllowance(involvingETH && tokens[i] == _ethereumAddress ? address(0) : tokens[i] , amounts[i], operator);
         }
+    }
+
+    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) internal {
+        _transferToMe(tokenAddress, value);
+        _checkAllowance(tokenAddress, value, operator);
     }
 
     function _transferToMeAndCheckAllowance() private {
@@ -308,17 +295,13 @@ abstract contract AMM is IAMM {
             delete _tokenIndex[_tokensToTransfer[i]];
             _flushBack(_tokensToTransfer[i]);
         }
+        _flushBack(address(0));
         delete _tokensToTransfer;
         delete _operators;
         delete _tokenAmounts;
     }
 
-    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 value, address operator) private {
-        _transferToMe(tokenAddress, value);
-        _checkAllowance(tokenAddress, value, operator);
-    }
-
-    function _transferToMe(address tokenAddress, uint256 value) private {
+    function _transferToMe(address tokenAddress, uint256 value) internal virtual {
         if(tokenAddress == address(0)) {
             require(msg.value == value, "Incorrect eth value");
             return;
@@ -326,13 +309,14 @@ abstract contract AMM is IAMM {
         _safeTransferFrom(tokenAddress, msg.sender, address(this), value);
     }
 
-    function _flushBack(address[] memory tokenAddresses, bool involvingETH) private {
+    function _flushBack(address[] memory tokenAddresses) internal {
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
-            _flushBack(involvingETH && tokenAddresses[i] == _ethereumAddress ? address(0) : tokenAddresses[i]);
+            _flushBack(tokenAddresses[i]);
         }
+        _flushBack(address(0));
     }
 
-    function _flushBack(address tokenAddress) private {
+    function _flushBack(address tokenAddress) internal {
         uint256 amount = tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
         if(amount == 0) {
             return;
@@ -368,7 +352,7 @@ abstract contract AMM is IAMM {
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
-    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) private {
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal {
         bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }

@@ -11,21 +11,27 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
 
     address private _wethAddress;
 
-    address private immutable _factoryAddress;
-
     constructor(address uniswapV2RouterAddress) AMM("UniswapV2", 1, _wethAddress = IUniswapV2Router(_uniswapV2RouterAddress = uniswapV2RouterAddress).WETH(), 2, true) {
-        _factoryAddress = IUniswapV2Router(uniswapV2RouterAddress).factory();
     }
 
-    function uniswapData() public virtual override view returns(address routerAddress, address factoryAddress, address wethAddress) {
+    function factory() private view returns (address) {
+        return IUniswapV2Router(_uniswapV2RouterAddress).factory();
+    }
+
+    function uniswapData() public virtual override view returns(address routerAddress, address wethAddress) {
         routerAddress = _uniswapV2RouterAddress;
-        factoryAddress = _factoryAddress;
         wethAddress = _wethAddress;
     }
 
     function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
+
+        address token0 = pair.token0();
+        address token1 = pair.token1();
+        if(IUniswapV2Factory(factory()).getPair(token0, token1) != liquidityPoolAddress) {
+            return(0, new uint256[](0), new address[](0));
+        }
 
         liquidityPoolAmount = pair.totalSupply();
 
@@ -35,13 +41,13 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
         tokensAmounts[1] = amountB;
 
         tokenAddresses = new address[](2);
-        tokenAddresses[0] = pair.token0();
-        tokenAddresses[1] = pair.token1();
+        tokenAddresses[0] = token0;
+        tokenAddresses[1] = token1;
     }
 
     function byTokens(address[] memory tokenAddresses) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
 
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(_factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]));
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(factory()).getPair(tokenAddresses[0], tokenAddresses[1]));
 
         if(address(pair) == address(0)) {
             return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
@@ -103,7 +109,7 @@ contract UniswapV2AMMV1 is IUniswapV2AMMV1, AMM {
                 block.timestamp + 10000
             );
         }
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(_factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]));
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(factory()).getPair(tokenAddresses[0], tokenAddresses[1]));
         orderedTokens[0] = pair.token0();
         orderedTokens[1] = pair.token1();
     }

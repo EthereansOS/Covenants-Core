@@ -55,7 +55,7 @@ describe("AMM", () => {
 
         tokens = [
             context.wethTokenAddress,
-            context.usdtTokenAddress,
+            //context.usdtTokenAddress,
             context.chainLinkTokenAddress,
             context.usdcTokenAddress,
             context.daiTokenAddress,
@@ -91,6 +91,9 @@ describe("AMM", () => {
             amm.version = data[1];
             gottenAMMS[amm.name.substring(0, 1).toLowerCase() + amm.name.substring(1).split('V2').join('')] = amm;
 
+            amm.name.toLowerCase().indexOf("balancer") !== -1 && (amm.doubleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x8a649274e4d777ffc6851f13d23a86bbfa2f2fbf"));
+            amm.name.toLowerCase().indexOf("balancer") !== -1 && (amm.multipleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x9b208194acc0a8ccb2a8dcafeacfbb7dcc093f81"));
+
             amm.toBuy = 300;
             try {
                 await addLiquidity(amm, accounts[0], true, false, amm.doubleTokenLiquidityPoolAddress);
@@ -100,9 +103,6 @@ describe("AMM", () => {
             } catch (e) {}
             delete amm.toBuy;
         }
-
-        gottenAMMS.balancer && (gottenAMMS.balancer.doubleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x8a649274e4d777ffc6851f13d23a86bbfa2f2fbf"));
-        gottenAMMS.balancer && (gottenAMMS.balancer.multipleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x9b208194acc0a8ccb2a8dcafeacfbb7dcc093f81"));
 
         return gottenAMMS;
     }
@@ -209,7 +209,7 @@ describe("AMM", () => {
 
     it("byLP", async () => {
         var data = await ammAggregator.methods.findByLiquidityPool(liquidityPool.options.address).call();
-        assert.strictEqual(amms.uniswap || amms.sushiSwap ? (amms.uniswap || amms.sushiSwap).contract.options.address : utilities.voidEthereumAddress, data[3]);
+        assert.strictEqual(amms.uniswap ? amms.uniswap.contract.options.address : utilities.voidEthereumAddress, data[3]);
     });
 
     it("setAMMS", async () => {
@@ -318,7 +318,7 @@ describe("AMM", () => {
         if (existing) {
             while (true) {
                 var data = await amm.contract.methods.byTokens(tokenAddresses).call();
-                if (data.liquidityPoolAddress !== utilities.voidEthereumAddress) {
+                if (data[2] !== utilities.voidEthereumAddress) {
                     break;
                 }
                 tokenAddresses = getTokenAddresses(ethereum, amm.ethereumAddress, moreThan2, existing, dfo);
@@ -338,7 +338,7 @@ describe("AMM", () => {
 
         if (existing) {
             var data = await amm.contract.methods.byTokens(tokenAddresses).call();
-            liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress = data.liquidityPoolAddress);
+            liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress = data[2]);
             var decimals = await liquidityPool.methods.decimals().call();
             data = await amm.contract.methods.byTokenAmount(liquidityPoolAddress, tokenAddresses[0], amounts[0]).call();
             expectedLiquidityPoolAmount = await liquidityPool.methods.balanceOf(realReceiver).call();
@@ -374,7 +374,7 @@ describe("AMM", () => {
             liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress);
             var liquidityPoolData = await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call();
             var decimals = await liquidityPool.methods.decimals().call();
-            expectedLiquidityPoolAmount = liquidityPoolData.liquidityPoolAmount;
+            expectedLiquidityPoolAmount = liquidityPoolData[0];
             expectedLiquidityPoolAmount = utilities.fromDecimals(expectedLiquidityPoolAmount, decimals);
         }
 
@@ -446,12 +446,14 @@ describe("AMM", () => {
 
     async function addLiquidity(amm, receiver, byLP, ethereum, liquidityPoolAddress, tokenIndex) {
 
+        liquidityPoolAddress = liquidityPoolAddress || amm.doubleTokenLiquidityPoolAddress;
+
         var tokenAddresses = !liquidityPoolAddress ? undefined : (await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call())[2];
 
         if (!tokenAddresses) {
             while (true) {
                 var data = await amm.contract.methods.byTokens(tokenAddresses = getTokenAddresses(ethereum, amm.ethereumAddress)).call();
-                if (data.liquidityPoolAddress !== utilities.voidEthereumAddress) {
+                if (data[2] !== utilities.voidEthereumAddress) {
                     break;
                 }
             }
@@ -600,7 +602,8 @@ describe("AMM", () => {
         if (!tokenAddresses) {
             while (true) {
                 var data = await amm.contract.methods.byTokens(tokenAddresses = getTokenAddresses(ethereum, amm.ethereumAddress)).call();
-                if (data.liquidityPoolAddress !== utilities.voidEthereumAddress) {
+                if (data[2] !== utilities.voidEthereumAddress) {
+                    console.log(tokenAddresses);
                     break;
                 }
             }
@@ -613,11 +616,13 @@ describe("AMM", () => {
         }
 
         if (!byLP && isNaN(tokenIndex)) {
-            for (var i in tokenAddresses) {
-                await removeLiquidity(amm, receiver, byLP, ethereum, oldLiquidityPoolAddress, utilities.formatNumber(i));
+            /*for (var i in tokenAddresses) {
+                await removeLiquidity(amm, receiver, byLP, ethereum, liquidityPoolAddress, utilities.formatNumber(i));
             }
+            return;*/
             return;
         }
+
 
         receiver = receiver || utilities.voidEthereumAddress;
         var realReceiver = receiver === utilities.voidEthereumAddress ? accounts[0] : receiver;
@@ -643,11 +648,11 @@ describe("AMM", () => {
         }
 
         if (liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
-            /*if(!amm.hasUniqueLiquidityPools) {
+            if(!amm.hasUniqueLiquidityPools) {
                 return;
             }
-            return await removeLiquidity(amm, receiver, byLP, ethereum);*/
             return;
+            //return await removeLiquidity(amm, receiver, byLP, ethereum);
         }
 
         var expectedLiquidityPoolAmount = web3.utils.toBN(await liquidityPool.methods.balanceOf(accounts[0]).call()).sub(web3.utils.toBN(liquidityPoolAmount)).toString();
@@ -760,7 +765,7 @@ describe("AMM", () => {
 
         for(var tokenAddress of tokenAddresses) {
             var token = tokens.filter(it => it.options.address === tokenAddress)[0];
-            await token.methods.approve(amm.contract.options.address, utilities.toDecimals(100000000000000000, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+            await token.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
         }
         var liquidityPoolAmount = utilities.toDecimals(15, 18);
         var byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
@@ -791,18 +796,354 @@ describe("AMM", () => {
         var value = web3.utils.toBN(ethereumAmount).add(web3.utils.toBN(ethereumAmount)).toString();
         await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
         await nothingInContracts(amm.contract.options.address);
+
         await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
         await nothingInContracts(amm.contract.options.address);
 
         var after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
         console.log(before, after);
 
-        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(100000000000000000, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
         await amm.contract.methods.removeLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions());
         await nothingInContracts(amm.contract.options.address);
         before = after;
         after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
         console.log(before, after);
+
+        value = ethereumAmount;
+
+        var swapDatas = [{
+            enterInETH : true,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.daiTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }, {
+            enterInETH : false,
+            exitInETH : true,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [amm.ethereumAddress],
+            inputToken : context.daiTokenAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        },{
+            enterInETH : false,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.daiTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }];
+
+        await amm.contract.methods.swapLiquidityBatch(swapDatas).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+    });
+
+    it("Mooniswap Batch", async () => {
+        var amms = await getAMMS();
+        if(!amms.mooniswap) {
+            return;
+        }
+        var amm = amms.mooniswap;
+        var liquidityPoolAddress = amm.doubleTokenLiquidityPoolAddress;
+        var tokenAddresses;
+        if(!liquidityPoolAddress) {
+            var data = await amm.contract.methods.byTokens([context.daiTokenAddress, amm.ethereumAddress]).call();
+            liquidityPoolAddress = data[2];
+            tokenAddresses = data[3];
+        }
+        var data = await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call();
+        tokenAddresses = data[2];
+
+        var liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress);
+        var before = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+
+        for(var tokenAddress of tokenAddresses) {
+            var token = tokens.filter(it => it.options.address === tokenAddress)[0];
+            try {
+                await token.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+            } catch(e) {
+            }
+        }
+        var liquidityPoolAmount = utilities.toDecimals(15, 18);
+        var byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        var ethereumIndex = tokenAddresses.indexOf(amm.ethereumAddress);
+        var ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+        var liquidityPoolsData = [{
+            liquidityPoolAddress,
+            amount : liquidityPoolAmount,
+            tokenAddress : utilities.voidEthereumAddress,
+            amountIsLiquidityPool : true,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : false,
+            receiver : utilities.voidEthereumAddress
+        }];
+        var value = web3.utils.toBN(ethereumAmount).add(web3.utils.toBN(ethereumAmount)).add(web3.utils.toBN(ethereumAmount)).toString();
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        var after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        await amm.contract.methods.removeLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions());
+        await nothingInContracts(amm.contract.options.address);
+        before = after;
+        after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        value =  web3.utils.toBN(ethereumAmount).add(web3.utils.toBN(ethereumAmount)).toString();
+
+        var swapDatas = [{
+            enterInETH : true,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.daiTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }, {
+            enterInETH : false,
+            exitInETH : true,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [amm.ethereumAddress],
+            inputToken : context.daiTokenAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        },{
+            enterInETH : false,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.daiTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }];
+
+        await amm.contract.methods.swapLiquidityBatch(swapDatas).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+    });
+
+    it("SushiSwap Batch", async () => {
+        var amms = await getAMMS();
+        if(!amms.sushiSwap) {
+            return;
+        }
+        var amm = amms.sushiSwap;
+        var liquidityPoolAddress = amm.liquidityPoolAddressETH;
+        var tokenAddresses;
+        if(!liquidityPoolAddress) {
+            var data = await amm.contract.methods.byTokens([context.usdcTokenAddress, amm.ethereumAddress]).call();
+            liquidityPoolAddress = data[2];
+            tokenAddresses = data[3];
+        }
+        var data = await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call();
+        tokenAddresses = data[2];
+
+        var liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress);
+        var before = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+
+        for(var tokenAddress of tokenAddresses) {
+            var token = tokens.filter(it => it.options.address === tokenAddress)[0];
+            await token.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        }
+        var liquidityPoolAmount = utilities.toDecimals(0.1, 18);
+        var byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        var ethereumIndex = tokenAddresses.indexOf(amm.ethereumAddress);
+        var ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+        var otherTokenAddress = tokenAddresses[ethereumIndex === 0 ? 1 : 0];
+        console.log(ethereumAmount);
+        var liquidityPoolsData = [{
+            liquidityPoolAddress,
+            amount : liquidityPoolAmount,
+            tokenAddress : utilities.voidEthereumAddress,
+            amountIsLiquidityPool : true,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : false,
+            receiver : utilities.voidEthereumAddress
+        }];
+        var value = web3.utils.toBN(ethereumAmount).add(web3.utils.toBN(ethereumAmount)).toString();
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        var after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        await amm.contract.methods.removeLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions());
+        await nothingInContracts(amm.contract.options.address);
+        before = after;
+        after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        value = ethereumAmount;
+
+        var swapDatas = [{
+            enterInETH : true,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [otherTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }, {
+            enterInETH : false,
+            exitInETH : true,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [amm.ethereumAddress],
+            inputToken : otherTokenAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        },{
+            enterInETH : false,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [otherTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }];
+
+        await amm.contract.methods.swapLiquidityBatch(swapDatas).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+    });
+
+    it("Balancer Batch", async () => {
+        var amms = await getAMMS();
+        if(!amms.balancer) {
+            return;
+        }
+        var amm = amms.balancer;
+        var liquidityPoolAddress = amm.doubleTokenLiquidityPoolAddress;
+        var tokenAddresses;
+        if(!liquidityPoolAddress) {
+            var data = await amm.contract.methods.byTokens([context.daiTokenAddress, amm.ethereumAddress]).call();
+            liquidityPoolAddress = data[2];
+            tokenAddresses = data[3];
+        }
+        var data = await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call();
+        tokenAddresses = data[2];
+
+        var liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress);
+        var before = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+
+        for(var tokenAddress of tokenAddresses) {
+            var token = tokens.filter(it => it.options.address === tokenAddress)[0];
+            await token.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        }
+        var liquidityPoolAmount = utilities.toDecimals(15, 18);
+        var byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        var ethereumIndex = tokenAddresses.indexOf(amm.ethereumAddress);
+        var ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+
+        var byTokenAmount = await amm.contract.methods.byTokenAmount(liquidityPoolAddress, amm.ethereumAddress, ethereumAmount).call();
+        //ethereumAmount = byTokenAmount[1][ethereumIndex];
+        //liquidityPoolAmount = byTokenAmount[0];
+
+        var liquidityPoolsData = [{
+            liquidityPoolAddress,
+            amount : liquidityPoolAmount,
+            tokenAddress : utilities.voidEthereumAddress,
+            amountIsLiquidityPool : true,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : false,
+            receiver : utilities.voidEthereumAddress
+        }];
+        var value = ethereumAmount;
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        var after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after, await liquidityPool.methods.balanceOf(accounts[0]).call());
+
+        byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+        value = ethereumAmount;
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        console.log(before, after, await liquidityPool.methods.balanceOf(accounts[0]).call());
+
+        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(0xfffffffffffffffffffffffffffffffffffffffffffff, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        await amm.contract.methods.removeLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions());
+        await nothingInContracts(amm.contract.options.address);
+        before = after;
+        after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+        value = ethereumAmount;
+
+        var swapDatas = [{
+            enterInETH : true,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.usdcTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }/*, {
+            enterInETH : false,
+            exitInETH : true,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [amm.ethereumAddress],
+            inputToken : context.usdcTokenAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        },{
+            enterInETH : false,
+            exitInETH : false,
+            liquidityPoolAddresses : [liquidityPoolAddress],
+            path : [context.usdcTokenAddress],
+            inputToken : amm.ethereumAddress,
+            amount : ethereumAmount,
+            receiver : accounts[0]
+        }*/];
+
+        await amm.contract.methods.swapLiquidityBatch(swapDatas).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
     });
 
     async function swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle) {

@@ -7,7 +7,7 @@ import "../../../util/IERC20.sol";
 
 interface ISushiSwapAMMV1 is IAMM {
 
-    function sushiSwapData() external view returns(address routerAddress, address factoryAddress, address wethAddress);
+    function sushiSwapData() external view returns(address routerAddress, address wethAddress);
 }
 
 interface IUniswapV2Router {
@@ -112,4 +112,5 @@ interface IUniswapV2Pair is IERC20 {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
+    function factory() external view returns(address);
 }
