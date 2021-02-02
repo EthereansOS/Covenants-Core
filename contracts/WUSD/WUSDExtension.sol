@@ -43,10 +43,6 @@ contract WUSDExtension {
         _;
     }
 
-    function setController(address newController) public controllerOnly {
-        _controller = newController;
-    }
-
     function mintEmpty(string memory tokenName, string memory tokenSymbol, string memory objectUri, bool editable) public controllerOnly returns(uint256 objectId, address interoperableInterfaceAddress) {
         return _mintEmpty(tokenName, tokenSymbol, objectUri, editable);
     }

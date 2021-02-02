@@ -160,16 +160,16 @@ describe("WUSD", () => {
             doubleProxyAddress : dfo.doubleProxyAddress,
             rebalanceByCreditReceivers : [],
             rebalanceByCreditPercentages : [],
-            rebalanceByCreditPercentageForCaller : 300,
+            rebalanceByCreditPercentageForCaller : utilities.toDecimals("0.02", 18),
             rebalanceByCreditBlockInterval : 0,
             allowedAMMsBytes : await encodeAMMV2Params(),
             wusdExtension : utilities.voidEthereumAddress,
             wusdNote2ObjectId : 0,
             wusdNote2Controller : wusdNote2Controller.options.address,
-            wusdNote2Percentage : 5000,
+            wusdNote2Percentage : utilities.toDecimals("0.125", 18),
             wusdNote5ObjectId : 0,
             wusdNote5Controller : wusdNote5Controller.options.address,
-            wusdNote5Percentage : 200,
+            wusdNote5Percentage : utilities.toDecimals("0.195", 18),
             orchestratorAddress : ethItemOrchestrator.options.address,
             names : ["Wrapped USD", "Wrapped USD"],
             symbols : ["WUSD", "WUSD"],
@@ -471,60 +471,6 @@ describe("WUSD", () => {
         }
     });
 
-    it("Nobody but DFO can change Controller", async() => {
-        var note2Info = await wusdNote2Controller.methods.info().call();
-        var note5Info = await wusdNote5Controller.methods.info().call();
-        var wUSDInitializer = {
-            doubleProxyAddress : dfo.doubleProxyAddress,
-            rebalanceByCreditReceivers : [],
-            rebalanceByCreditPercentages : [],
-            rebalanceByCreditPercentageForCaller : 300,
-            rebalanceByCreditBlockInterval : 0,
-            allowedAMMsBytes : await encodeAMMV2Params(),
-            wusdExtension : uSDExtension.options.address,
-            wusdObjectId : note2Info[1],
-            wusdNote2ObjectId : note2Info[2],
-            wusdNote2Controller : wusdNote2Controller.options.address,
-            wusdNote2Percentage : 1500,
-            wusdNote5ObjectId : note5Info[2],
-            wusdNote5Controller : wusdNote5Controller.options.address,
-            wusdNote5Percentage : 200,
-            orchestratorAddress : ethItemOrchestrator.options.address,
-            names : [],
-            symbols : [],
-            uris : []
-        };
-        var wusdInitializerBytes = encodeWUSDInitializer(wUSDInitializer);
-        var newUsdController = await new web3.eth.Contract(WUSDExtensionController.abi).deploy({ data: WUSDExtensionController.bin, arguments: [wusdInitializerBytes] }).send(blockchainConnection.getSendingOptions());
-
-        /*usdCollection = new web3.eth.Contract(context.ethItemNativeABI, data[0]);
-        usdObjectId = data[1];
-        var data = await usdController.methods.wusdNote2Info().call();
-        usdCreditObjectId = data[1];
-        uSDExtension = new web3.eth.Contract(WUSDExtension.abi, await usdController.methods.extension().call());*/
-        var usdInfo = await newUsdController.methods.wusdInfo().call();
-        assert.strictEqual(usdInfo[0], usdCollection.options.address);
-        assert.strictEqual(usdInfo[1], usdObjectId);
-
-        /*var usdCreditInfo = await newUsdController.methods.usdCreditInfo().call();
-        assert.strictEqual(usdCreditInfo[0], usdCollection.options.address);
-        assert.strictEqual(usdCreditInfo[1], usdCreditObjectId);*/
-
-        try {
-            await usdController.methods.setController(newUsdController.options.address).send(blockchainConnection.getSendingOptions());
-            assert(false);
-        } catch (e) {
-            assert((e.message || e).toLowerCase().indexOf("unauthorized action") !== -1);
-        }
-
-        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/USDV2SetControllerProposal.sol'), 'UTF-8').format(usdController.options.address, newUsdController.options.address);
-        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
-        await dfoManager.finalizeProposal(dfo, proposal);
-        assert.strictEqual(await uSDExtension.methods.controller().call(), newUsdController.options.address);
-
-        usdController = newUsdController;
-    });
-
     it("Rebalance By Debt", async () => {
         var allowedAMMSCopy = JSON.parse(JSON.stringify(allowedAMMS));
         allowedAMMSCopy[0][1].splice(1, 1);
@@ -572,7 +518,7 @@ describe("WUSD", () => {
         assert.strictEqual(balanceOfExpected, balanceOfAfter);
     });
 
-    it("Rebalance By Credit", async () => {
+    it("Rebalance By Credit by Liquidity Injection", async () => {
         var pair = new web3.eth.Contract(context.uniswapV2PairABI, allowedAMMS[0][1][0]);
         var tokenA = new web3.eth.Contract(context.IERC20ABI, await pair.methods.token0().call());
         var tokenB = new web3.eth.Contract(context.IERC20ABI, await pair.methods.token1().call());
@@ -647,7 +593,82 @@ describe("WUSD", () => {
         }
     });
 
-    it("Transform Credit in uSD", async () => {
+    it("Transform Credit in wUSD after liquidity Injection", async () => {
+
+        var creditBalanceBefore = await usdCollection.methods.balanceOf(wusdNote2Controller.options.address, usdObjectId).call();
+
+        var value = utilities.toDecimals(5, '18');
+
+        var creditBalanceExpected = utilities.numberToString(utilities.formatNumber(creditBalanceBefore) - (utilities.formatNumber(value) * 2));
+        creditBalanceExpected = utilities.fromDecimals(creditBalanceExpected, '18');
+
+        await usdCollection.methods.safeTransferFrom(accounts[0], wusdNote2Controller.options.address, usdCreditObjectId, value, "0x").send(blockchainConnection.getSendingOptions());
+
+        var creditBalanceAfter = await usdCollection.methods.balanceOf(wusdNote2Controller.options.address, usdObjectId).call();
+        creditBalanceAfter = utilities.fromDecimals(creditBalanceAfter, '18');
+
+        assert.strictEqual(creditBalanceAfter, creditBalanceExpected);
+    });
+
+    it("Rebalance By Credit by Burn", async () => {
+
+        await usdCollection.methods.burn(usdObjectId, utilities.toDecimals(30, 18)).send(blockchainConnection.getSendingOptions());
+
+        var differences = await usdController.methods.differences().call();
+        var credit = differences.credit;
+
+        var rebalanceByCreditReceiversInfo = await usdController.methods.rebalanceByCreditReceiversInfo().call();
+
+        var receivers = rebalanceByCreditReceiversInfo[0].map(it => it);
+        receivers.push(accounts[0]);
+
+        var percentages = rebalanceByCreditReceiversInfo[1].map(it => it);
+        percentages.push(rebalanceByCreditReceiversInfo[2]);
+
+        var noteInfo = await usdController.methods.wusdNote2Info().call();
+        receivers.push(noteInfo[3]);
+        percentages.push(noteInfo[4]);
+
+        noteInfo = await usdController.methods.wusdNote5Info().call();
+        receivers.push(noteInfo[3]);
+        percentages.push(noteInfo[4]);
+
+        receivers.push(rebalanceByCreditReceiversInfo[3]);
+
+        var totalPercentage = '0';
+        percentages.forEach(it => totalPercentage = web3.utils.toBN(totalPercentage).add(web3.utils.toBN(it)).toString());
+        percentages.push(web3.utils.toBN(await usdController.methods.ONE_HUNDRED().call()).sub(web3.utils.toBN(totalPercentage)).toString());
+
+        var adds = [];
+        for(var percentage of percentages) {
+            adds.push(await calculatePercentage(credit, percentage));
+        }
+
+        var sum = '0';
+        adds.forEach(it => sum = web3.utils.toBN(sum).add(web3.utils.toBN(it)).toString());
+
+        credit = await utilities.fromDecimals(credit, 18);
+        sum = await utilities.fromDecimals(sum, 18);
+
+        assert.strictEqual(credit, sum);
+
+        var expecteds = [];
+        for(var i in receivers) {
+            var balance = await usdCollection.methods.balanceOf(receivers[i], usdObjectId).call();
+            balance = web3.utils.toBN(balance).add(web3.utils.toBN(adds[i])).toString();
+            expecteds.push(utilities.fromDecimals(balance, 18));
+        }
+
+        await usdController.methods.rebalanceByCredit().send(blockchainConnection.getSendingOptions());
+
+        for(var i in receivers) {
+            var balance = await usdCollection.methods.balanceOf(receivers[i], usdObjectId).call();
+            balance = utilities.fromDecimals(balance, 18);
+            assert.strictEqual(balance, expecteds[i]);
+        }
+    });
+
+    it("Transform Credit in wUSD after burn", async () => {
 
         var creditBalanceBefore = await usdCollection.methods.balanceOf(wusdNote2Controller.options.address, usdObjectId).call();
 

@@ -17,7 +17,7 @@ import "./IWUSDExtensionController.sol";
 
 contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
-    uint256 public constant ONE_HUNDRED = 10000;
+    uint256 public constant ONE_HUNDRED = 1e18;
 
     uint256 private constant DECIMALS = 18;
 
@@ -182,20 +182,12 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         _setRebalanceByCreditData(rebalanceByCreditReceivers, rebalanceByCreditPercentages, rebalanceByCreditPercentageForCaller);
     }
 
-    function changeController(address controller) public byDFO {
-        WUSDExtension(_extension).setController(controller);
-    }
-
     function setCollectionUri(string memory uri) public byDFO {
         WUSDExtension(_extension).setCollectionUri(uri);
     }
 
     function setItemUri(uint256 existingObjectId, string memory uri) public byDFO {
         WUSDExtension(_extension).setItemUri(existingObjectId, uri);
-    }
-
-    function setController(address newController) public byDFO {
-        WUSDExtension(_extension).setController(newController);
     }
 
     function setrebalanceByCreditBlockInterval(uint256 newrebalanceByCreditBlockInterval) public byDFO {
