@@ -13,12 +13,23 @@ var glob = require("glob");
 describe("AMM", () => {
 
     var buyForETHAmount = 5000;
+    var ammAggregator;
     var tokens;
     var AMMs;
     var amms;
+    var ammDFO;
+
+    var liquidityPool;
 
     before(async() => {
         await blockchainConnection.init;
+
+        uniswapV2Factory = new web3.eth.Contract(context.uniswapV2FactoryABI, context.uniswapV2FactoryAddress);
+        liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(context.buidlTokenAddress, context.wethTokenAddress).call());
+
+        ammDFO = await dfoManager.createDFO("MyName", "MySymbol", 10000000, 100, 10);
+
+        var AMMAggregator = await compile("amm-aggregator/aggregator/AMMAggregator");
 
         var AMMPaths = await new Promise(function(ok) {
             var basePath = (path.resolve(__dirname, '..', 'contracts') + '/').split('\\').join('/');
@@ -42,18 +53,6 @@ describe("AMM", () => {
             balancer: { contract: await new web3.eth.Contract(AMMs.Balancer.abi).deploy({ data: AMMs.Balancer.bin, arguments: [context.wethTokenAddress] }).send(blockchainConnection.getSendingOptions()) }
         }
 
-        amms.balancer && (amms.balancer.doubleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x8a649274e4d777ffc6851f13d23a86bbfa2f2fbf"));
-        amms.balancer && (amms.balancer.multipleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x9b208194acc0a8ccb2a8dcafeacfbb7dcc093f81"));
-
-        await Promise.all(Object.values(amms).map(amm => amm.contract.methods.data().call().then(data => {
-            amm.ethereumAddress = data[0];
-            amm.maxTokensPerLiquidityPool = parseInt(data[1]);
-            amm.hasUniqueLiquidityPools = data[2];
-        }).then(amm.contract.methods.info().call().then(info => {
-            amm.name = info[0];
-            amm.version = info[1];
-        }))));
-
         tokens = [
             context.wethTokenAddress,
             context.usdtTokenAddress,
@@ -66,19 +65,47 @@ describe("AMM", () => {
 
         await Promise.all(tokens.map(it => buyForETH(it, buyForETHAmount, uniswap.contract)));
 
-        for (var amm of Object.values(amms)) {
+        var ammsAddresses = Object.values(amms).map(it => it.contract.options.address);
+
+        ammAggregator = await new web3.eth.Contract(AMMAggregator.abi).deploy({ data: AMMAggregator.bin, arguments: [ammDFO.doubleProxyAddress, ammsAddresses] }).send(blockchainConnection.getSendingOptions());
+    });
+
+    async function getAMMS() {
+        var IAMM = await compile("amm-aggregator/common/IAMM");
+
+        var addresses = await ammAggregator.methods.amms().call();
+
+        var gottenAMMS = {};
+
+        for(var address of addresses) {
+            var amm = {
+                address,
+                contract: new web3.eth.Contract(IAMM.abi, address)
+            };
+            var data = await amm.contract.methods.data().call();
+            amm.ethereumAddress = data[0];
+            amm.maxTokensPerLiquidityPool = parseInt(data[1]);
+            amm.hasUniqueLiquidityPools = data[2];
+            data = await amm.contract.methods.info().call();
+            amm.name = data[0];
+            amm.version = data[1];
+            gottenAMMS[amm.name.substring(0, 1).toLowerCase() + amm.name.substring(1).split('V2').join('')] = amm;
+
             amm.toBuy = 300;
             try {
                 await addLiquidity(amm, accounts[0], true, false, amm.doubleTokenLiquidityPoolAddress);
-            } catch(e) {
-            }
+            } catch (e) {}
             try {
                 amm.name.toLowerCase().indexOf("balancer") === -1 && await addLiquidity(amm, accounts[0], true, true, amm.doubleTokenLiquidityPoolAddress);
-            } catch(e) {
-            }
+            } catch (e) {}
             delete amm.toBuy;
         }
-    });
+
+        gottenAMMS.balancer && (gottenAMMS.balancer.doubleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x8a649274e4d777ffc6851f13d23a86bbfa2f2fbf"));
+        gottenAMMS.balancer && (gottenAMMS.balancer.multipleTokenLiquidityPoolAddress = web3.utils.toChecksumAddress("0x9b208194acc0a8ccb2a8dcafeacfbb7dcc093f81"));
+
+        return gottenAMMS;
+    }
 
     async function buyForETH(token, valuePlain, ammPlugin) {
         var value = utilities.toDecimals(valuePlain.toString(), '18');
@@ -109,8 +136,7 @@ describe("AMM", () => {
     async function tokenData(token, method) {
         try {
             return await token.methods[method]().call();
-        } catch (e) {
-        }
+        } catch (e) {}
         var name;
         try {
             var to = token.options ? token.options.address : token;
@@ -119,11 +145,11 @@ describe("AMM", () => {
                 data: web3.utils.sha3(`${method}()`).substring(0, 10)
             });
             name = web3.utils.toUtf8(raw);
-        } catch(e) {
+        } catch (e) {
             name = "";
         }
         name = name.trim();
-        if(name) {
+        if (name) {
             return name;
         }
         if (!token.options || !token.options.address) {
@@ -181,8 +207,57 @@ describe("AMM", () => {
         }
     }
 
+    it("byLP", async () => {
+        var data = await ammAggregator.methods.findByLiquidityPool(liquidityPool.options.address).call();
+        assert.strictEqual(amms.uniswap || amms.sushiSwap ? (amms.uniswap || amms.sushiSwap).contract.options.address : utilities.voidEthereumAddress, data[3]);
+    });
+
+    it("setAMMS", async () => {
+
+        var addresses = await ammAggregator.methods.amms().call();
+
+        var toAdd = [];
+        var toDeleteCode = "";
+        var toAddCode = "";
+        for(var i = addresses.length -1; i >= 0; i--) {
+            toDeleteCode += `        aggregator.remove(${i});\n`;
+        }
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/AMMSetAMMs.sol'), 'UTF-8').format(ammAggregator.options.address, toDeleteCode.trim(), toAdd.length, toAddCode.trim());
+        var proposal = await dfoManager.createProposal(ammDFO, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(ammDFO, proposal);
+        var newAddresses = await ammAggregator.methods.amms().call();
+        assert.strictEqual(newAddresses.length, 0);
+
+        toAdd = [];
+        toDeleteCode = "";
+        toAddCode = "";
+        for(var i = addresses.length -1; i >= 0; i--) {
+            toAdd.push(addresses[i]);
+            toAddCode += `        ammsToAdd[${i}] = ${addresses[i]};\n`;
+        }
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/AMMSetAMMs.sol'), 'UTF-8').format(ammAggregator.options.address, toDeleteCode.trim(), toAdd.length, toAddCode.trim());
+        var proposal = await dfoManager.createProposal(ammDFO, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(ammDFO, proposal);
+        var newAddresses = await ammAggregator.methods.amms().call();
+        assert.strictEqual(newAddresses.length, Object.values(amms).length);
+
+        toAdd = [];
+        toDeleteCode = "";
+        toAddCode = "";
+        for(var i = addresses.length -1; i >= 0; i--) {
+            toDeleteCode += `        aggregator.remove(${i});\n`;
+            toAdd.push(addresses[i]);
+            toAddCode += `        ammsToAdd[${i}] = ${addresses[i]};\n`;
+        }
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/AMMSetAMMs.sol'), 'UTF-8').format(ammAggregator.options.address, toDeleteCode.trim(), toAdd.length, toAddCode.trim());
+        var proposal = await dfoManager.createProposal(ammDFO, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(ammDFO, proposal);
+        var newAddresses = await ammAggregator.methods.amms().call();
+        assert.strictEqual(newAddresses.length, Object.values(amms).length);
+    });
+
     it("swapLiquidity", async() => {
-        for (amm of Object.values(amms)) {
+        for (amm of Object.values(await getAMMS())) {
             try {
                 console.log("\n=== " + amm.name + " ===");
                 console.log("receiver path 1: enterInETH");
@@ -208,7 +283,7 @@ describe("AMM", () => {
                 await swapLiquidity(amm, accounts[1], false, true, true);
                 console.log("receiver path +: enterInETH exitInETH");
                 await swapLiquidity(amm, accounts[1], true, true, true);
-                if(amm.name.toLowerCase().indexOf('balancer') === -1) {
+                if (amm.name.toLowerCase().indexOf('balancer') === -1) {
                     console.log("receiver path +: noEth");
                     await swapLiquidity(amm, accounts[1], false, false, true);
                     console.log("receiver path +: ethInTheMiddle");
@@ -220,7 +295,7 @@ describe("AMM", () => {
                 await swapLiquidity(amm, undefined, false, true, true);
                 console.log("no receiver path +: enterInETH exitInETH");
                 await swapLiquidity(amm, undefined, true, true, true);
-                if(amm.name.toLowerCase().indexOf('balancer') === -1) {
+                if (amm.name.toLowerCase().indexOf('balancer') === -1) {
                     console.log("no receiver path +: noEth");
                     await swapLiquidity(amm, undefined, false, false, true);
                     console.log("no receiver path +: ethInTheMiddle");
@@ -319,7 +394,7 @@ describe("AMM", () => {
     }
 
     it("createLiquidityPoolAndAddLiquidity", async() => {
-        for (amm of Object.values(amms)) {
+        for (amm of Object.values(await getAMMS())) {
             try {
                 if (amm.name.toLowerCase().indexOf("balancer") !== -1) {
                     continue;
@@ -409,15 +484,13 @@ describe("AMM", () => {
         tokenAddresses = data[2];
 
         if (byLP) {
-            console.log(liquidityPoolAmount, amounts);
             var data = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
             amounts = data[0];
         }
 
-        console.log(liquidityPoolAmount, amounts);
 
-        if(liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
-            if(!amm.hasUniqueLiquidityPools) {
+        if (liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
+            if (!amm.hasUniqueLiquidityPools) {
                 return;
             }
             return await addLiquidity(amm, receiver, byLP, ethereum);
@@ -471,7 +544,7 @@ describe("AMM", () => {
     }
 
     it("addLiquidity", async() => {
-        for (amm of Object.values(amms)) {
+        for (amm of Object.values(await getAMMS())) {
             try {
                 console.log(amm.name);
                 console.log("receiver by LP Amount");
@@ -569,7 +642,7 @@ describe("AMM", () => {
             amounts = data[1];
         }
 
-        if(liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
+        if (liquidityPoolAmount === '0' || amounts.indexOf(it => it === '0') !== -1) {
             /*if(!amm.hasUniqueLiquidityPools) {
                 return;
             }
@@ -619,7 +692,7 @@ describe("AMM", () => {
     }
 
     it("removeLiquidity", async() => {
-        for (amm of Object.values(amms)) {
+        for (amm of Object.values(await getAMMS())) {
             try {
                 console.log(amm.name);
                 console.log("receiver by LP Amount");
@@ -666,6 +739,72 @@ describe("AMM", () => {
         }
     });
 
+    it("UniswapBatch", async () => {
+        var amms = await getAMMS();
+        if(!amms.uniswap) {
+            return;
+        }
+        var amm = amms.uniswap;
+        var liquidityPoolAddress = amm.doubleTokenLiquidityPoolAddress;
+        var tokenAddresses;
+        if(!liquidityPoolAddress) {
+            var data = await amm.contract.methods.byTokens([context.daiTokenAddress, amm.ethereumAddress]).call();
+            liquidityPoolAddress = data[2];
+            tokenAddresses = data[3];
+        }
+        var data = await amm.contract.methods.byLiquidityPool(liquidityPoolAddress).call();
+        tokenAddresses = data[2];
+
+        var liquidityPool = new web3.eth.Contract(context.IERC20ABI, liquidityPoolAddress);
+        var before = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+
+        for(var tokenAddress of tokenAddresses) {
+            var token = tokens.filter(it => it.options.address === tokenAddress)[0];
+            await token.methods.approve(amm.contract.options.address, utilities.toDecimals(100000000000000000, await token.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        }
+        var liquidityPoolAmount = utilities.toDecimals(15, 18);
+        var byLiquidityPoolAmountData = await amm.contract.methods.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount).call();
+        var ethereumIndex = tokenAddresses.indexOf(amm.ethereumAddress);
+        var ethereumAmount = byLiquidityPoolAmountData[0][ethereumIndex];
+        var liquidityPoolsData = [{
+            liquidityPoolAddress,
+            amount : liquidityPoolAmount,
+            tokenAddress : utilities.voidEthereumAddress,
+            amountIsLiquidityPool : true,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : true,
+            receiver : utilities.voidEthereumAddress
+        },{
+            liquidityPoolAddress,
+            amount : ethereumAmount,
+            tokenAddress : amm.ethereumAddress,
+            amountIsLiquidityPool : false,
+            involvingETH : false,
+            receiver : utilities.voidEthereumAddress
+        }];
+        var value = web3.utils.toBN(ethereumAmount).add(web3.utils.toBN(ethereumAmount)).toString();
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+        await amm.contract.methods.addLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions({value}));
+        await nothingInContracts(amm.contract.options.address);
+
+        var after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+
+        await liquidityPool.methods.approve(amm.contract.options.address, utilities.toDecimals(100000000000000000, await liquidityPool.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+        await amm.contract.methods.removeLiquidityBatch(liquidityPoolsData).send(blockchainConnection.getSendingOptions());
+        await nothingInContracts(amm.contract.options.address);
+        before = after;
+        after = utilities.fromDecimals(await liquidityPool.methods.balanceOf(accounts[0]).call(), 18);
+        console.log(before, after);
+    });
+
     async function swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle) {
 
         var liquidityPoolAddress = !moreThanOne ? amm.doubleTokenLiquidityPoolAddress : amm.multipleTokenLiquidityPoolAddress;
@@ -695,11 +834,11 @@ describe("AMM", () => {
                     var times = 0;
                     while (true) {
                         otherToken = randomTokenAddress(paths.slice(0, position + 1));
-                        if(otherToken !== inputToken && paths.indexOf(otherToken) === -1) {
-                            if((liquidityPoolAddress = (await amm.contract.methods.byTokens([
+                        if (otherToken !== inputToken && paths.indexOf(otherToken) === -1) {
+                            if ((liquidityPoolAddress = (await amm.contract.methods.byTokens([
                                     paths[position],
                                     otherToken
-                            ]).call())[2]) !== utilities.voidEthereumAddress) {
+                                ]).call())[2]) !== utilities.voidEthereumAddress) {
                                 break;
                             }
                         }
@@ -723,7 +862,7 @@ describe("AMM", () => {
             inputToken = enterInETH || !exitInETH ? amm.ethereumAddress : nonEthToken;
             paths = [enterInETH || !exitInETH ? nonEthToken : amm.ethereumAddress];
             liquidityPoolAddresses = [liquidityPoolAddress];
-            if(amm.maxTokensPerLiquidityPool === 0 && moreThanOne) {
+            if (amm.maxTokensPerLiquidityPool === 0 && moreThanOne) {
                 liquidityPoolAddresses.push(liquidityPoolAddresses[0]);
                 var thirdToken = lpTokens.filter(it => it !== amm.ethereumAddress && it !== paths[0])[0];
                 enterInETH && paths.push(thirdToken);
@@ -731,11 +870,11 @@ describe("AMM", () => {
             }
         }
 
-        if(enterInETH && !exitInETH && paths[paths.length - 1] === context.wethTokenAddress) {
+        if (enterInETH && !exitInETH && paths[paths.length - 1] === context.wethTokenAddress) {
             return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
         }
 
-        if(enterInETH && exitInETH && (paths.slice(0, paths.length - 1).indexOf(amm.ethereumAddress) !== -1 || paths.slice(0, paths.length - 1).indexOf(utilities.voidEthereumAddress) !== -1)) {
+        if (enterInETH && exitInETH && (paths.slice(0, paths.length - 1).indexOf(amm.ethereumAddress) !== -1 || paths.slice(0, paths.length - 1).indexOf(utilities.voidEthereumAddress) !== -1)) {
             return await swapLiquidity(amm, receiver, enterInETH, exitInETH, moreThanOne, ethInTheMiddle);
         }
 
@@ -805,7 +944,7 @@ describe("AMM", () => {
         var swapData = {
             amount,
             inputToken,
-            path : paths,
+            path: paths,
             liquidityPoolAddresses,
             receiver,
             enterInETH: enterInETH || false,
@@ -818,8 +957,8 @@ describe("AMM", () => {
         try {
             transaction = await amm.contract.methods.swapLiquidity(swapData).send(blockchainConnection.getSendingOptions({ value: enterInETH ? amount : '0' }));
             var names = [];
-            for(var i in paths) {
-                if((i = parseInt(i)) === paths.length - 1) {
+            for (var i in paths) {
+                if ((i = parseInt(i)) === paths.length - 1) {
                     break;
                 }
                 var adr = paths[i];
