@@ -638,7 +638,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
      */
     function _mintLiquidity(address uniqueOwner, uint256 amount, uint256 setupIndex) private returns(uint256 objectId) {
         if (_setups[setupIndex].objectId == 0) {
-            (objectId,) = INativeV1(_liquidityFarmTokenCollection).mint(amount, "Covenants Farming Liquidity", "fLP", ILiquidityMiningFactory(_factory).getLiquidityFarmTokenURI(), true);
+            (objectId,) = INativeV1(_liquidityFarmTokenCollection).mint(amount, string(abi.encodePacked("Farming LP ", _toString(_setups[setupIndex].liquidityPoolTokenAddress))), "fLP", ILiquidityMiningFactory(_factory).getLiquidityFarmTokenURI(), true);
             emit FarmToken(objectId, _setups[setupIndex].liquidityPoolTokenAddress, setupIndex, _setups[setupIndex].endBlock);
             _objectIdSetup[objectId] = setupIndex;
             _setups[setupIndex].objectId = objectId;
@@ -646,6 +646,20 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             INativeV1(_liquidityFarmTokenCollection).mint(_setups[setupIndex].objectId, amount);
         }
         INativeV1(_liquidityFarmTokenCollection).safeTransferFrom(address(this), uniqueOwner, _setups[setupIndex].objectId, amount, "");
+    }
+
+    function _toString(address _addr) internal pure returns(string memory) {
+        bytes32 value = bytes32(uint256(_addr));
+        bytes memory alphabet = "0123456789abcdef";
+
+        bytes memory str = new bytes(42);
+        str[0] = '0';
+        str[1] = 'x';
+        for (uint i = 0; i < 20; i++) {
+            str[2+i*2] = alphabet[uint(uint8(value[i + 12] >> 4))];
+            str[3+i*2] = alphabet[uint(uint8(value[i + 12] & 0x0f))];
+        }
+        return string(str);
     }
 
     /** @dev burns a farm token from the collection.
