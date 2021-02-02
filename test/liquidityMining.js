@@ -213,7 +213,6 @@ describe("LiquidityMining", () => {
             "address",
             "bytes",
             "address",
-//            "string[]",
             "address",
             "bytes",
             "bool",
@@ -223,7 +222,6 @@ describe("LiquidityMining", () => {
             clonedDefaultLiquidityMiningAddress,//liquidityMiningExtension.options.address,
             "0x",
             ethItemOrchestrator.options.address,
-//            ["LiquidityMiningToken", "LMT", "google.com"],
             rewardToken != utilities.voidEthereumAddress ? rewardToken.options.address : utilities.voidEthereumAddress,
             abi.encode(["tuple(address,uint256,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256,bool)[]"], [setups]),
             true,
@@ -305,6 +303,30 @@ describe("LiquidityMining", () => {
     it("Exit fee is 0", async() => {
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         assert.strictEqual(parseInt(exitFee), 0);
+    });
+    it("Change URI", async () => {
+        assert.strictEqual(await positionTokenCollection.methods.uri().call(), "google.com");
+        assert.strictEqual(await liquidityMiningFactory.methods.liquidityFarmTokenCollectionURI().call(), "google.com");
+        assert.strictEqual(await liquidityMiningFactory.methods.liquidityFarmTokenURI().call(), "google.com");
+        var newUri = "mino.com";
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetCollectionAndItemURI.sol'), 'UTF-8').format(liquidityMiningFactory.options.address, newUri, newUri);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        assert.strictEqual(await positionTokenCollection.methods.uri().call(), "google.com");
+        assert.strictEqual(await liquidityMiningFactory.methods.liquidityFarmTokenCollectionURI().call(), newUri);
+        assert.strictEqual(await liquidityMiningFactory.methods.liquidityFarmTokenURI().call(), newUri);
+        try {
+            await liquidityMiningFactory.methods.updateLiquidityFarmTokenCollectionURI("mauro.eth").send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
+        }
+        try {
+            await liquidityMiningFactory.methods.updateLiquidityFarmTokenURI("mauro.eth").send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
+        }
     });
     it("DFO can update the exit fee to 1", async() => {
         var exitFeeExpected = 1;
@@ -578,7 +600,10 @@ describe("LiquidityMining", () => {
         var pinnedFreeRewardPerBlock = utilities.fromDecimals(pinnedFreeSetup.rewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
         assert.strictEqual(pinnedFreeRewardPerBlock, expectedPinnedFreeRewardPerBlock);
 
-        
+        if(!setup.free) {
+            console.log("Name:", await positionTokenCollection.methods.name(setup.objectId).call(), "Symbol:", await positionTokenCollection.methods.symbol(setup.objectId).call(), "Uri:", await positionTokenCollection.methods.uri(setup.objectId).call());
+            assert.strictEqual(await positionTokenCollection.methods.uri(setup.objectId).call(), await liquidityMiningFactory.methods.liquidityFarmTokenURI().call());
+        }
 
         return position;
     }
