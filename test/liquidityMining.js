@@ -61,12 +61,12 @@ describe("LiquidityMining", () => {
 
             var rewardTokenAddress = context.daiTokenAddress;//dfo.votingTokenAddress;
 
-            //rewardToken = new web3.eth.Contract(context.IERC20ABI, rewardTokenAddress);
-            rewardToken = utilities.voidEthereumAddress;
+            rewardToken = new web3.eth.Contract(context.IERC20ABI, rewardTokenAddress);
+            // rewardToken = utilities.voidEthereumAddress;
 
             mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
             // mainToken = utilities.voidEthereumAddress;
-            secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
+            secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
 
             liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : wethToken.options.address).call());
 
@@ -731,17 +731,17 @@ describe("LiquidityMining", () => {
             }
         }
         
+        var transaction = null;
         if (removesAllLiquidity) {
             if (!setup.free) {
-                var transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
+                transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
             }
             console.log(`withdrawing ${actor.name} position:`, actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity)
-            var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
-        } else {
-            var transaction = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
-            var transaction2 = null;
         }
+        var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
         await logSetups();
+        transaction && console.log(await web3.eth.getTransactionReceipt(transaction.transactionHash));
+        transaction2 && console.log(await web3.eth.getTransactionReceipt(transaction2.transactionHash));
         console.log('liquidity withdrawn');
         console.log(`withdraw block ${await web3.eth.getBlockNumber()}`);
         var updatedPosition = await liquidityMiningContract.methods.position(actor.positionId).call();
