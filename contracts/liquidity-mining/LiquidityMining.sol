@@ -344,9 +344,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             liquidityMiningPosition.creationBlock = block.number;
         } else {
             if (liquidityMiningPosition.reward == 0) {
-                // close the locked position after withdrawing all the reward
-                _positions[positionId] = _positions[0x0];
-                if (liquidityMiningPosition.setupEndBlock >= block.number) {
+                /*
+                // rebalance the setup if not free
+                if (!_finishedLockedSetups[_setups[liquidityMiningPosition.setupIndex].objectId] && liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock) {
                     // the locked setup must be considered finished only if it's not renewable
                     _finishedLockedSetups[_setups[liquidityMiningPosition.setupIndex].objectId] = _setups[liquidityMiningPosition.setupIndex].renewTimes == 0;
                     if (_hasPinned && _setups[_pinnedSetupIndex].free) {
@@ -362,6 +362,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                         _renewSetup(liquidityMiningPosition.setupIndex);
                     }
                 }
+                */
+                // close the locked position after withdrawing all the reward
+                _positions[positionId] = _positions[0x0];
             } else {
                 // set the partially redeemed amount
                 _partiallyRedeemed[positionId] = reward;
@@ -411,7 +414,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if (block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock) {
                 // the amount to add to the pinned is given by the difference between the reward per block and currently locked one
                 // in the case of a new setup, the currentRewardPerBlock is 0 so the difference is the whole rewardPerBlock
-                // amount += (_setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock);
                 amount += _setups[i].rewardPerBlock - ((_setups[i].rewardPerBlock * (_setups[i].currentStakedLiquidity * 1e18 / _setups[i].maximumLiquidity)) / 1e18);
             // this is a locked setup that has expired
             } else if (block.number >= _setups[i].endBlock) {
@@ -461,7 +463,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // calculate reward by multiplying relative reward per block and the remaining blocks
             reward = relativeRewardPerBlock * remainingBlocks;
             // check if the reward is still available
-            // require(relativeRewardPerBlock <= (setup.rewardPerBlock - setup.currentRewardPerBlock), "No availability");
         }
     }
 
@@ -694,12 +695,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // update the setup index
             setupIndex = liquidityMiningPosition.setupIndex;
             remainingLiquidity = liquidityMiningPosition.liquidityPoolTokenAmount - removedLiquidity;
-            // update the receiver
-            // liquidityMiningPosition.liquidityPoolData.receiver = liquidityMiningPosition.uniqueOwner;
-            // set the lp data to the position one
-            // lpData = liquidityMiningPosition.liquidityPoolData;
-            // update the lp data
-            // lpData.amount = removedLiquidity;
         }
         // retrieve fee stuff
         (uint256 exitFeePercentage, address exitFeeWallet) = ILiquidityMiningFactory(_factory).feePercentageInfo();
@@ -859,13 +854,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     }
 
     /** @dev function used to receive batch of erc1155 tokens. */
-    function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public override returns(bytes4) {
+    function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public view override returns(bytes4) {
         require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
         return this.onERC1155BatchReceived.selector;
     }
 
     /** @dev function used to receive erc1155 tokens. */
-    function onERC1155Received(address, address, uint256, uint256, bytes memory) public override returns(bytes4) {
+    function onERC1155Received(address, address, uint256, uint256, bytes memory) public view override returns(bytes4) {
         require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
         return this.onERC1155Received.selector;
     }
