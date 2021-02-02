@@ -84,8 +84,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     }
 
     /** @dev allows this contract to receive eth. */
-    receive() external payable {
-    }
+    receive() external payable { }
 
     /** @dev returns the liquidity mining setups.
       * @return array containing all the liquidity mining setups.
@@ -186,7 +185,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _rebalanceRewardPerToken(request.setupIndex, liquidityPoolData.amount, false);
         } else {
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, lockedRewardPerBlock, false);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maximumLiquidity)) / 1e18, false);
             }
         }
 
@@ -246,7 +245,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock += newLockedRewardPerBlock;
             // rebalance the pinned reward per block
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, newLockedRewardPerBlock, false);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maximumLiquidity)) / 1e18, false);
             }
         } else {
             if (newReward > 0) {
@@ -347,6 +346,22 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if (liquidityMiningPosition.reward == 0) {
                 // close the locked position after withdrawing all the reward
                 _positions[positionId] = _positions[0x0];
+                if (liquidityMiningPosition.setupEndBlock >= block.number) {
+                    // the locked setup must be considered finished only if it's not renewable
+                    _finishedLockedSetups[_setups[liquidityMiningPosition.setupIndex].objectId] = _setups[liquidityMiningPosition.setupIndex].renewTimes == 0;
+                    if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+                        _rebalanceRewardPerBlock(
+                            _pinnedSetupIndex, 
+                            _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - ((_setups[liquidityMiningPosition.setupIndex].rewardPerBlock * (_setups[liquidityMiningPosition.setupIndex].currentStakedLiquidity * 1e18 / _setups[liquidityMiningPosition.setupIndex].maximumLiquidity)) / 1e18),
+                            false
+                        );
+                    }
+                    if (_setups[liquidityMiningPosition.setupIndex].renewTimes > 0) {
+                        _setups[liquidityMiningPosition.setupIndex].renewTimes -= 1;
+                        // renew the setup if renewable
+                        _renewSetup(liquidityMiningPosition.setupIndex);
+                    }
+                }
             } else {
                 // set the partially redeemed amount
                 _partiallyRedeemed[positionId] = reward;
@@ -388,7 +403,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** @dev this function allows any user to rebalance the pinned setup. */
     function rebalancePinnedSetup() public {
-        if (!_hasPinned || !_setups[_pinnedSetupIndex].free) return;
+        // if (!_hasPinned || !_setups[_pinnedSetupIndex].free) return;
         uint256 amount;
         for (uint256 i = 0; i < _setups.length; i++) {
             if (_setups[i].free) continue;
@@ -396,7 +411,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if (block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock) {
                 // the amount to add to the pinned is given by the difference between the reward per block and currently locked one
                 // in the case of a new setup, the currentRewardPerBlock is 0 so the difference is the whole rewardPerBlock
-                amount += (_setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock);
+                // amount += (_setups[i].rewardPerBlock - _setups[i].currentRewardPerBlock);
+                amount += _setups[i].rewardPerBlock - ((_setups[i].rewardPerBlock * (_setups[i].currentStakedLiquidity * 1e18 / _setups[i].maximumLiquidity)) / 1e18);
             // this is a locked setup that has expired
             } else if (block.number >= _setups[i].endBlock) {
                 _finishedLockedSetups[_setups[i].objectId] = true;
@@ -409,8 +425,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 }
             }
         }
-        _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
         if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
             _rebalanceRewardPerBlock(_pinnedSetupIndex, amount, true);
         }
     }
@@ -445,7 +461,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // calculate reward by multiplying relative reward per block and the remaining blocks
             reward = relativeRewardPerBlock * remainingBlocks;
             // check if the reward is still available
-            require(relativeRewardPerBlock <= (setup.rewardPerBlock - setup.currentRewardPerBlock), "No availability");
+            // require(relativeRewardPerBlock <= (setup.rewardPerBlock - setup.currentRewardPerBlock), "No availability");
         }
     }
 
@@ -538,9 +554,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 _setups[index].currentRewardPerBlock = data.rewardPerBlock;
             } else {
                 // update locked liquidity mining setup
-                _setups[index].rewardPerBlock = data.rewardPerBlock;
+                _setups[index].rewardPerBlock = data.rewardPerBlock > 0 ? data.rewardPerBlock : _setups[index].rewardPerBlock;
                 _setups[index].renewTimes = data.renewTimes;
-                _setups[index].penaltyFee = data.penaltyFee;
             }
         }
     }
@@ -717,7 +732,11 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                     // the locked setup must be considered finished only if it's not renewable
                     _finishedLockedSetups[objectId] = _setups[setupIndex].renewTimes == 0;
                     if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                        _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[setupIndex].rewardPerBlock - _setups[setupIndex].currentRewardPerBlock, false);
+                        _rebalanceRewardPerBlock(
+                            _pinnedSetupIndex, 
+                            _setups[setupIndex].rewardPerBlock - ((_setups[setupIndex].rewardPerBlock * (_setups[setupIndex].currentStakedLiquidity * 1e18 / _setups[setupIndex].maximumLiquidity)) / 1e18),
+                            false
+                        );
                     }
                     if (_setups[setupIndex].renewTimes > 0) {
                         _setups[setupIndex].renewTimes -= 1;
@@ -727,7 +746,11 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 } else {
                     // this is an unlock, so we just need to provide back the reward per block
                     if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                        _rebalanceRewardPerBlock(_pinnedSetupIndex, liquidityMiningPosition.lockedRewardPerBlock, true);
+                        _rebalanceRewardPerBlock(
+                            _pinnedSetupIndex, 
+                            _setups[setupIndex].rewardPerBlock * ((removedLiquidity * 1e18 / _setups[setupIndex].maximumLiquidity) / 1e18), 
+                            true
+                        );
                     }
                 }
             }
