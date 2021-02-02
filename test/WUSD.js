@@ -207,6 +207,29 @@ describe("WUSD", () => {
         }
     });
 
+    it("Change URI", async () => {
+        assert.strictEqual(await usdCollection.methods.uri().call(), "google.com")
+        assert.strictEqual(await usdCollection.methods.uri(usdObjectId).call(), "google.com");
+        var newUri = "mino.com";
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/WUSDChangeURIs.sol'), 'UTF-8').format(usdController.options.address, newUri, usdObjectId);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        assert.strictEqual(await usdCollection.methods.uri().call(), newUri);
+        assert.strictEqual(await usdCollection.methods.uri(usdObjectId).call(), newUri);
+        try {
+            await usdController.methods.setCollectionUri("mauro.eth").send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
+        }
+        try {
+            await usdController.methods.setItemUri(usdObjectId, "mauro.eth").send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
+        }
+    });
+
     it("Allowed AMMs", async() => {
         var allowed = await usdController.methods.allowedAMMs().call();
         assert.strictEqual(JSON.stringify(allowed), JSON.stringify(allowedAMMS));
