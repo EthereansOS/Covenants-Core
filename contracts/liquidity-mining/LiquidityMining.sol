@@ -69,6 +69,16 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** Public extension methods. */
 
+    /** @dev initializes the liquidity mining contract.
+      * @param extension extension address.
+      * @param extensionInitData lm extension init payload.
+      * @param orchestrator address of the eth item orchestrator.
+      * @param rewardTokenAddress address of the reward token.
+      * @param liquidityMiningSetupsBytes array containing all the liquidity mining setups as bytes.
+      * @param setPinned true if we're setting a pinned setup during initialization, false otherwise.
+      * @param pinnedIndex index of the pinned setup.
+      * @return extensionReturnCall result of the extension initialization function, if it was called.  
+     */
     function init(address extension, bytes memory extensionInitData, address orchestrator, address rewardTokenAddress, bytes memory liquidityMiningSetupsBytes, bool setPinned, uint256 pinnedIndex) public returns(bytes memory extensionReturnCall) {
         require(_factory == address(0), "Already initialized");
         require((_extension = extension) != address(0), "extension");
@@ -77,8 +87,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         if (keccak256(extensionInitData) != keccak256("")) {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
-        //require((_orchestrator = orchestrator) != address(0), "orchestrator");
-        //require((_itemData = itemData).length == 6, "length");
         (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", false, ILiquidityMiningFactory(_factory).getLiquidityFarmTokenCollectionURI(), address(this), ""), "");
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
     }
@@ -267,7 +275,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         require(
-            // liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0) &&
             to != address(0) &&
             liquidityMiningPosition.setupStartBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
             liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock,
@@ -344,25 +351,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             liquidityMiningPosition.creationBlock = block.number;
         } else {
             if (liquidityMiningPosition.reward == 0) {
-                /*
-                // rebalance the setup if not free
-                if (!_finishedLockedSetups[_setups[liquidityMiningPosition.setupIndex].objectId] && liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock) {
-                    // the locked setup must be considered finished only if it's not renewable
-                    _finishedLockedSetups[_setups[liquidityMiningPosition.setupIndex].objectId] = _setups[liquidityMiningPosition.setupIndex].renewTimes == 0;
-                    if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                        _rebalanceRewardPerBlock(
-                            _pinnedSetupIndex, 
-                            _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - ((_setups[liquidityMiningPosition.setupIndex].rewardPerBlock * (_setups[liquidityMiningPosition.setupIndex].currentStakedLiquidity * 1e18 / _setups[liquidityMiningPosition.setupIndex].maximumLiquidity)) / 1e18),
-                            false
-                        );
-                    }
-                    if (_setups[liquidityMiningPosition.setupIndex].renewTimes > 0) {
-                        _setups[liquidityMiningPosition.setupIndex].renewTimes -= 1;
-                        // renew the setup if renewable
-                        _renewSetup(liquidityMiningPosition.setupIndex);
-                    }
-                }
-                */
                 // close the locked position after withdrawing all the reward
                 _positions[positionId] = _positions[0x0];
             } else {

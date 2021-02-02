@@ -80,19 +80,19 @@ describe("LiquidityMining", () => {
             await initActor("Bob", accounts[2], 15, 50, 2, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 3.15, 0.177, 2.45, 0.07, false, true);
             await initActor("Charlie", accounts[3], 19, 200, 0, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 30, 0.177, 12.474);
             await initActor("Donald", accounts[4], 40, 201, 0, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 50, 0.180, 15.15);
-            await initActor("Orbulo", accounts[5], 210, 250, 0, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.0001, 0.150, 6, 0, false);
-            await initActor("Frank", accounts[6], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.243, 0.315, 0.007, false);
-            await initActor("Vasapower", accounts[7], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.315, 0.243, 0.315, 0.007, false);
-            await initActor("Dino", accounts[8], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.006999, false);
-            await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.006999, false, true);
-            await initActor("Cavicchioli", accounts[10], 315, 325, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.75);
-            await initActor("Gigi", accounts[13], 316, 359, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.1505, 0.0035);
-            await initActor("Boomer", accounts[14], 318, 361, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.07175, 0.00175);
-            await initActor("Gallitto", accounts[11], 325, 345, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
-            await initActor("Cappello", accounts[12], 326, 346, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
+            await initActor("Eve", accounts[5], 210, 250, 0, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.0001, 0.150, 6, 0, false);
+            await initActor("Faith", accounts[6], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.243, 0.315, 0.007, false);
+            await initActor("Grace", accounts[7], 259, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, true, 0.315, 0.243, 0.315, 0.007, false);
+            await initActor("Heidi", accounts[8], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.006999, false);
+            await initActor("Isaac", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.006999, false, true);
+            await initActor("Justin", accounts[10], 315, 325, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 4.75);
+            await initActor("Mallory", accounts[13], 316, 359, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.1505, 0.0035);
+            await initActor("Nick", accounts[14], 318, 361, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.07175, 0.00175);
+            await initActor("Olivia", accounts[11], 325, 345, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
+            await initActor("Penny", accounts[12], 326, 346, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
 
         } catch (error) {
-            console.error(error);
+            
             throw new Error();
         }
 
@@ -144,11 +144,11 @@ describe("LiquidityMining", () => {
         for (let i = 0; i < setupUpdateBlocks.length; i++) {
             setupUpdateBlocks[i] = { rewardPerToken: await liquidityMiningContract.methods._rewardPerTokenPerSetupPerBlock(0, setupUpdateBlocks[i]).call(), block: setupUpdateBlocks[i] };
         }
-        console.log(`exit block: ${blockNumber} - setup update blocks: `, setupUpdateBlocks);
+        
     }
 
     async function logSetups() {
-        console.log('setups:', await liquidityMiningContract.methods.setups().call());
+        
     }
 
     it("New LiquidityMining Contract by Factory by extension", async () => {
@@ -237,11 +237,11 @@ describe("LiquidityMining", () => {
         var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
 
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
-        console.log('here 4');
+        
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
         var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address,bytes)"))[0].topics[1]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
-        console.log('here 5');
+        
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
         oneHundred = await liquidityMiningContract.methods.ONE_HUNDRED().call();
 
@@ -459,7 +459,7 @@ describe("LiquidityMining", () => {
         var setup = (await liquidityMiningContract.methods.setups().call())[pinnedSetupIndex];
         var currentPinnedFreeSetupRewardPerBlock = utilities.fromDecimals(setup.rewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
-        console.log(currentPinnedFreeSetupRewardPerBlock, expectedPinnedFreeSetupRewardPerBlock);
+        
         assert.strictEqual(currentPinnedFreeSetupRewardPerBlock, expectedPinnedFreeSetupRewardPerBlock);
     });
     it("should rebalance the pinned setup after the setups have been set", async () => {
@@ -472,7 +472,7 @@ describe("LiquidityMining", () => {
         var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
 
         var setup = (await liquidityMiningContract.methods.setups().call())[setupIndex];
-        console.log((await liquidityMiningContract.methods.setups().call())[2])
+        
         var expectedRemainingRewardPerBlock = web3.utils.toBN(setup.rewardPerBlock);
         expectedRemainingRewardPerBlock = expectedRemainingRewardPerBlock.sub(web3.utils.toBN(utilities.toDecimals(expectedRewardPerBlock), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18)).toString();
         expectedRemainingRewardPerBlock = utilities.fromDecimals(expectedRemainingRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -525,9 +525,9 @@ describe("LiquidityMining", () => {
                     (await web3.eth.getBlock(await web3.eth.getBlockNumber())).timestamp + 10000
                 ).send({...from, value : mainTokenAmount});
             }
-            console.log('add liquidity done.');
+            
             var liquidityPoolTokenContract = new web3.eth.Contract(context.IERC20ABI, liquidityPoolTokenAddress);
-            console.log(`lp token balance is ${await liquidityPoolTokenContract.methods.balanceOf(address).call()}`);
+            
             await liquidityPoolTokenContract.methods.approve(liquidityMiningContract.options.address, await liquidityPoolTokenContract.methods.totalSupply().call()).send(from);
             liquidityPoolTokenAmount = await liquidityPoolTokenContract.methods.balanceOf(address).call();
         }
@@ -545,16 +545,16 @@ describe("LiquidityMining", () => {
 
         await blockchainConnection.jumpToBlock(enterBlock, true);
         var result = await liquidityMiningContract.methods.openPosition(stake).send({...from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
-        console.log(result);
+        
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
-        console.log(position);
+        
         actor.position = position;
         actor.enterBlock = position.creationBlock;
         actor.positionId = positionId;
 
-        console.log(`rpb ${expectedRewardPerBlock} - end block ${setup.endBlock} - enter block ${actor.enterBlock}`);
+        
         var expectedReward = setup.free ? 0 : expectedRewardPerBlock * (setup.endBlock - actor.enterBlock);
 
         var balance = 0;
@@ -565,7 +565,7 @@ describe("LiquidityMining", () => {
 
         actor.hasLiquidityItems = !setup.free;
         actor.hasPositionOwnership = true;
-        console.log(`expected reward is ${expectedReward}`);
+        
         !position.free && assert.strictEqual(utilities.fromDecimals(position.lockedRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), utilities.formatMoney(expectedRewardPerBlock));
         !position.free && assert.strictEqual(utilities.fromDecimals(position.reward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), utilities.formatMoney(expectedReward));
 
@@ -578,7 +578,7 @@ describe("LiquidityMining", () => {
         var pinnedFreeRewardPerBlock = utilities.fromDecimals(pinnedFreeSetup.rewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
         assert.strictEqual(pinnedFreeRewardPerBlock, expectedPinnedFreeRewardPerBlock);
 
-        console.log(actor.name, actor.enterBlock - zeroBlock, "stake - ", pinnedFreeRewardPerBlock, "free rpb - ", position.liquidityPoolTokenAmount, " lpt amount - ", balance, " token balance");
+        
 
         return position;
     }
@@ -635,13 +635,13 @@ describe("LiquidityMining", () => {
 
         if (rewardToken !== utilities.voidEthereumAddress) {
             var balance = await rewardToken.methods.balanceOf(actor.address).call();
-            console.log(balance, rewardToGiveBack);
+            
             if(parseInt(balance) < parseInt(rewardToGiveBack)) {
                 await buyForETH(rewardToken, 100, actor.address);
             }
             balance = await rewardToken.methods.balanceOf(actor.address).call();
-            console.log(balance);
-            await rewardToken.methods.approve(liquidityMiningContract.options.address, rewardToGiveBack).send(actors.Vasapower.from);
+            
+            await rewardToken.methods.approve(liquidityMiningContract.options.address, rewardToGiveBack).send(actors.Grace.from);
         }
 
         var rewardBalance = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
@@ -724,10 +724,10 @@ describe("LiquidityMining", () => {
                 actor.hasPartiallyWithdrawn = true;
             } else {
                 var calculatedFreeReward = await liquidityMiningContract.methods.calculateFreeLiquidityMiningSetupReward(actor.positionId, true).call();
-                console.log(`calculated free reward ${calculatedFreeReward}`);
-                console.log(`reward balance ${rewardBalance}`);
+                
+                
                 expectedRewardBalance = web3.utils.toBN(rewardBalance).add(web3.utils.toBN(calculatedFreeReward)).toString();
-                console.log(`expected reward balance ${expectedRewardBalance}`);
+                
             }
         }
         
@@ -736,14 +736,12 @@ describe("LiquidityMining", () => {
             if (!setup.free) {
                 transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
             }
-            console.log(`withdrawing ${actor.name} position:`, actor.position.free ? actor.positionId : 0, setup.objectId, actor.position.setupIndex, actor.unwrap, removedLiquidity)
+            
         }
         var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
         await logSetups();
-        transaction && console.log(await web3.eth.getTransactionReceipt(transaction.transactionHash));
-        transaction2 && console.log(await web3.eth.getTransactionReceipt(transaction2.transactionHash));
-        console.log('liquidity withdrawn');
-        console.log(`withdraw block ${await web3.eth.getBlockNumber()}`);
+        
+        
         var updatedPosition = await liquidityMiningContract.methods.position(actor.positionId).call();
         actor.position = updatedPosition;
         rewardToken === utilities.voidEthereumAddress && (expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(transaction ? await blockchainConnection.calculateTransactionFee(transaction) : '0')).sub(transaction2 ? web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transaction2)) : web3.utils.toBN('0')).toString());
@@ -777,7 +775,7 @@ describe("LiquidityMining", () => {
             await unlockStakingPosition(actors.Alice, true);
             assert(false);
         } catch (e) {
-            console.log(e);
+            
             assert.notStrictEqual((e.message|| e).toLowerCase().indexOf(rewardToken !== utilities.voidEthereumAddress ? rewardToken.options.address === dfo.votingTokenAddress ? "transfer amount exceeds balance" : "insufficient-" : "invalid sent amount"), -1);
         }
     });
@@ -832,7 +830,7 @@ describe("LiquidityMining", () => {
             await liquidityMiningContract.methods.withdrawReward(actors.Bob.positionId).send(actors.Charlie.from);
             assert(false);
         } catch (e) {
-            console.log(e.message);
+            
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("not owned"), -1);
         }
     });
@@ -848,8 +846,8 @@ describe("LiquidityMining", () => {
     it("should allow bob to withdraw unwrapping the pair", () => withdrawStakingPosition(actors.Bob));
     it("should allow charlie to withdraw its position without unwrapping the pair", () => withdrawStakingPosition(actors.Charlie));
     it("should allow donald to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Donald));
-    it("orbulo should set a new staking position", () => createNewStakingPosition(actors.Orbulo));
-    it("should allow orbulo to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Orbulo));
+    it("eve should set a new staking position", () => createNewStakingPosition(actors.Eve));
+    it("should allow eve to withdraw its position unwrapping the pair", () => withdrawStakingPosition(actors.Eve));
     it("should set a new locked liquidity mining setup", async() => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
@@ -901,47 +899,47 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("frank should set a new staking position", () => createNewStakingPosition(actors.Frank));
-    it("dino should set a new staking position", () => createNewStakingPosition(actors.Dino));
-    it("frank should transfer its item tokens to vasapower", async () => {
+    it("faith should set a new staking position", () => createNewStakingPosition(actors.Faith));
+    it("heidi should set a new staking position", () => createNewStakingPosition(actors.Heidi));
+    it("faith should transfer its item tokens to grace", async () => {
         var setups = await liquidityMiningContract.methods.setups().call()
-        var objectId = setups[actors.Frank.setupIndex].objectId;
-        var frankBalance = await positionTokenCollection.methods.balanceOf(actors.Frank.address, objectId).call();
-        await positionTokenCollection.methods.safeTransferFrom(actors.Frank.address, actors.Vasapower.address, objectId, frankBalance, 0x0).send(actors.Frank.from);
+        var objectId = setups[actors.Faith.setupIndex].objectId;
+        var faithBalance = await positionTokenCollection.methods.balanceOf(actors.Faith.address, objectId).call();
+        await positionTokenCollection.methods.safeTransferFrom(actors.Faith.address, actors.Grace.address, objectId, faithBalance, 0x0).send(actors.Faith.from);
 
-        var vasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, objectId).call();
-        assert.strictEqual(vasapowerBalance, frankBalance);
-        actors.Frank.transferedLiquidity = true;
-        actors.Vasapower.objectId = actors.Frank.objectId;
+        var graceBalance = await positionTokenCollection.methods.balanceOf(actors.Grace.address, objectId).call();
+        assert.strictEqual(graceBalance, faithBalance);
+        actors.Faith.transferedLiquidity = true;
+        actors.Grace.objectId = actors.Faith.objectId;
     });
-    it("dino should transfer its position ownership to ale", async () => {
-        var result = await liquidityMiningContract.methods.transfer(actors.Ale.address, actors.Dino.positionId).send(actors.Dino.from);
+    it("heidi should transfer its position ownership to isaac", async () => {
+        var result = await liquidityMiningContract.methods.transfer(actors.Isaac.address, actors.Heidi.positionId).send(actors.Heidi.from);
         var { positionId } = result.events.Transfer.returnValues;
-        console.log("ale position id:", positionId);
-        actors.Ale.positionId = positionId;
-        actors.Ale.enterBlock = actors.Dino.enterBlock;
-        actors.Ale.expectedRewardPerBlock = actors.Dino.expectedRewardPerBlock;
-        var position = await liquidityMiningContract.methods._positions(actors.Ale.positionId).call();
-        assert.strictEqual(actors.Ale.address, position.uniqueOwner);
-        actors.Ale = { ...actors.Dino, address: actors.Ale.address, name: actors.Ale.name, from: actors.Ale.from };
+        
+        actors.Isaac.positionId = positionId;
+        actors.Isaac.enterBlock = actors.Heidi.enterBlock;
+        actors.Isaac.expectedRewardPerBlock = actors.Heidi.expectedRewardPerBlock;
+        var position = await liquidityMiningContract.methods._positions(actors.Isaac.positionId).call();
+        assert.strictEqual(actors.Isaac.address, position.uniqueOwner);
+        actors.Isaac = { ...actors.Heidi, address: actors.Isaac.address, name: actors.Isaac.name, from: actors.Isaac.from };
 
         var setups = await liquidityMiningContract.methods.setups().call()
-        var objectId = setups[actors.Dino.position.setupIndex].objectId;
-        var dinoBalance = await positionTokenCollection.methods.balanceOf(actors.Dino.address, objectId).call();
-        await positionTokenCollection.methods.safeTransferFrom(actors.Dino.address, actors.Ale.address, objectId, dinoBalance, 0x0).send(actors.Dino.from);
+        var objectId = setups[actors.Heidi.position.setupIndex].objectId;
+        var heidiBalance = await positionTokenCollection.methods.balanceOf(actors.Heidi.address, objectId).call();
+        await positionTokenCollection.methods.safeTransferFrom(actors.Heidi.address, actors.Isaac.address, objectId, heidiBalance, 0x0).send(actors.Heidi.from);
 
         /*
-        actors.Vasapower.positionId = actors.Frank.positionId;
-        actors.Vasapower.positionId = actors.Frank.positionId;
-        actors.Vasapower.enterBlock = actors.Frank.enterBlock;
-        actors.Vasapower.expectedRewardPerBlock = actors.Frank.expectedRewardPerBlock;
+        actors.Grace.positionId = actors.Faith.positionId;
+        actors.Grace.positionId = actors.Faith.positionId;
+        actors.Grace.enterBlock = actors.Faith.enterBlock;
+        actors.Grace.expectedRewardPerBlock = actors.Faith.expectedRewardPerBlock;
         */
-        var aleBalance = await positionTokenCollection.methods.balanceOf(actors.Ale.address, objectId).call();
-        assert.strictEqual(aleBalance, dinoBalance);
-        actors.Dino.transferedLiquidity = true;
+        var isaacBalance = await positionTokenCollection.methods.balanceOf(actors.Isaac.address, objectId).call();
+        assert.strictEqual(isaacBalance, heidiBalance);
+        actors.Heidi.transferedLiquidity = true;
     });
-    it("frank should partial reward without unwrapping the pair", async () => {
-        var actor = actors.Frank;
+    it("faith should partial reward without unwrapping the pair", async () => {
+        var actor = actors.Faith;
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
         var blockNumber = ((await web3.eth.getBlockNumber()) + 1) - actor.enterBlock;
         var expectedReward = utilities.toDecimals(actor.expectedRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
@@ -959,30 +957,30 @@ describe("LiquidityMining", () => {
         assert.strictEqual(balanceOf, expectedBalanceOf);
 
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
-        actors.Frank.partialReward = true;
+        actors.Faith.partialReward = true;
     });
-    it("should allow frank to add liquidity to its position", () => addLiquidity(actors.Frank));
-    it("frank should not be able to unlock without unwrapping the pair", async () => {
+    it("should allow faith to add liquidity to its position", () => addLiquidity(actors.Faith));
+    it("faith should not be able to unlock without unwrapping the pair", async () => {
         try {
-            unlockStakingPosition(actors.Frank);
+            unlockStakingPosition(actors.Faith);
         } catch (error) {
-            console.log(error);
+            
         }
     });
-    it("vasapower should not be able to withdraw reward using frank posotion token", async () => {
+    it("grace should not be able to withdraw reward using faith posotion token", async () => {
         try {
-            await liquidityMiningContract.methods.withdrawReward(actors.Frank.positionId).send(actors.Vasapower.from);
+            await liquidityMiningContract.methods.withdrawReward(actors.Faith.positionId).send(actors.Grace.from);
         } catch (e) {
-            console.log(e.message);
+            
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("not owned"), -1);
         }
     });
-    it("should not allow dino to withdraw unwrapping the pair", async () => {
+    it("should not allow heidi to withdraw unwrapping the pair", async () => {
         try {
-            await withdrawStakingPosition(actors.Dino);
+            await withdrawStakingPosition(actors.Heidi);
             assert(false);
         } catch (e) {
-            console.log(e.message);
+            
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("not owned"), -1);
         }
     });
@@ -991,11 +989,11 @@ describe("LiquidityMining", () => {
             await withdrawStakingPosition(actors.Bob);
             assert(false);
         } catch (e) {
-            console.log(e.message);
+            
             assert.notStrictEqual((e.message || e).toLowerCase().indexOf("revert"), -1);
         }
     });
-    it("should allow ale to withdraw unwrapping the pair", () => withdrawStakingPosition(actors.Ale));
+    it("should allow isaac to withdraw unwrapping the pair", () => withdrawStakingPosition(actors.Isaac));
     it("should set a new free liquidity mining setup", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
@@ -1041,23 +1039,23 @@ describe("LiquidityMining", () => {
         var setupIndexLengthAfter = (await liquidityMiningContract.methods.setups().call()).length;
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
     });
-    it("vasapower should be able to withdraw liquidity using frank transferred tokens", async () => {
-        var setup = (await liquidityMiningContract.methods.setups().call())[actors.Vasapower.setupIndex];
-        var vasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, actors.Vasapower.objectId).call();
-        var vasapowerMainTokenBalance = mainToken !== utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actors.Vasapower.address).call() : await web3.eth.getBalance(actors.Vasapower.address);
-        var vasapowerSecondaryTokenBalance = secondaryToken !== utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actors.Vasapower.address).call() : await web3.eth.getBalance(actors.Vasapower.address);
-        await liquidityMiningContract.methods.withdrawLiquidity(0, actors.Vasapower.objectId, actors.Vasapower.unwrap, vasapowerBalance).send(actors.Vasapower.from);
-        var updatedVasapowerBalance = await positionTokenCollection.methods.balanceOf(actors.Vasapower.address, actors.Vasapower.objectId).call();
-        var updatedVasapowerMainTokenBalance = mainToken !== utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actors.Vasapower.address).call() : await web3.eth.getBalance(actors.Vasapower.address);
-        var updatedVasapowerSecondaryTokenBalance = secondaryToken !== utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actors.Vasapower.address).call() : await web3.eth.getBalance(actors.Vasapower.address);
+    it("grace should be able to withdraw liquidity using faith transferred tokens", async () => {
+        var setup = (await liquidityMiningContract.methods.setups().call())[actors.Grace.setupIndex];
+        var graceBalance = await positionTokenCollection.methods.balanceOf(actors.Grace.address, actors.Grace.objectId).call();
+        var graceMainTokenBalance = mainToken !== utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actors.Grace.address).call() : await web3.eth.getBalance(actors.Grace.address);
+        var graceSecondaryTokenBalance = secondaryToken !== utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actors.Grace.address).call() : await web3.eth.getBalance(actors.Grace.address);
+        await liquidityMiningContract.methods.withdrawLiquidity(0, actors.Grace.objectId, actors.Grace.unwrap, graceBalance).send(actors.Grace.from);
+        var updatedGraceBalance = await positionTokenCollection.methods.balanceOf(actors.Grace.address, actors.Grace.objectId).call();
+        var updatedGraceMainTokenBalance = mainToken !== utilities.voidEthereumAddress ? await mainToken.methods.balanceOf(actors.Grace.address).call() : await web3.eth.getBalance(actors.Grace.address);
+        var updatedGraceSecondaryTokenBalance = secondaryToken !== utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actors.Grace.address).call() : await web3.eth.getBalance(actors.Grace.address);
             
-        assert.notStrictEqual(vasapowerMainTokenBalance, updatedVasapowerMainTokenBalance);
-        assert.notStrictEqual(vasapowerSecondaryTokenBalance, updatedVasapowerSecondaryTokenBalance);
-        assert.notStrictEqual(vasapowerBalance, updatedVasapowerBalance);
-        assert.strictEqual(updatedVasapowerBalance, '0');
+        assert.notStrictEqual(graceMainTokenBalance, updatedGraceMainTokenBalance);
+        assert.notStrictEqual(graceSecondaryTokenBalance, updatedGraceSecondaryTokenBalance);
+        assert.notStrictEqual(graceBalance, updatedGraceBalance);
+        assert.strictEqual(updatedGraceBalance, '0');
 
     })
-    it("cavicchioli should set a new staking position", async() => createNewStakingPosition(actors.Cavicchioli));
+    it("justin should set a new staking position", async() => createNewStakingPosition(actors.Justin));
     it("should update liquidity mining setup at index 6", async () => {
 
         var setupIndexLengthExpected = (await liquidityMiningContract.methods.setups().call()).length + 1;
@@ -1124,8 +1122,8 @@ describe("LiquidityMining", () => {
             var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
             await dfoManager.finalizeProposal(dfo, proposal);
             var elapsedBlocks = (await web3.eth.getBlockNumber()) - zeroBlock - 1;
-            console.log(`${elapsedBlocks} - ${await web3.eth.getBlockNumber()}`);
-            actors.Cavicchioli.expectedReward -= (actors.Cavicchioli.expectedPinnedFreeRewardPerBlock * elapsedBlocks);
+            
+            actors.Justin.expectedReward -= (actors.Justin.expectedPinnedFreeRewardPerBlock * elapsedBlocks);
         } else {
             await liquidityMiningExtension.methods.setLiquidityMiningSetups(liquidityMiningSetups.map(data => {
                 return {
@@ -1147,7 +1145,7 @@ describe("LiquidityMining", () => {
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
 
     });
-    it("gigi should set a new staking position", () => createNewStakingPosition(actors.Gigi));
+    it("mallory should set a new staking position", () => createNewStakingPosition(actors.Mallory));
 
     it("should update liquidity mining setup at index 7", async () => {
 
@@ -1206,15 +1204,15 @@ describe("LiquidityMining", () => {
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
 
     });
-    it("boomer should set a new staking position", () => createNewStakingPosition(actors.Boomer));
+    it("nick should set a new staking position", () => createNewStakingPosition(actors.Nick));
     async function addLiquidity(actor) {
 
         var {from, address, setupIndex, enterBlock, liquidityPoolAddressIndex, mainTokenAmountPlain, expectedRewardPerBlock, positionItem, involvingETH, positionId, amountIsLiquidityPool } = actor;
 
         var mainTokenAmount = utilities.toDecimals(mainTokenAmountPlain, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
         var balanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(address).call() : await web3.eth.getBalance(address);
-        console.log(`starting balance ${balanceOf}`);
-        console.log(`add liquidity block: ${await web3.eth.getBlockNumber()}`);
+        
+        
         var setup = (await liquidityMiningContract.methods.setups().call())[setupIndex];
 
         var ammPlugin = new web3.eth.Contract(UniswapV2AMMV1.abi, setup.ammPlugin);
@@ -1254,8 +1252,8 @@ describe("LiquidityMining", () => {
                     (await web3.eth.getBlock(await web3.eth.getBlockNumber())).timestamp + 10000
                 ).send({...from, value : mainTokenAmount});
             }
-            console.log('add liquidity done.');
-            console.log(`lp token balance is ${await liquidityPoolTokenContract.methods.balanceOf(address).call()}`);
+            
+            
             await liquidityPoolTokenContract.methods.approve(liquidityMiningContract.options.address, await liquidityPoolTokenContract.methods.totalSupply().call()).send(from);
             liquidityPoolTokenAmount = parseInt(await liquidityPoolTokenContract.methods.balanceOf(address).call()) - startingBalance;
         }
@@ -1272,12 +1270,12 @@ describe("LiquidityMining", () => {
         };
         
         var oldPosition = await liquidityMiningContract.methods.position(positionId).call();
-        console.log(oldPosition);
+        
         var transaction = await liquidityMiningContract.methods.addLiquidity(positionId, stake).send({...from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         await logSetups();
         var updateBlock = await web3.eth.getBlockNumber();
         var position = await liquidityMiningContract.methods.position(positionId).call();
-        console.log(position);
+        
 
         if (setup.free) {
             var newBalanceOf = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(address).call() : await web3.eth.getBalance(address);
@@ -1296,31 +1294,31 @@ describe("LiquidityMining", () => {
             assert.strictEqual(expectedReward, parseFloat(utilities.fromDecimals(position.reward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true)));
             actor.expectedReward = expectedReward;
             //rewardToken === utilities.voidEthereumAddress && (actor.expectedReward -= parseFloat(utilities.fromDecimals(await blockchainConnection.calculateTransactionFee(transaction), 18, true)));
-            console.log(`expected reward is ${actor.expectedReward}`);
+            
         }
 
         var position = await liquidityMiningContract.methods.position(positionId).call();
-        console.log(position);
+        
 
     };
-    it("should allow cavicchioli to add liquidity to its position", () => addLiquidity(actors.Cavicchioli));
-    it("should allow cavicchioli to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Cavicchioli));
-    it("should allow gallitto to create a new position", () => createNewStakingPosition(actors.Gallitto));
-    it("should allow cappello to create a new position", () => createNewStakingPosition(actors.Cappello));
-    it("should allow gallitto to withdraw 50% of the liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolTokenAmount / 2));
-        actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
+    it("should allow justin to add liquidity to its position", () => addLiquidity(actors.Justin));
+    it("should allow justin to withdraw without unwrapping the pair", () => withdrawStakingPosition(actors.Justin));
+    it("should allow olivia to create a new position", () => createNewStakingPosition(actors.Olivia));
+    it("should allow penny to create a new position", () => createNewStakingPosition(actors.Penny));
+    it("should allow olivia to withdraw 50% of the liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Olivia, parseInt(actors.Olivia.position.liquidityPoolTokenAmount / 2));
+        actors.Olivia.exitBlock = actors.Olivia.exitBlock + 20;
     });
-    it("should allow cappello to withdraw 25% of the liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Cappello, parseInt(actors.Cappello.position.liquidityPoolTokenAmount / 4));
-        actors.Cappello.exitBlock = actors.Cappello.exitBlock + 20;
+    it("should allow penny to withdraw 25% of the liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Penny, parseInt(actors.Penny.position.liquidityPoolTokenAmount / 4));
+        actors.Penny.exitBlock = actors.Penny.exitBlock + 20;
     });
-    it("should allow cappello to withdraw the remaining 75% of liquidity pool token amount", () => withdrawStakingPosition(actors.Cappello));
-    it("should allow gallitto to withdraw 33% of the remaining liquidity pool token amount", async () => {
-        await withdrawStakingPosition(actors.Gallitto, parseInt(actors.Gallitto.position.liquidityPoolTokenAmount / 3));
-        actors.Gallitto.exitBlock = actors.Gallitto.exitBlock + 20;
+    it("should allow penny to withdraw the remaining 75% of liquidity pool token amount", () => withdrawStakingPosition(actors.Penny));
+    it("should allow olivia to withdraw 33% of the remaining liquidity pool token amount", async () => {
+        await withdrawStakingPosition(actors.Olivia, parseInt(actors.Olivia.position.liquidityPoolTokenAmount / 3));
+        actors.Olivia.exitBlock = actors.Olivia.exitBlock + 20;
     });
-    it("should allow gallitto to withdraw the remaining liquidity pool token amount", () => withdrawStakingPosition(actors.Gallitto));
+    it("should allow olivia to withdraw the remaining liquidity pool token amount", () => withdrawStakingPosition(actors.Olivia));
     it("should clear the pinned setup", async () => {
         var pinnedIndex = await liquidityMiningContract.methods._pinnedSetupIndex().call();
         var pinnedSetup = (await liquidityMiningContract.methods.setups().call())[pinnedIndex];
@@ -1338,6 +1336,6 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(pinnedSetup.rewardPerBlock, updatedSetup.rewardPerBlock);
         assert.strictEqual(updatedSetup.rewardPerBlock, updatedSetup.currentRewardPerBlock);
     })
-    it("should allow gigi to withdraw the position", () => withdrawStakingPosition(actors.Gigi));
-    it("should allow boomer to withdraw the position", () => withdrawStakingPosition(actors.Boomer));
+    it("should allow mallory to withdraw the position", () => withdrawStakingPosition(actors.Mallory));
+    it("should allow nick to withdraw the position", () => withdrawStakingPosition(actors.Nick));
 });
