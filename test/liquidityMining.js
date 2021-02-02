@@ -87,7 +87,7 @@ describe("LiquidityMining", () => {
             await initActor("Ale", accounts[9], 260, 304, 3, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.315, 0.236, 0.308, 0.006999, false, true);
             await initActor("Cavicchioli", accounts[10], 310, 320, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.250, 3.25);
             await initActor("Gigi", accounts[13], 311, 354, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.1505, 0.0035);
-            await initActor("Boomer", accounts[14], 312, 355, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.0717, 0.0017);
+            await initActor("Boomer", accounts[14], 313, 356, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.07175, 0.00175);
             await initActor("Gallitto", accounts[11], 320, 340, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
             await initActor("Cappello", accounts[12], 321, 341, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
 
@@ -477,8 +477,6 @@ describe("LiquidityMining", () => {
         expectedRemainingRewardPerBlock = expectedRemainingRewardPerBlock.sub(web3.utils.toBN(utilities.toDecimals(expectedRewardPerBlock), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18)).toString();
         expectedRemainingRewardPerBlock = utilities.fromDecimals(expectedRemainingRewardPerBlock, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18);
 
-        var expectedReward = expectedRewardPerBlock * (actor.exitBlock - enterBlock);
-
         expectedRemainingRewardPerBlock = utilities.formatMoney(expectedRemainingRewardPerBlock);
 
         var pinnedFreeSetupIndex = await liquidityMiningContract.methods._pinnedSetupIndex().call();
@@ -555,6 +553,10 @@ describe("LiquidityMining", () => {
         actor.position = position;
         actor.enterBlock = position.creationBlock;
         actor.positionId = positionId;
+
+        console.log(`rpb ${expectedRewardPerBlock} - end block ${setup.endBlock} - enter block ${actor.enterBlock}`);
+        var expectedReward = setup.free ? 0 : expectedRewardPerBlock * (setup.endBlock - actor.enterBlock);
+
         var balance = 0;
         if (stake.mintPositionToken) {
             balance = await positionTokenCollection.methods.balanceOf(actor.address, actor.positionId).call();
@@ -1145,7 +1147,7 @@ describe("LiquidityMining", () => {
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
 
     });
-    it("gigi should set a new staking position", async() => createNewStakingPosition(actors.Gigi));
+    it("gigi should set a new staking position", () => createNewStakingPosition(actors.Gigi));
 
     it("should update liquidity mining setup at index 7", async () => {
 
@@ -1204,7 +1206,7 @@ describe("LiquidityMining", () => {
         assert.strictEqual(setupIndexLengthExpected, setupIndexLengthAfter);
 
     });
-    it("boomer should set a new staking position", async() => createNewStakingPosition(actors.Boomer));
+    it("boomer should set a new staking position", () => createNewStakingPosition(actors.Boomer));
     async function addLiquidity(actor) {
 
         var {from, address, setupIndex, enterBlock, liquidityPoolAddressIndex, mainTokenAmountPlain, expectedRewardPerBlock, positionItem, involvingETH, positionId, amountIsLiquidityPool } = actor;
@@ -1336,4 +1338,6 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(pinnedSetup.rewardPerBlock, updatedSetup.rewardPerBlock);
         assert.strictEqual(updatedSetup.rewardPerBlock, updatedSetup.currentRewardPerBlock);
     })
+    it("should allow gigi to withdraw the position", () => withdrawStakingPosition(actors.Gigi));
+    it("should allow boomer to withdraw the position", () => withdrawStakingPosition(actors.Boomer));
 });
