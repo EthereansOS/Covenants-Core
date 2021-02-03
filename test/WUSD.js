@@ -38,6 +38,46 @@ describe("WUSD", () => {
     var usdObjectId;
     var usdCreditObjectId;
 
+    async function encodeRealAMMV2Params() {
+        allowedAMMS = [
+            [
+                web3.utils.toChecksumAddress("0xFC1665BD717dB247CDFB3a08b1d496D1588a6340"), [
+                    await uniswapV2Factory.methods.getPair(DAI.options.address, USDC.options.address).call()
+                ]
+            ]
+        ];
+        var types = ['tuple(address,address[])[]'];
+        var params = [allowedAMMS];
+        var encoded = abi.encode(types, params);
+        return encoded;
+    };
+
+    async function encodeRealWUSDControllerInitializer() {
+        var wUSDInitializer = {
+            doubleProxyAddress : web3.utils.toChecksumAddress("0xF869538e3904778A0cb1FF620C8E83c7df36B946"),
+            rebalanceByCreditReceivers : [],
+            rebalanceByCreditPercentages : [],
+            rebalanceByCreditPercentageForCaller : utilities.toDecimals("0.02", 18),
+            rebalanceByCreditBlockInterval : 90000,
+            allowedAMMsBytes : await encodeRealAMMV2Params(),
+            wusdExtension : utilities.voidEthereumAddress,
+            wusdNote2ObjectId : 0,
+            wusdNote2Controller : utilities.voidEthereumAddress,
+            wusdNote2Percentage : utilities.toDecimals("0.2", 18),
+            wusdNote5ObjectId : 0,
+            wusdNote5Controller : utilities.voidEthereumAddress,
+            wusdNote5Percentage : utilities.toDecimals("0.1", 18),
+            orchestratorAddress : web3.utils.toChecksumAddress("0x86ab19d36c38aa81f092eab4b1a8a4b553612465"),
+            names : ["Covenants Wrapped USD", "Wrapped USD"],
+            symbols : ["WUSD", "WUSD"],
+            uris : ["ipfs://ipfs/Qmf6yWyuaazY7CSvf64Q3anFoPQH9MThxGoGgZV5TYqgQv", "ipfs://ipfs/QmTj9k7vq8DqLFuS3TrGGNDaacHL2cTgLjJ6Tu8ZbKwTHm"]
+        };
+        var wusdInitializerBytes = encodeWUSDInitializer(wUSDInitializer);
+        console.log("====");
+        console.log(wusdInitializerBytes);
+        console.log("====");
+    }
+
     before(async() => {
 
         await blockchainConnection.init;
@@ -154,6 +194,8 @@ describe("WUSD", () => {
     }
 
     it("Controller Creation", async() => {
+        encodeRealWUSDControllerInitializer();
+
         wusdNote2Controller = await new web3.eth.Contract(WUSDNoteController.abi).deploy({ data: WUSDNoteController.bin }).send(blockchainConnection.getSendingOptions());
         wusdNote5Controller = await new web3.eth.Contract(WUSDNoteController.abi).deploy({ data: WUSDNoteController.bin }).send(blockchainConnection.getSendingOptions());
         var wUSDInitializer = {
