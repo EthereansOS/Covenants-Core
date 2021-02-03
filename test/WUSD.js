@@ -277,12 +277,23 @@ describe("WUSD", () => {
         assert.strictEqual(JSON.stringify(allowed), JSON.stringify(allowedAMMS));
     });
 
+    it("Load original controller", async () => {
+        usdController = new web3.eth.Contract(WUSDExtensionController.abi, context.wusdExtensionControllerAddress);
+        var data = await usdController.methods.wusdInfo().call();
+        usdCollection = new web3.eth.Contract(context.ethItemNativeABI, data[0]);
+        usdObjectId = data[1];
+        data = await usdController.methods.wusdNote2Info().call();
+        usdCreditObjectId = data[1];
+        uSDExtension = new web3.eth.Contract(WUSDExtension.abi, await usdController.methods.extension().call());
+    });
+
     async function getUSD(liquidityPoolPosition, maxAmountPerToken, byLiquidityPool) {
+        var allowed = await usdController.methods.allowedAMMs().call();
 
         var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
 
-        var liquidityPoolAddress = allowedAMMS[0][1][liquidityPoolPosition];
+        var liquidityPoolAddress = allowed[0][1][liquidityPoolPosition];
         var maxuSDExpected = maxAmountPerToken * 2;
         maxuSDExpected += usdBalanceBefore;
 
@@ -376,8 +387,8 @@ describe("WUSD", () => {
 
     it("Retrieve a uSD amount (by tokens) not greather than 550. Difference will be sent back", async() => {
         await getUSD(0, 70);
-        await getUSD(1, 90);
-        await getUSD(2, 65);
+        await getUSD(0, 90);
+        await getUSD(0, 65);
     });
 
     it("Retrieve a uSD amount (by liquidity pool token)", async () => {
@@ -386,11 +397,13 @@ describe("WUSD", () => {
 
     it("Burn a uSD amount not greather than 350. Difference will be sent back", async() => {
 
+        var allowed = await usdController.methods.allowedAMMs().call();
+
         var usdBalanceBefore = await usdCollection.methods.balanceOf(accounts[0], usdObjectId).call();
         usdBalanceBefore = parseFloat(utilities.fromDecimals(usdBalanceBefore, "18", true));
 
         var consume = async function consume(liquidityPoolPosition, testMainCode, mainObjectId, otherObjectId, maxAmountPerToken, keepLiquidityPool) {
-            var liquidityPoolAddress = allowedAMMS[0][1][liquidityPoolPosition];
+            var liquidityPoolAddress = allowed[0][1][liquidityPoolPosition];
 
             var maxuSDExpected = maxAmountPerToken * 2;
 
@@ -463,8 +476,8 @@ describe("WUSD", () => {
 
         var inputs = [
             await consume(0, DAI, DAIItemObjectId, USDCItemObjectId, 5, true),
-            await consume(1, USDT, USDTItemObjectId, USDCItemObjectId, 11, false),
-            await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30, true),
+            //await consume(1, USDT, USDTItemObjectId, USDCItemObjectId, 11, false),
+            //await consume(2, DAI, DAIItemObjectId, USDTItemObjectId, 30, true),
         ];
 
         var tokens = {};
@@ -561,7 +574,8 @@ describe("WUSD", () => {
     });
 
     it("Rebalance By Credit by Liquidity Injection", async () => {
-        var pair = new web3.eth.Contract(context.uniswapV2PairABI, allowedAMMS[0][1][0]);
+        var allowed = await usdController.methods.allowedAMMs().call();
+        var pair = new web3.eth.Contract(context.uniswapV2PairABI, allowed[0][1][0]);
         var tokenA = new web3.eth.Contract(context.IERC20ABI, await pair.methods.token0().call());
         var tokenB = new web3.eth.Contract(context.IERC20ABI, await pair.methods.token1().call());
         var amounts = [
@@ -631,6 +645,7 @@ describe("WUSD", () => {
         for(var i in receivers) {
             var balance = await usdCollection.methods.balanceOf(receivers[i], usdObjectId).call();
             balance = utilities.fromDecimals(balance, 18);
+            console.log(receivers[i], balance);
             assert.strictEqual(balance, expecteds[i]);
         }
     });
@@ -638,8 +653,8 @@ describe("WUSD", () => {
     it("Transform Credit in wUSD after liquidity Injection", async () => {
 
         var creditBalanceBefore = await usdCollection.methods.balanceOf(wusdNote2Controller.options.address, usdObjectId).call();
-
-        var value = utilities.toDecimals(5, '18');
+        console.log(utilities.fromDecimals(creditBalanceBefore, 18));
+        var value = utilities.toDecimals(0.00000001, '18');
 
         var creditBalanceExpected = utilities.numberToString(utilities.formatNumber(creditBalanceBefore) - (utilities.formatNumber(value) * 2));
         creditBalanceExpected = utilities.fromDecimals(creditBalanceExpected, '18');
@@ -654,7 +669,7 @@ describe("WUSD", () => {
 
     it("Rebalance By Credit by Burn", async () => {
 
-        await usdCollection.methods.burn(usdObjectId, utilities.toDecimals(30, 18)).send(blockchainConnection.getSendingOptions());
+        await usdCollection.methods.burn(usdObjectId, utilities.toDecimals(2, 18)).send(blockchainConnection.getSendingOptions());
 
         var differences = await usdController.methods.differences().call();
         var credit = differences.credit;

@@ -94,6 +94,11 @@ describe("Index", () => {
         }
     });
 
+    it("Load real index", async () => {
+        indexContract = await new web3.eth.Contract(Index.abi, context.indexAddress);
+        indexCollection = new web3.eth.Contract(context.ethItemNativeABI, await indexContract.methods.collection().call());
+    });
+
     async function newIndex(name, symbol, uri, tokens, amountsPlain, amountToMint) {
 
         var ethInvolved = tokens.filter(it => it === utilities.voidEthereumAddress).length === 1;
