@@ -75,7 +75,7 @@ contract FixedInflation is IFixedInflation {
             entryConfiguration.data.lastBlock = _entries[entryConfiguration.data.id].lastBlock;
             _entries[entryConfiguration.data.id] = entryConfiguration.data;
             if(operationSets[i].length > 0) {
-                _setOperations(entryConfiguration.data.id, operationSets[i], dfoFeePercentage);
+                _setOperations(entryConfiguration.data.id, operationSets[i]);
             }
         }
     }
@@ -194,17 +194,19 @@ contract FixedInflation is IFixedInflation {
     function _transferTo(address erc20TokenAddress, uint256 totalAmount, address rewardReceiver, uint256 callerRewardPercentage, address[] memory receivers, uint256[] memory receiversPercentages) private {
         uint256 availableAmount = totalAmount;
 
-        uint256 currentPartialAmount = rewardReceiver == address(0) ? 0 : _calculateRewardPercentage(totalAmount, callerRewardPercentage);
+        uint256 currentPartialAmount = rewardReceiver == address(0) ? 0 : _calculateRewardPercentage(availableAmount, callerRewardPercentage);
         _transferTo(erc20TokenAddress, rewardReceiver, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 
         (uint256 dfoFeePercentage, address dfoWallet) = IFixedInflationFactory(_factory).feePercentageInfo();
-        currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(totalAmount, dfoFeePercentage);
+        currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(availableAmount, dfoFeePercentage);
         _transferTo(erc20TokenAddress, dfoWallet, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 
-        for(uint256 i = 0; i < receiversPercentages.length; i++) {
-            _transferTo(erc20TokenAddress, receivers[i], currentPartialAmount = _calculateRewardPercentage(totalAmount, receiversPercentages[i]));
+        uint256 stillAvailableAmount = availableAmount;
+
+        for(uint256 i = 0; i < receivers.length - 1; i++) {
+            _transferTo(erc20TokenAddress, receivers[i], currentPartialAmount = _calculateRewardPercentage(stillAvailableAmount, receiversPercentages[i]));
             availableAmount -= currentPartialAmount;
         }
 
@@ -261,19 +263,19 @@ contract FixedInflation is IFixedInflation {
     function _add(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, uint256 dfoFeePercentage) private {
         emit Entry(fixedInflationEntry.id = keccak256(abi.encode(fixedInflationEntry, operations, dfoFeePercentage, msg.sender, block.number, block.timestamp)));
         _entries[fixedInflationEntry.id] = fixedInflationEntry;
-        _setOperations(fixedInflationEntry.id, operations, dfoFeePercentage);
+        _setOperations(fixedInflationEntry.id, operations);
     }
 
-    function _setOperations(bytes32 id, FixedInflationOperation[] memory operations, uint256 dfoFeePercentage) private {
+    function _setOperations(bytes32 id, FixedInflationOperation[] memory operations) private {
         require(_entries[id].id == id, "Invalid id");
         require(operations.length > 0, "Length > 0");
         delete _operations[id];
         for(uint256 i = 0; i < operations.length; i++) {
             FixedInflationOperation memory operation = operations[i];
             require(operation.receivers.length > 0, "No receivers");
-            require(operation.receiversPercentages.length == (operation.receivers.length - 1), "Percentages must be less than receivers");
-            uint256 percentage = dfoFeePercentage + _entries[id].callerRewardPercentage;
-            for(uint256 j = 0; j < operation.receiversPercentages.length; j++) {
+            require(operation.receiversPercentages.length == (operation.receivers.length - 1), "Last receiver percentage is calculated automatically");
+            uint256 percentage = 0;
+            for(uint256 j = 0; j < operation.receivers.length - 1; j++) {
                 percentage += operation.receiversPercentages[j];
                 require(operation.receivers[j] != address(0), "Void receiver");
             }

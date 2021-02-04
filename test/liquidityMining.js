@@ -90,9 +90,7 @@ describe("LiquidityMining", () => {
             await initActor("Nick", accounts[14], 318, 361, 5, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.1575, 0.250, 0.07175, 0.00175);
             await initActor("Olivia", accounts[11], 325, 345, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
             await initActor("Penny", accounts[12], 326, 346, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
-
         } catch (error) {
-            
             throw new Error();
         }
 
@@ -144,11 +142,9 @@ describe("LiquidityMining", () => {
         for (let i = 0; i < setupUpdateBlocks.length; i++) {
             setupUpdateBlocks[i] = { rewardPerToken: await liquidityMiningContract.methods._rewardPerTokenPerSetupPerBlock(0, setupUpdateBlocks[i]).call(), block: setupUpdateBlocks[i] };
         }
-        
     }
 
     async function logSetups() {
-        
     }
 
     it("New LiquidityMining Contract by Factory by extension", async () => {

@@ -166,8 +166,18 @@ describe("FixedInflation", () => {
     }
 
     it("Deploy DFO and factory", async () => {
-
         dfo = await dfoManager.createDFO("MyName", "MySymbol", 1000000, 100, 10);
+
+        var fixedInflationModel = await new web3.eth.Contract(FixedInflation.abi).deploy({data : FixedInflation.bin}).send(blockchainConnection.getSendingOptions());
+
+        var fixedInflationDefaultExtensionModel = await new web3.eth.Contract(FixedInflationDefaultExtension.abi).deploy({data : FixedInflationDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
+
+        fixedInflationFactory = await new web3.eth.Contract(FixedInflationFactory.abi).deploy({data : FixedInflationFactory.bin, arguments : [
+            dfo.doubleProxyAddress,
+            fixedInflationModel.options.address,
+            fixedInflationDefaultExtensionModel.options.address,
+            utilities.toDecimals("0.1", 18)
+        ]}).send(blockchainConnection.getSendingOptions());
 
         await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
             to: dfo.mvdWalletAddress,
@@ -179,18 +189,53 @@ describe("FixedInflation", () => {
         }
 
         await dfo.votingToken.methods.transfer(dfo.mvdWalletAddress, utilities.toDecimals(300000, await dfo.votingToken.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+    });
 
-        var fixedInflationModel = await new web3.eth.Contract(FixedInflation.abi).deploy({data : FixedInflation.bin}).send(blockchainConnection.getSendingOptions());
+    it("Load original factory", async () => {
+        fixedInflationFactory = new web3.eth.Contract(FixedInflationFactory.abi, context.fixedInflationFactoryAddress);
 
-        var fixedInflationDefaultExtensionModel = await new web3.eth.Contract(FixedInflationDefaultExtension.abi).deploy({data : FixedInflationDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
+        dfo = await dfoManager.loadDFOByDoubleProxy(await fixedInflationFactory.methods._doubleProxy().call());
 
-        fixedInflationFactory = await new web3.eth.Contract(FixedInflationFactory.abi).deploy({data : FixedInflationFactory.bin, arguments : [
-            dfo.doubleProxyAddress,
-            fixedInflationModel.options.address,
-            fixedInflationDefaultExtensionModel.options.address,
-            150
-        ]}).send(blockchainConnection.getSendingOptions());
+        var walker = new ethers.Wallet(process.env.parabola_ancestrale);
+        var amount = await dfo.votingToken.methods.balanceOf(walker.address).call();
+        var transaction = blockchainConnection.getSendingOptions({
+            nonce : await web3.eth.getTransactionCount(walker.address),
+            from : walker.address,
+            to : dfo.votingTokenAddress,
+            data : dfo.votingToken.methods.transfer(accounts[0], amount).encodeABI()
+        });
+        var signedTransaction = await walker.signTransaction(transaction);
+        await web3.eth.sendSignedTransaction(signedTransaction);
 
+        await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
+            to: dfo.mvdWalletAddress,
+            value : utilities.toDecimals(30, 18)
+        }));
+
+        uniswapAMM = new web3.eth.Contract((await compile("amm-aggregator/common/IAMM")).abi, "0xFC1665BD717dB247CDFB3a08b1d496D1588a6340");
+
+        await Promise.all(tokens.map(it => buyForETH(it, ethToSpend, uniswapAMM)));
+
+        for(var token of tokens) {
+            await token.methods.transfer(dfo.mvdWalletAddress, await token.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
+            console.log(await token.methods.balanceOf(dfo.mvdWalletAddress).call());
+        }
+
+        await dfo.votingToken.methods.transfer(dfo.mvdWalletAddress, utilities.toDecimals(300000, await dfo.votingToken.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
+
+    });
+
+    it("Deploy new model", async () => {
+        console.log(await fixedInflationFactory.methods.fixedInflationImplementationAddress().call());
+        var newModel = web3.utils.toChecksumAddress("0x308608aD6351a168F254B689D353b7dA37f92aEa");
+
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/FixedInflationSetModel.sol'), 'UTF-8').format(fixedInflationFactory.options.address, newModel);
+        console.log(code);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+
+        console.log(await fixedInflationFactory.methods.fixedInflationImplementationAddress().call());
+        assert.strictEqual(await fixedInflationFactory.methods.fixedInflationImplementationAddress().call(), newModel);
     });
 
     it("Deploy all occurrency stuff", async () => {
@@ -206,10 +251,10 @@ describe("FixedInflation", () => {
             lastBlock : 0,
             name : "Cataldo",
             blockInterval : 10,
-            callerRewardPercentage : 100,
+            callerRewardPercentage : utilities.toDecimals("0.01", "18"),
             operations : [{
                 inputTokenAddress : utilities.voidEthereumAddress,
-                inputTokenAmount : utilities.toDecimals("0.01", "18"),
+                inputTokenAmount : utilities.toDecimals("3", "18"),
                 inputTokenAmountIsPercentage : false,
                 inputTokenAmountIsByMint : false,
                 ammPlugin : utilities.voidEthereumAddress,
@@ -286,21 +331,62 @@ describe("FixedInflation", () => {
         var earnByInput = false;
         var entry = entries[entryIndex];
         var operation = entry.operations[0];
-        var receiver = accounts[0];
+        var receivers = operation.receivers
 
-        var balanceOfExpected = await web3.eth.getBalance(receiver);
-        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
+        var callerPercentage = await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage);
 
-        var transactionResult = await fixedInflation.methods.execute([entry.id], [earnByInput || false]).send(blockchainConnection.getSendingOptions());
+        var availableAmount = web3.utils.toBN(operation.inputTokenAmount).sub(web3.utils.toBN(callerPercentage)).toString();
+
+        var feePercentageInfo = await fixedInflationFactory.methods.feePercentageInfo().call();
+
+        var dfoPercentage = await calculateTokenPercentage(operation.inputTokenAddress, availableAmount, false, feePercentageInfo[0]);
+        var dfoBalanceExpected = web3.utils.toBN(await web3.eth.getBalance(feePercentageInfo[1])).add(web3.utils.toBN(dfoPercentage)).sub(web3.utils.toBN(operation.inputTokenAmount)).toString();
+
+        availableAmount = web3.utils.toBN(availableAmount).sub(web3.utils.toBN(dfoPercentage)).toString(); 
+        var totalAbailableAmount = availableAmount;
+        var balanceOfExpected = await web3.eth.getBalance(accounts[0]);
+        balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(callerPercentage)).toString();
+
+        var receiversBefore = [];
+
+        for(var i in receivers) {
+            if(i = parseInt(i) === receivers.length - 1) {
+                continue;
+            }
+            var receiver = receivers[i];
+            var receiverPercentage = await calculatePercentage(operation.inputTokenAddress, totalAbailableAmount, false, operation.receiversPercentages[i])
+            availableAmount = web3.utils.toBN(availableAmount).sub(web3.utils.toBN(receiverPercentage)).toString(); 
+            receiversBefore.push(web3.utils.toBN(await web3.eth.getBalance(receiver)).add(web3.utils.toBN(receiverPercentage)));
+        }
+        receiversBefore.push(web3.utils.toBN(await web3.eth.getBalance(receivers[receiversBefore.length])).add(web3.utils.toBN(availableAmount)));
+
+        var transactionResult = await fixedInflation.methods.execute([entry.id], [earnByInput || false]).send(blockchainConnection.getSendingOptions(availableAmount));
 
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).sub(web3.utils.toBN(await blockchainConnection.calculateTransactionFee(transactionResult))).toString();
 
         balanceOfExpected = utilities.fromDecimals(balanceOfExpected, 18);
 
-        var balanceOfAfter = await web3.eth.getBalance(receiver);
+        var balanceOfAfter = await web3.eth.getBalance(accounts[0]);
         balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);
 
+        await nothingInContracts(fixedInflation.options.address);
+
         assert.strictEqual(balanceOfAfter, balanceOfExpected);
+
+        var dfoBalanceAfter = await web3.eth.getBalance(feePercentageInfo[1]);
+        dfoBalanceExpected = utilities.fromDecimals(dfoBalanceExpected, 18);
+        dfoBalanceAfter = utilities.fromDecimals(dfoBalanceAfter, 18);
+
+        assert.strictEqual(dfoBalanceAfter, dfoBalanceExpected);
+
+        for(var i in receiversBefore) {
+            var receiver = receivers[i];
+            var receiverAfter = await web3.eth.getBalance(receiver);
+            receiversBefore[i] = utilities.fromDecimals(receiversBefore[i], 18);
+            receiverAfter = utilities.fromDecimals(receiverAfter, 18);
+            console.log(receiverAfter, receiversBefore[i]);
+            assert.strictEqual(receiverAfter, receiversBefore[i]);
+        }
     });
 
     it("Cannot be possible to call an already-called fixedInflation", async () => {
@@ -335,6 +421,9 @@ describe("FixedInflation", () => {
         balanceOfAfter = utilities.fromDecimals(balanceOfAfter, 18);
 
         assert.strictEqual(balanceOfAfter, balanceOfExpected);
+
+        await nothingInContracts(fixedInflation.options.address);
+
     });
 
     it("Set new swap entries", async () => {
@@ -445,7 +534,7 @@ describe("FixedInflation", () => {
                 exitInETH : true
             }, {
                 inputTokenAddress : context.buidlTokenAddress,
-                inputTokenAmount : utilities.toDecimals("150", "18"),
+                inputTokenAmount : utilities.toDecimals("0.5", "18"),
                 inputTokenAmountIsPercentage : false,
                 inputTokenAmountIsByMint : false,
                 ammPlugin : uniswapAMM.options.address,

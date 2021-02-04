@@ -86,11 +86,11 @@ async function loadDFOByProxy(dfoProxyAddress) {
     }
     data.proxy = new web3.eth.Contract(context.dfoProxyABI, data.dfoProxyAddress);
 
-    data.doubleProxyAddress = await data.proxy.methods.getToken().call();
-    data.mvdWalletAddress = await data.proxy.methods.getToken().call();
+    data.doubleProxyAddress = await data.proxy.methods.getDoubleProxyAddress().call();
+    data.mvdWalletAddress = await data.proxy.methods.getMVDWalletAddress().call();
 
     data.votingToken = new web3.eth.Contract(context.dfoVotingTokenABI, data.votingTokenAddress = await data.proxy.methods.getToken().call());
-    data.stateHolder = new web3.eth.Contract(context.dfoStateHolderABI, data.stateHolderAddress = await data.proxy.methods.getToken().call());
+    data.stateHolder = new web3.eth.Contract(context.dfoStateHolderABI, data.stateHolderAddress = await data.proxy.methods.getStateHolderAddress().call());
     data.functionalitiesManager = new web3.eth.Contract(context.dfoFunctionalitiesManagerABI, data.functionalitiesManagerAddress = await data.proxy.methods.getToken().call());
     data.hardCap = web3.eth.abi.decodeParameter("uint256", await data.proxy.methods.read("getVotesHardCap", "0x").call());
     return data;
