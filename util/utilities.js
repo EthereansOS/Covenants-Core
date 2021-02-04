@@ -26,7 +26,7 @@ function fromDecimals(n, d, noFormat) {
         return noFormat === true ? result : formatMoney(result);
     }
     var number = (typeof n).toLowerCase() === 'string' ? parseInt(n) : n;
-    if (!number || this.isNaN(number)) {
+    if (!number || isNaN(number)) {
         return '0';
     }
     var nts = parseFloat(numberToString((number / (decimals < 2 ? 1 : Math.pow(10, decimals)))));
@@ -46,7 +46,7 @@ function toDecimals(n, d) {
         return web3.utils.toWei((typeof n).toLowerCase() === 'string' ? n : numberToString(n), symbol);
     }
     var number = (typeof n).toLowerCase() === 'string' ? parseInt(n) : n;
-    if (!number || this.isNaN(number)) {
+    if (!number || isNaN(number)) {
         return 0;
     }
     return numberToString(number * (decimals < 2 ? 1 : Math.pow(10, decimals)));

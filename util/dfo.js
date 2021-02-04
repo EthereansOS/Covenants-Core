@@ -76,6 +76,26 @@ async function createDFO(name, symbol, totalSupplyPlain, proposalLength, hardCap
     return data;
 }
 
+async function loadDFOByDoubleProxy(doubleProxyAddress) {
+    return loadDFOByProxy(await new web3.eth.Contract(context.dfoDoubleProxyABI, doubleProxyAddress).methods.proxy().call());
+}
+
+async function loadDFOByProxy(dfoProxyAddress) {
+    var data = {
+        dfoProxyAddress
+    }
+    data.proxy = new web3.eth.Contract(context.dfoProxyABI, data.dfoProxyAddress);
+
+    data.doubleProxyAddress = await data.proxy.methods.getToken().call();
+    data.mvdWalletAddress = await data.proxy.methods.getToken().call();
+
+    data.votingToken = new web3.eth.Contract(context.dfoVotingTokenABI, data.votingTokenAddress = await data.proxy.methods.getToken().call());
+    data.stateHolder = new web3.eth.Contract(context.dfoStateHolderABI, data.stateHolderAddress = await data.proxy.methods.getToken().call());
+    data.functionalitiesManager = new web3.eth.Contract(context.dfoFunctionalitiesManagerABI, data.functionalitiesManagerAddress = await data.proxy.methods.getToken().call());
+    data.hardCap = web3.eth.abi.decodeParameter("uint256", await data.proxy.methods.read("getVotesHardCap", "0x").call());
+    return data;
+}
+
 async function createProposal(dfo, codeName, submitable, code, methodSignature, internal, needsSender, replaces, args) {
     var compiled = await compile(code, "ProposalCode");
     var arguments = [
@@ -173,6 +193,8 @@ function formatDFOLogs(logVar, event) {
 
 module.exports = {
     createDFO,
+    loadDFOByDoubleProxy,
+    loadDFOByProxy,
     createProposal,
     finalizeProposal
 }
