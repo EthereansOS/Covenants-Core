@@ -208,7 +208,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
-        require(liquidityMiningPosition.free || liquidityMiningPosition.setupEndBlock >= block.number, "Invalid add liquidity");
+        require(liquidityMiningPosition.free, "Invalid add liquidity");
         LiquidityMiningSetup memory chosenSetup = _setups[liquidityMiningPosition.setupIndex];
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, request);
 
@@ -232,40 +232,20 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         } else {
             require(msg.value == 0, "ETH not involved");
         }
-        // if free we must rebalance and snapshot the state
-        if (liquidityMiningPosition.free) {
-            // rebalance the reward per token
-            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, false);
-        } else {
-            // mint more item corresponding to the new liquidity
-            _mintLiquidity(liquidityMiningPosition.uniqueOwner, liquidityPoolData.amount, liquidityMiningPosition.setupIndex);
-        }
+        // rebalance the reward per token
+        _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, 0, false);
         // calculate reward before adding liquidity pool data to the position
-        (uint256 newReward, uint256 newLockedRewardPerBlock) = liquidityMiningPosition.free ? (calculateFreeLiquidityMiningSetupReward(positionId, false), 0) : calculateLockedLiquidityMiningSetupReward(liquidityMiningPosition.setupIndex, mainTokenAmount, false, 0);
+        uint256 newReward = calculateFreeLiquidityMiningSetupReward(positionId, false);
         // update the liquidity pool token amount
         liquidityMiningPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
-        if (!liquidityMiningPosition.free) {
-            // transfer the reward in advance to this contract
-            ILiquidityMiningExtension(_extension).transferTo(newReward, address(this));
-            // update the position reward, locked reward per block and the liquidity pool token amount
-            liquidityMiningPosition.reward += newReward;
-            liquidityMiningPosition.lockedRewardPerBlock += newLockedRewardPerBlock;
-            _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock += newLockedRewardPerBlock;
-            _setups[liquidityMiningPosition.setupIndex].currentStakedLiquidity += mainTokenAmount;
-            // rebalance the pinned reward per block
-            if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maximumLiquidity)) / 1e18, false);
-            }
-        } else {
-            if (newReward > 0) {
-                // transfer the reward
-                ILiquidityMiningExtension(_extension).transferTo(newReward, msg.sender);
-            }
-            // update the creation block to avoid blocks before the new add liquidity
-            liquidityMiningPosition.creationBlock = block.number;
-            // rebalance the reward per token
-            _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityPoolData.amount, false);
+        if (newReward > 0) {
+            // transfer the reward
+            ILiquidityMiningExtension(_extension).transferTo(newReward, msg.sender);
         }
+        // update the creation block to avoid blocks before the new add liquidity
+        liquidityMiningPosition.creationBlock = block.number;
+        // rebalance the reward per token
+        _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityPoolData.amount, false);
     }
 
     /** @dev this function allows a wallet to update the extension of the given liquidity mining position.
@@ -355,7 +335,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 _positions[positionId] = _positions[0x0];
             } else {
                 // set the partially redeemed amount
-                _partiallyRedeemed[positionId] = reward;
+                _partiallyRedeemed[positionId] += reward;
             }
         }
     }

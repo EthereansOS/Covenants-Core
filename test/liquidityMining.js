@@ -1007,7 +1007,7 @@ describe("LiquidityMining", () => {
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
         actors.Faith.partialReward = true;
     });
-    it("should allow faith to add liquidity to its position", () => addLiquidity(actors.Faith));
+    /*it("should allow faith to add liquidity to its position", () => addLiquidity(actors.Faith));*/
     it("faith should not be able to unlock without unwrapping the pair", async () => {
         try {
             unlockStakingPosition(actors.Faith);
