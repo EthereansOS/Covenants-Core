@@ -610,7 +610,7 @@ describe("LiquidityMining", () => {
         await logSetups();
         var { positionId } = result.events.Transfer.returnValues;
         var position = await liquidityMiningContract.methods.position(positionId).call();
-        
+        console.log(position);
         actor.position = position;
         actor.enterBlock = position.creationBlock;
         actor.positionId = positionId;
@@ -642,6 +642,8 @@ describe("LiquidityMining", () => {
             console.log("Name:", await positionTokenCollection.methods.name(setup.objectId).call(), "Symbol:", await positionTokenCollection.methods.symbol(setup.objectId).call(), "Uri:", await positionTokenCollection.methods.uri(setup.objectId).call());
             assert.strictEqual(await positionTokenCollection.methods.uri(setup.objectId).call(), await liquidityMiningFactory.methods.liquidityFarmTokenURI().call());
         }
+        console.log(`actor ${actor.name} reward balance is ${await rewardToken.methods.balanceOf(actor.address).call()}`);
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
 
         return position;
     }
@@ -673,6 +675,7 @@ describe("LiquidityMining", () => {
         actor.lastPartialRewardBlock = updatedPosition.creationBlock;
         assert.notStrictEqual(position.creationBlock, actor.lastPartialRewardBlock);
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     it("should allow alice to partial reward again", async () => {
         var actor = actors.Alice;
@@ -696,6 +699,7 @@ describe("LiquidityMining", () => {
         actor.lastPartialRewardBlock = updatedPosition.creationBlock;
         assert.notStrictEqual(position.creationBlock, actor.lastPartialRewardBlock);
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     async function unlockStakingPosition(actor, dontPassReward) {
         var position = await liquidityMiningContract.methods.position(actor.positionId).call();
@@ -819,11 +823,11 @@ describe("LiquidityMining", () => {
         }
 
         var transaction = null;
-        if (!setup.free) {
+        if (!actor.position.free) {
             transaction = await liquidityMiningContract.methods.withdrawReward(actor.positionId).send(actor.from);
         }
 
-        var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
+        var transaction2 = await liquidityMiningContract.methods.withdrawLiquidity(actor.position.free ? actor.positionId : 0, actor.objectId || setup.objectId, actor.unwrap, removedLiquidity).send(actor.from);    
         await logSetups();
 
         var updatedPosition = await liquidityMiningContract.methods.position(actor.positionId).call();
@@ -843,6 +847,7 @@ describe("LiquidityMining", () => {
         var secondaryBalance = utilities.fromDecimals(secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var liquidityPoolBalance = utilities.fromDecimals(await liquidityPool.methods.balanceOf(actor.address).call(), await liquidityPool.methods.decimals().call());
 
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
         if(setup.free) {
             if (!removesAllLiquidity) {
                 assert.strictEqual(position.liquidityPoolTokenAmount - removedLiquidity, parseInt(updatedPosition.liquidityPoolTokenAmount));
@@ -1046,6 +1051,7 @@ describe("LiquidityMining", () => {
 
         actor.expectedReward -= parseFloat(utilities.fromDecimals(expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18, true));
         actors.Faith.partialReward = true;
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     /*it("should allow faith to add liquidity to its position", () => addLiquidity(actors.Faith));*/
     it("faith should not be able to unlock without unwrapping the pair", async () => {
@@ -1141,6 +1147,7 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(graceSecondaryTokenBalance, updatedGraceSecondaryTokenBalance);
         assert.notStrictEqual(graceBalance, updatedGraceBalance);
         assert.strictEqual(updatedGraceBalance, '0');
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
 
     })
     it("justin should set a new staking position", async() => createNewStakingPosition(actors.Justin));
@@ -1396,15 +1403,18 @@ describe("LiquidityMining", () => {
     it("should allow olivia to withdraw 50% of the liquidity pool token amount", async () => {
         await withdrawStakingPosition(actors.Olivia, parseInt(actors.Olivia.position.liquidityPoolTokenAmount / 2));
         actors.Olivia.exitBlock = actors.Olivia.exitBlock + 20;
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     it("should allow penny to withdraw 25% of the liquidity pool token amount", async () => {
         await withdrawStakingPosition(actors.Penny, parseInt(actors.Penny.position.liquidityPoolTokenAmount / 4));
         actors.Penny.exitBlock = actors.Penny.exitBlock + 20;
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     it("should allow penny to withdraw the remaining 75% of liquidity pool token amount", () => withdrawStakingPosition(actors.Penny));
     it("should allow olivia to withdraw 33% of the remaining liquidity pool token amount", async () => {
         await withdrawStakingPosition(actors.Olivia, parseInt(actors.Olivia.position.liquidityPoolTokenAmount / 3));
         actors.Olivia.exitBlock = actors.Olivia.exitBlock + 20;
+        console.log(`contract reward balance is ${await rewardToken.methods.balanceOf(liquidityMiningContract.options.address).call()}`);
     });
     it("should allow olivia to withdraw the remaining liquidity pool token amount", () => withdrawStakingPosition(actors.Olivia));
     it("should clear the pinned setup", async () => {
@@ -1431,6 +1441,11 @@ describe("LiquidityMining", () => {
         try {
             var collAddress = await liquidityMiningContract.methods._liquidityFarmTokenCollection().call();
             var coll = new web3.eth.Contract(context.ethItemNativeABI, collAddress);
+            try {
+                await withdrawStakingPosition(actors.Faith, await coll.methods.balanceOf(actors.Faith.address, actors.Faith.objectId).call());
+            } catch (error) {
+                console.error(error);
+            }
             var logs = await web3.eth.getPastLogs({
                 address : collAddress,
                 fromBlock : global.startBlock,
@@ -1449,6 +1464,7 @@ describe("LiquidityMining", () => {
                 var setupIndex = await liquidityMiningContract.methods.getObjectIdSetupIndex(objectId).call();
                 var totalSupply = await coll.methods.totalSupply(objectId).call();
                 console.log(objectId, setupIndex, totalSupply);
+                /*
                 if(totalSupply !== '0') {
                     try {
                         await withdrawStakingPosition(actors.Faith, await coll.methods.balanceOf(actors.Faith.address, objectId).call());
@@ -1458,6 +1474,10 @@ describe("LiquidityMining", () => {
                     totalSupply = await coll.methods.totalSupply(objectId).call();
                     console.log(objectId, setupIndex, totalSupply);
                 }
+                */
+            }
+            for (let [key, value] of Object.entries(actors)) {
+                console.log(`actor ${key} reward balance is ${await rewardToken.methods.balanceOf(value.address).call()}`);
             }
         } catch(e) {
             console.error(e);

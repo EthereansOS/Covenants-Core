@@ -46,7 +46,7 @@ struct LiquidityMiningPosition {
 // stake data struct
 struct LiquidityMiningPositionRequest {
     uint256 setupIndex; // index of the chosen setup.
-    uint256 amount; // amount of main token.
+    uint256 amount; // amount of main token or liquidity pool token.
     bool amountIsLiquidityPool; //true if user wants to directly share the liquidity pool token amount, false to add liquidity to AMM
     address positionOwner; // position extension or address(0) [msg.sender].
 }

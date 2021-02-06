@@ -14,7 +14,7 @@ import "./ILiquidityMining.sol";
 
 contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
-    uint256 public constant ONE_HUNDRED = 10000;
+    uint256 public constant ONE_HUNDRED = 1e18;
 
     // event that tracks liquidity mining contracts deployed
     event RewardToken(address indexed rewardTokenAddress);
@@ -141,7 +141,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         require(request.setupIndex < _setups.length, "Invalid setup index");
         // retrieve the setup
         LiquidityMiningSetup storage chosenSetup = _setups[request.setupIndex];
-        require(chosenSetup.free || (block.number >= chosenSetup.startBlock && block.number <= chosenSetup.endBlock), "Setup not available");
+        require(chosenSetup.free || (block.number >= chosenSetup.startBlock && block.number < chosenSetup.endBlock), "Setup not available");
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, request);
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
@@ -356,8 +356,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             (
                 liquidityMiningPosition.free && 
                 removedLiquidity <= liquidityMiningPosition.liquidityPoolTokenAmount &&
-                !_positionRedeemed[positionId]
-                // && liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0)
+                !_positionRedeemed[positionId] &&
+                liquidityMiningPosition.uniqueOwner == msg.sender
             ) || (positionId == 0 && INativeV1(_liquidityFarmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity), "Invalid withdraw");
         // check if liquidity mining position is valid
         require(liquidityMiningPosition.free || (_setups[setupIndex].endBlock <= block.number || _finishedLockedSetups[objectId]), "Invalid withdraw");
@@ -523,7 +523,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 _setups[index].currentRewardPerBlock = data.rewardPerBlock;
             } else {
                 // update locked liquidity mining setup
-                _setups[index].rewardPerBlock = data.rewardPerBlock > 0 ? data.rewardPerBlock : _setups[index].rewardPerBlock;
+                _setups[index].rewardPerBlock = data.rewardPerBlock;
                 _setups[index].renewTimes = data.renewTimes;
             }
         }
@@ -673,7 +673,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         );
         uint256 remainingLiquidity;
         // we are removing liquidity using the setup items
-        if (positionId != 0) {
+        if (liquidityMiningPosition.free && positionId != 0) {
             // update the setup index
             setupIndex = liquidityMiningPosition.setupIndex;
             remainingLiquidity = liquidityMiningPosition.liquidityPoolTokenAmount - removedLiquidity;
@@ -691,10 +691,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // remove liquidity using AMM
             address ammPlugin = _setups[setupIndex].ammPlugin;
             _safeApprove(lpData.liquidityPoolAddress, ammPlugin, lpData.amount);
-            (, uint256[] memory amounts,) = IAMM(ammPlugin).removeLiquidity(lpData);
-            require(amounts[0] > 0 && amounts[1] > 0, "Insufficient amount");
+            (, uint256[] memory amounts, address[] memory tokens) = IAMM(ammPlugin).removeLiquidity(lpData);
             if (isUnlock) {
-                _setups[setupIndex].currentStakedLiquidity -= amounts[0];
+                for (uint256 i = 0; i < tokens.length; i++) {
+                    if (tokens[i] == _setups[setupIndex].mainTokenAddress) {
+                        _setups[setupIndex].currentStakedLiquidity -= amounts[0];
+                        break;
+                    }
+                }
             }
         } else {
             // send back the liquidity pool token amount without the fee
@@ -707,7 +711,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 // check if it's finished (this is a withdraw) or not (a unlock)
                 if (!isUnlock) {
                     // the locked setup must be considered finished only if it's not renewable
-                    _finishedLockedSetups[objectId] = _setups[setupIndex].renewTimes == 0;
+                    _finishedLockedSetups[objectId] = true;
                     if (_hasPinned && _setups[_pinnedSetupIndex].free) {
                         _rebalanceRewardPerBlock(
                             _pinnedSetupIndex, 
@@ -732,7 +736,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 }
             }
         }
-        if (positionId != 0) {
+        if (liquidityMiningPosition.free && positionId != 0) {
             // delete the liquidity mining position after the withdraw
             if (remainingLiquidity == 0) {
                 _positions[positionId] = _positions[0x0];
