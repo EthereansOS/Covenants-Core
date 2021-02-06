@@ -816,6 +816,8 @@ describe("LiquidityMining", () => {
         var expectedRewardBalance = web3.utils.toBN(rewardBalance).add(web3.utils.toBN(await utilities.toDecimals(actor.expectedReward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18))).toString();
         var expectedMainBalance = web3.utils.toBN(mainBalance).add(web3.utils.toBN(amounts[mainTokenIndex])).toString();
         var expectedSecondaryBalance = web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString();
+        console.log(liquidityPoolBalance);
+        console.log(liquidityPoolTokenAmount);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
         await logSetups();
         var setup = (await liquidityMiningContract.methods.setups().call())[position.setupIndex];
@@ -828,12 +830,13 @@ describe("LiquidityMining", () => {
 
             }
         }
-        
+
         if (!setup.free) {
             var collAddress = await liquidityMiningContract.methods._liquidityFarmTokenCollection().call();
             var coll = new web3.eth.Contract(context.ethItemNativeABI, collAddress);
-            var lpBalance = await coll.methods.balanceOf(actor.address, actor.objectId).call()
-            expectedLiquidityPoolBalance = utilities.fromDecimals(lpBalance, await coll.methods.decimals().call());
+            var lpBalance = await coll.methods.balanceOf(actor.address, actor.objectId || setup.objectId).call();
+            console.log(lpBalance);
+            expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(lpBalance), await coll.methods.decimals().call());
         }
 
         var transaction = null;
@@ -875,6 +878,7 @@ describe("LiquidityMining", () => {
             assert.strictEqual(mainBalance, expectedMainBalance);
             assert.strictEqual(secondaryBalance, expectedSecondaryBalance);
         } else {
+            console.log(await liquidityPool.methods.balanceOf(actor.address).call());
             assert.strictEqual(liquidityPoolBalance, expectedLiquidityPoolBalance);
         }
     }

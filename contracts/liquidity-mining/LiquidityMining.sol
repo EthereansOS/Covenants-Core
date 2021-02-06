@@ -87,7 +87,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         if (keccak256(extensionInitData) != keccak256("")) {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
-        (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", false, ILiquidityMiningFactory(_factory).getLiquidityFarmTokenCollectionURI(), address(this), ""), "");
+        (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, ILiquidityMiningFactory(_factory).getLiquidityFarmTokenCollectionURI(), address(this), ""), "");
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
     }
 
