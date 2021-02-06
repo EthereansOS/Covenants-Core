@@ -40,7 +40,7 @@ var tokens;
 
 var actors = {};
 
-describe("FixedInflation", () => {
+describe("Multiple Proposals", () => {
 
     before(async() => {
 
