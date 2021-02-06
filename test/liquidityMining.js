@@ -752,6 +752,13 @@ describe("LiquidityMining", () => {
         var expectedSecondaryBalance = utilities.fromDecimals(web3.utils.toBN(secondaryBalance).add(web3.utils.toBN(amounts[secondaryTokenIndex])).toString(), secondaryToken != utilities.voidEthereumAddress ? await secondaryToken.methods.decimals().call() : 18);
         var expectedLiquidityPoolBalance = utilities.fromDecimals(web3.utils.toBN(liquidityPoolBalance).add(web3.utils.toBN(liquidityPoolTokenAmount)).toString(), await liquidityPool.methods.decimals().call());
 
+        if (!setup.free) {
+            var collAddress = await liquidityMiningContract.methods._liquidityFarmTokenCollection().call();
+            var coll = new web3.eth.Contract(context.ethItemNativeABI, collAddress);
+            var lpBalance = await coll.methods.balanceOf(actor.address, actor.objectId).call()
+            expectedLiquidityPoolBalance = utilities.fromDecimals(lpBalance, await coll.methods.decimals().call());
+        }
+
         expectedRewardBalance = web3.utils.toBN(expectedRewardBalance).sub(web3.utils.toBN(rewardToGiveBack)).toString();
 
         var transaction = await liquidityMiningContract.methods.unlock(actor.positionId, actor.unwrap).send({value : rewardToGiveBack, ...actor.from });
