@@ -52,51 +52,45 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
     uint256 private _rebalanceByCreditPercentageForCaller;
 
+    uint256 public maximumPairRatioForMint;
+
+    uint256 public maximumPairRatioForBurn;
+
+    uint256 public minimumRebalanceByDebtAmount;
+
     struct WUSDInitializer {
-        address doubleProxyAddress;
-        address[] rebalanceByCreditReceivers;
-        uint256[] rebalanceByCreditPercentages;
-        uint256 rebalanceByCreditPercentageForCaller;
-        uint256 rebalanceByCreditBlockInterval;
-        bytes allowedAMMsBytes;
-        address wusdExtension;
-        uint256 wusdNote2ObjectId;
-        address wusdNote2Controller;
-        uint256 wusdNote2Percentage;
-        uint256 wusdNote5ObjectId;
-        address wusdNote5Controller;
-        uint256 wusdNote5Percentage;
         address orchestratorAddress;
-        string[] names;
-        string[] symbols;
-        string[] uris;
+        address doubleProxyAddress;
+        uint256 rebalanceByCreditPercentageForCaller;
+        uint256 wusdNote2Percentage;
+        uint256 wusdNote5Percentage;
+        uint256 maximumPairRatioForMint;
+        uint256 maximumPairRatioForBurn;
+        uint256 minimumRebalanceByDebtAmount;
+        uint256 rebalanceByCreditBlockInterval;
     }
 
     constructor(bytes memory wusdInitializerBytes) {
         WUSDInitializer memory wusdInitializer = abi.decode(wusdInitializerBytes, (WUSDInitializer));
         _doubleProxy = wusdInitializer.doubleProxyAddress;
         rebalanceByCreditBlockInterval = wusdInitializer.rebalanceByCreditBlockInterval;
-        WUSDExtension wusdExtension = WUSDExtension(_extension = wusdInitializer.wusdExtension != address(0) ? wusdInitializer.wusdExtension : address(new WUSDExtension(wusdInitializer.orchestratorAddress, wusdInitializer.names[0], wusdInitializer.symbols[0], wusdInitializer.uris[0], wusdInitializer.names[1], wusdInitializer.symbols[1], wusdInitializer.uris[1])));
-        (_collection, _wusdObjectId, _wusdInteroperableInterfaceAddress) = wusdExtension.data();
-        if(wusdInitializer.wusdNote2ObjectId != 0) {
-            _wusdNote2InteroperableInterfaceAddress = address(INativeV1(_collection).asInteroperable(_wusdNote2ObjectId = wusdInitializer.wusdNote2ObjectId));
-            _checkNoteController(_wusdNote2Controller = wusdInitializer.wusdNote2Controller, _wusdNote2ObjectId, 2);
-        }
-        if(wusdInitializer.wusdNote5ObjectId != 0) {
-            _wusdNote5InteroperableInterfaceAddress = address(INativeV1(_collection).asInteroperable(_wusdNote5ObjectId = wusdInitializer.wusdNote5ObjectId));
-            _checkNoteController(_wusdNote5Controller = wusdInitializer.wusdNote5Controller, _wusdNote5ObjectId, 5);
-        }
-        _wusdNote2Percentage = wusdInitializer.wusdNote2Percentage;
-        _wusdNote5Percentage = wusdInitializer.wusdNote5Percentage;
-        _setRebalanceByCreditData(wusdInitializer.rebalanceByCreditReceivers, wusdInitializer.rebalanceByCreditPercentages, wusdInitializer.rebalanceByCreditPercentageForCaller);
-        _setAllowedAMMs(wusdInitializer.allowedAMMsBytes);
+        maximumPairRatioForMint = wusdInitializer.maximumPairRatioForMint;
+        maximumPairRatioForBurn = wusdInitializer.maximumPairRatioForBurn;
+        minimumRebalanceByDebtAmount = wusdInitializer.minimumRebalanceByDebtAmount;
+        require(
+            ((_wusdNote2Percentage = wusdInitializer.wusdNote2Percentage) +
+            (_wusdNote5Percentage = wusdInitializer.wusdNote5Percentage) +
+            (_rebalanceByCreditPercentageForCaller = wusdInitializer.rebalanceByCreditPercentageForCaller))
+            <= ONE_HUNDRED, "More than one hundred");
+        (_collection, _wusdObjectId, _wusdInteroperableInterfaceAddress) = WUSDExtension(_extension = address(new WUSDExtension(wusdInitializer.orchestratorAddress))).data();
     }
 
-    function initNotes(address[] memory controllers, string[] memory names, string[] memory symbols, string[] memory uris) public {
+    function finalizeInitialization(bytes memory allowedAMMS, address[] memory controllers) public {
         require(_wusdNote2InteroperableInterfaceAddress == address(0), "already init");
+        _setAllowedAMMs(allowedAMMS);
         WUSDExtension wusdExtension = WUSDExtension(_extension);
-        (_wusdNote2ObjectId, _wusdNote2InteroperableInterfaceAddress) = wusdExtension.mintEmpty(names[0], symbols[0], uris[0], true);
-        (_wusdNote5ObjectId, _wusdNote5InteroperableInterfaceAddress) = wusdExtension.mintEmpty(names[1], symbols[1], uris[1], true);
+        (_wusdNote2ObjectId, _wusdNote2InteroperableInterfaceAddress) = wusdExtension.mintEmpty("2x Wrapped USD", "2xUSD", "ipfs://ipfs/QmWgkBQdDHEr2WzA4GJNuED3sD9SYzRiknV7qXnGJgiRNP", true);
+        (_wusdNote5ObjectId, _wusdNote5InteroperableInterfaceAddress) = wusdExtension.mintEmpty("5x Wrapped USD", "5xUSD", "ipfs://ipfs/QmU3wEzZ6kdnigXKYbgnrEnpQMwPfNqEhFEXXR1YBZvZeN", true);
         IWUSDNoteController(_wusdNote2Controller = controllers[0]).init(_collection, _wusdObjectId, _wusdNote2ObjectId, 2);
         IWUSDNoteController(_wusdNote5Controller = controllers[1]).init(_collection, _wusdObjectId, _wusdNote5ObjectId, 5);
     }
@@ -192,6 +186,18 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
     function setrebalanceByCreditBlockInterval(uint256 newrebalanceByCreditBlockInterval) public byDFO {
         rebalanceByCreditBlockInterval = newrebalanceByCreditBlockInterval;
+    }
+
+    function setMinimumRebalanceByDebtAmount(uint256 newMinimumRebalanceByDebtAmount) public byDFO {
+        minimumRebalanceByDebtAmount = newMinimumRebalanceByDebtAmount;
+    }
+
+    function setMaximumPairRatioForMint(uint256 newMaximumPairRatioForMint) public byDFO {
+        maximumPairRatioForMint = newMaximumPairRatioForMint;
+    }
+
+    function setMaximumPairRatioForBurn(uint256 newMaximumPairRatioForBurn) public byDFO {
+        maximumPairRatioForBurn = newMaximumPairRatioForBurn;
     }
 
     function allowedAMMs() public view returns(AllowedAMM[] memory) {
@@ -292,12 +298,14 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
     function _burn(address from, uint256 value, bytes memory payload) private {
         (uint256 ammPosition, uint256 liquidityPoolPosition, uint256 liquidityPoolAmount, bool keepLiquidityPool) = abi.decode(payload, (uint256, uint256, uint256, bool));
         _safeApprove(_wusdInteroperableInterfaceAddress, _extension, INativeV1(_collection).toInteroperableInterfaceAmount(_wusdObjectId, value));
+        IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
+        address liquidityPoolAddress = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
+        _checkMaximumPairRatio(amm, liquidityPoolAddress, liquidityPoolAmount, maximumPairRatioForBurn);
         WUSDExtension(_extension).burnFor(from, value, _allowedAMMs[ammPosition].ammAddress, _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, keepLiquidityPool ? from : address(this));
         if(!keepLiquidityPool) {
-            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-            _checkAllowance(_allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition], liquidityPoolAmount, address(amm));
+            _checkAllowance(liquidityPoolAddress, liquidityPoolAmount, address(amm));
             amm.removeLiquidity(LiquidityPoolData(
-                _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition],
+                liquidityPoolAddress,
                 liquidityPoolAmount,
                 address(0),
                 true,
@@ -309,6 +317,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
 
     function _rebalanceByDebt(address from, uint256 value, bytes memory payload) private {
         (, uint256 debt) = differences();
+        require(debt >= minimumRebalanceByDebtAmount, "Insufficient debt");
         require(value <= debt, "Cannot Burn this amount");
         uint256 note = abi.decode(payload, (uint256));
         _safeApprove(_wusdInteroperableInterfaceAddress, _extension, INativeV1(_collection).toInteroperableInterfaceAmount(_wusdObjectId, value));
@@ -369,19 +378,18 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         returns(uint256 toMint)
     {
         address liquidityPoolAddress = _allowedAMMs[ammPosition].liquidityPools[liquidityPoolPosition];
+        IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
         uint256[] memory spent;
-        uint256[] memory amounts;
-        address[] memory tokens;
+        (uint256[] memory amounts, address[] memory tokens) = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
+        _checkMaximumPairRatio(amounts, tokens, maximumPairRatioForMint);
         if(byLiquidityPool) {
             _safeTransferFrom(liquidityPoolAddress, msg.sender, address(this), toMint = liquidityPoolAmount);
         } else {
-            IAMM amm = IAMM(_allowedAMMs[ammPosition].ammAddress);
-            (amounts, tokens) = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
             for(uint256 i = 0; i < tokens.length; i++) {
                 _safeTransferFrom(tokens[i], msg.sender, address(this), amounts[i]);
                 _safeApprove(tokens[i], address(amm), amounts[i]);
             }
-            (toMint, spent,) = IAMM(_allowedAMMs[ammPosition].ammAddress).addLiquidity(LiquidityPoolData(
+            (toMint, spent,) = amm.addLiquidity(LiquidityPoolData(
                 liquidityPoolAddress,
                 liquidityPoolAmount,
                 address(0),
@@ -400,6 +408,25 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
                 _safeTransfer(tokens[i], msg.sender, difference);
             }
         }
+    }
+
+    function _checkMaximumPairRatio(IAMM amm, address liquidityPoolAddress, uint256 liquidityPoolAmount, uint256 maximumPairRatio) private view {
+        (uint256[] memory amounts, address[] memory tokens) = amm.byLiquidityPoolAmount(liquidityPoolAddress, liquidityPoolAmount);
+        _checkMaximumPairRatio(amounts, tokens, maximumPairRatio);
+    }
+
+    function _checkMaximumPairRatio(uint256[] memory amounts, address[] memory tokens, uint256 maximumPairRatio) private view {
+        if(maximumPairRatio == 0) {
+            return;
+        }
+        uint256 token0NormalizedAmount = _normalizeTokenAmountToDefaultDecimals(tokens[0], amounts[0]);
+        uint256 token1NormalizedAmount = _normalizeTokenAmountToDefaultDecimals(tokens[1], amounts[1]);
+
+        uint256 pairRatio = (token0NormalizedAmount * ONE_HUNDRED) / token1NormalizedAmount;
+        if(token1NormalizedAmount > token0NormalizedAmount) {
+            pairRatio = (token1NormalizedAmount * ONE_HUNDRED) / token0NormalizedAmount;
+        }
+        require(pairRatio <= maximumPairRatio, "Insufficient ratio");
     }
 
     function _checkAllowance(address tokenAddress, uint256 value, address operator) internal virtual {

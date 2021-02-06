@@ -24,11 +24,12 @@ contract ProposalCode {
         AllowedAMM[] memory newAllowedAMMs = new AllowedAMM[]({1});
         {2}
         IUSDExtensionController({0}).setAllowedAMMs(newAllowedAMMs);
+        IUSDExtensionController({0}).setMinimumRebalanceByDebtAmount(10*1e18);
     }
 }
 
 interface IUSDExtensionController {
-    function setController(address newController) external;
+    function setMinimumRebalanceByDebtAmount(uint256 newMinimumRebalanceByDebtAmount) external;
     function setAllowedAMMs(AllowedAMM[] memory newAllowedAMMs) external;
 }
 
