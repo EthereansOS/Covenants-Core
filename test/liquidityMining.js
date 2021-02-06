@@ -828,6 +828,13 @@ describe("LiquidityMining", () => {
 
             }
         }
+        
+        if (!setup.free) {
+            var collAddress = await liquidityMiningContract.methods._liquidityFarmTokenCollection().call();
+            var coll = new web3.eth.Contract(context.ethItemNativeABI, collAddress);
+            var lpBalance = await coll.methods.balanceOf(actor.address, actor.objectId).call()
+            expectedLiquidityPoolBalance = utilities.fromDecimals(lpBalance, await coll.methods.decimals().call());
+        }
 
         var transaction = null;
         if (!actor.position.free) {
