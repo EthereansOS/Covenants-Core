@@ -325,6 +325,16 @@ describe("LiquidityMining", () => {
             assert.notStrictEqual(e.message.indexOf("Unauthorized"), -1);
         }
     });
+    it("Change Logic", async () => {
+        LiquidityMiningExtension = await compile('liquidity-mining/DFOBasedLiquidityMiningExtension');
+
+        var newDefaultExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin});
+
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningFactoryUpdateLogicProposal.sol'), 'UTF-8').format(liquidityMiningFactory.options.address, newDefaultExtension.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "", true, code, "callOneTime(address)");
+        await dfoManager.finalizeProposal(dfo, proposal);
+        assert.strictEqual(await liquidityMiningFactory.methods.fixedInflationImplementationAddress().call(), newDefaultExtension.options.address);
+    });
     it("DFO can update the exit fee to 1", async() => {
         var exitFeeExpected = 1;
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'resources/LiquidityMiningSetFeeProposal.sol'), 'UTF-8').format(liquidityMiningFactory.options.address, exitFeeExpected);
