@@ -566,11 +566,8 @@ describe("LiquidityMining", () => {
         var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, mainTokenAmount).call();
 
         var secondaryTokenAmount = amounts[1][secondaryTokenIndex];
-        var liquidityPoolTokenAmount = 0;
+        var liquidityPoolTokenAmount = amounts[0];
         if (amountIsLiquidityPool) {
-            var byTokenAmount = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, mainTokenAmount).call();
-            console.log(liquidityPoolTokenAmount);
-            liquidityPoolTokenAmount = byTokenAmount[0];
             if (mainToken != utilities.voidEthereumAddress) await mainToken.methods.approve(uniswapV2Router.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
             if (secondaryToken != utilities.voidEthereumAddress) await secondaryToken.methods.approve(uniswapV2Router.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);  
             if(mainToken != utilities.voidEthereumAddress && secondaryToken != utilities.voidEthereumAddress) {
