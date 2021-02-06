@@ -346,10 +346,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 ILiquidityMiningExtension(_extension).transferTo(reward, liquidityMiningPosition.uniqueOwner);
             }
         }
-        if (liquidityMiningPosition.free) {
-            // update the creation block for the free position
-            liquidityMiningPosition.creationBlock = block.number;
-        } else {
+        // update the creation block for the position
+        liquidityMiningPosition.creationBlock = block.number;
+        if (!liquidityMiningPosition.free) {
             if (liquidityMiningPosition.reward == 0) {
                 // close the locked position after withdrawing all the reward
                 _positions[positionId] = _positions[0x0];
