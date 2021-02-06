@@ -791,7 +791,7 @@ describe("LiquidityMining", () => {
             removedLiquidity = position.liquidityPoolTokenAmount;
         }
 
-        var liquidityPoolTokenAmount = web3.utils.toBN(position.liquidityPoolTokenAmount);
+        var liquidityPoolTokenAmount = removesAllLiquidity ? web3.utils.toBN(position.liquidityPoolTokenAmount) : web3.utils.toBN(removedLiquidity);
         var exitFee = (await liquidityMiningFactory.methods.feePercentageInfo().call())[0];
         if(parseInt(exitFee) > 0) {
             exitFee = web3.utils.toBN(exitFee);
