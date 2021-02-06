@@ -251,6 +251,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             liquidityMiningPosition.reward += newReward;
             liquidityMiningPosition.lockedRewardPerBlock += newLockedRewardPerBlock;
             _setups[liquidityMiningPosition.setupIndex].currentRewardPerBlock += newLockedRewardPerBlock;
+            _setups[liquidityMiningPosition.setupIndex].currentStakedLiquidity += mainTokenAmount;
             // rebalance the pinned reward per block
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
                 _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maximumLiquidity)) / 1e18, false);

@@ -66,8 +66,8 @@ describe("LiquidityMining", () => {
 
             mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
             // mainToken = utilities.voidEthereumAddress;
-            secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
-            // secondaryToken = utilities.voidEthereumAddress;
+            // secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
+            secondaryToken = utilities.voidEthereumAddress;
 
             liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : wethToken.options.address).call());
 
