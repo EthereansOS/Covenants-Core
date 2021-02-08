@@ -67,6 +67,11 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         _;
     }
 
+    modifier activeExtensionOnly() {
+        require(ILiquidityMiningExtension(_extension).active(), "not active extension");
+        _;
+    }
+
     /** Public extension methods. */
 
     /** @dev initializes the liquidity mining contract.
@@ -137,7 +142,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     /** @dev function called by external users to open a new liquidity mining position.
       * @param request Liquidity Mining input data.
     */
-    function openPosition(LiquidityMiningPositionRequest memory request) public payable returns(uint256 positionId) {
+    function openPosition(LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly returns(uint256 positionId) {
         require(request.setupIndex < _setups.length, "Invalid setup index");
         // retrieve the setup
         LiquidityMiningSetup storage chosenSetup = _setups[request.setupIndex];
@@ -204,7 +209,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
       * @param positionId id of the liquidity mining position.
       * @param request update position request.
       */
-    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public payable byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
@@ -324,7 +329,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if(!liquidityMiningPosition.free) {
                 _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);
             } else {
-                ILiquidityMiningExtension(_extension).transferTo(reward, liquidityMiningPosition.uniqueOwner);
+                _safeTransferTo(reward, liquidityMiningPosition.uniqueOwner);
             }
         }
         // update the creation block for the position
@@ -849,6 +854,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     function onERC1155Received(address, address, uint256, uint256, bytes memory) public view override returns(bytes4) {
         require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
         return this.onERC1155Received.selector;
+    }
+
+    function _safeTransferTo(uint256 amount, address receiver) private {
+        uint256 balance = _rewardTokenAddress == address(0) ? address(_extension).balance : IERC20(_rewardTokenAddress).balanceOf(_extension);
+        if(balance == 0) {
+            return;
+        }
+        ILiquidityMiningExtension(_extension).transferTo(amount > balance ? balance : amount, receiver);
     }
 
 }

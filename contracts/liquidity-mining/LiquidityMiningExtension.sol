@@ -22,6 +22,8 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
     // whether the token is by mint or by reserve
     bool internal _byMint;
 
+    bool public override active;
+
     /** MODIFIERS */
 
     /** @dev liquidityMiningOnly modifier used to check for unauthorized transfers. */
@@ -44,9 +46,13 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     function init(bool byMint, address host) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
+        require((_host = host) != address(0), "blank host");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
-        _host = host;
+    }
+
+    function setActive(bool _active) public virtual hostOnly {
+        active = _active;
     }
 
     function setHost(address host) public virtual override hostOnly {

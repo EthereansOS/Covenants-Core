@@ -16,4 +16,6 @@ interface ILiquidityMiningExtension {
     function backToYou(uint256 amount) external payable;
 
     function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) external;
+
+    function active() external view returns(bool);
 }

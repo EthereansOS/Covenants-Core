@@ -24,6 +24,8 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
     // whether the token is by mint or by reserve
     bool internal _byMint;
 
+    bool public override active;
+
     /** MODIFIERS */
 
     /** @dev liquidityMiningOnly modifier used to check for unauthorized transfers. */
@@ -42,10 +44,13 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
     function init(bool byMint, address host) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
-        require(host != address(0), "blank host");
+        require((_doubleProxy = host) != address(0), "blank host");
         _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
-        _doubleProxy = host;
+    }
+
+    function setActive(bool _active) public virtual hostOnly {
+        active = _active;
     }
 
     /** @dev allows the DFO to update the double proxy address.
