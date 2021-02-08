@@ -2,10 +2,10 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./FixedInflationData.sol";
-import "./IFixedInflationExtension.sol";
-import "./util/DFOHub.sol";
-import "./IFixedInflation.sol";
+import "../FixedInflationData.sol";
+import "../IFixedInflationExtension.sol";
+import "../util/DFOHub.sol";
+import "../IFixedInflation.sol";
 
 contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 

@@ -10,7 +10,6 @@ var fs = require('fs');
 
 var LiquidityMining;
 var LiquidityMiningFactory;
-var LiquidityMiningExtension;
 var UniswapV2AMMV1;
 
 var byMint;
@@ -38,6 +37,9 @@ var actors = {};
 
 var zeroBlock;
 
+var mainDFO;
+var dFOBasedLiquidityMiningExtensionFactory;
+
 describe("LiquidityMining", () => {
 
     before(async () => {
@@ -45,7 +47,8 @@ describe("LiquidityMining", () => {
             await blockchainConnection.init;
             LiquidityMining = await compile('liquidity-mining/LiquidityMining');
             LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
-            LiquidityMiningExtension = await compile('liquidity-mining/DFOBasedLiquidityMiningExtension');
+            DFOBasedLiquidityMiningExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtensionFactory');
+            DFOBasedLiquidityMiningExtension = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtension');
             LiquidityMiningDefaultExtension = await compile('liquidity-mining/LiquidityMiningExtension');
             UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
 
@@ -56,6 +59,8 @@ describe("LiquidityMining", () => {
             wethToken = new web3.eth.Contract(context.IERC20ABI, await uniswapV2Router.methods.WETH().call());
 
             extensionOwner = accounts[0];
+
+            mainDFO = await dfoManager.createDFO("MyName", "MySymbol", 10000000, 100, 10);
 
             dfo = await dfoManager.createDFO("MyName", "MySymbol", 10000000, 100, 10);
 
@@ -94,7 +99,7 @@ describe("LiquidityMining", () => {
             await initActor("Olivia", accounts[11], 325, 345, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 5);
             await initActor("Penny", accounts[12], 326, 346, 4, 0, mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress, false, 0.0001, 0.5, 4.8333);
         } catch (error) {
-            throw new Error();
+            console.error(error);
         }
 
     });
@@ -196,15 +201,25 @@ describe("LiquidityMining", () => {
 
         liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
 
-        liquidityMiningExtension = await new web3.eth.Contract(LiquidityMiningExtension.abi).deploy({data : LiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
+        var dFOBasedLiquidityMiningExtensionModel = await new web3.eth.Contract(DFOBasedLiquidityMiningExtension.abi).deploy({data : DFOBasedLiquidityMiningExtension.bin}).send(blockchainConnection.getSendingOptions());
+
+        dFOBasedLiquidityMiningExtensionFactory = await new web3.eth.Contract(DFOBasedLiquidityMiningExtensionFactory.abi).deploy({data : DFOBasedLiquidityMiningExtensionFactory.bin, arguments : [mainDFO.doubleProxyAddress, dFOBasedLiquidityMiningExtensionModel.options.address]}).send(blockchainConnection.getSendingOptions());
+
+        var transaction = await dFOBasedLiquidityMiningExtensionFactory.methods.cloneModel().send(blockchainConnection.getSendingOptions());
+
+        var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
+
+        var liquidityMiningAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
+
+        liquidityMiningExtension = new web3.eth.Contract(DFOBasedLiquidityMiningExtension.abi, liquidityMiningAddress);
 
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
         var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
         await dfoManager.finalizeProposal(dfo, proposal);
 
-        var transaction = await liquidityMiningFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());
+        transaction = await liquidityMiningFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());
 
-        var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
+        receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
         var clonedDefaultLiquidityMiningAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
 
         var setups = [[
@@ -278,7 +293,7 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
         oneHundred = await liquidityMiningContract.methods.ONE_HUNDRED().call();
 
-        params[0] === clonedDefaultLiquidityMiningAddress && (liquidityMiningExtension = new web3.eth.Contract(LiquidityMiningExtension.abi, await liquidityMiningContract.methods._extension().call()));
+        params[0] === clonedDefaultLiquidityMiningAddress && (liquidityMiningExtension = new web3.eth.Contract(LiquidityMiningDefaultExtension.abi, await liquidityMiningContract.methods._extension().call()));
 
         rewardDestination = params[0] === clonedDefaultLiquidityMiningAddress ? liquidityMiningExtension.options.address : rewardDestination;
 
@@ -1381,9 +1396,9 @@ describe("LiquidityMining", () => {
             secondaryTokenAmount,
             positionOwner: utilities.voidEthereumAddress,
         };
-        
+
         var oldPosition = await liquidityMiningContract.methods.position(positionId).call();
-        
+
         var transaction = await liquidityMiningContract.methods.addLiquidity(positionId, stake).send({...from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         await logSetups();
         var updateBlock = await web3.eth.getBlockNumber();

@@ -31,14 +31,21 @@ var fixedInflationFactory;
 var FixedInflationExtension;
 var fixedInflationExtension;
 
+var DFOBasedFixedInflationExtensionFactory;
+var DFOBasedFixedInflationExtension;
+
 var FixedInflation;
 var fixedInflation;
 
 var liquidityPool;
 
+var dFOBasedFixedInflationExtensionFactory;
+
 var tokens;
 
 var actors = {};
+
+var mainDFO;
 
 describe("FixedInflation", () => {
 
@@ -47,9 +54,14 @@ describe("FixedInflation", () => {
         await blockchainConnection.init;
 
         FixedInflationFactory = await compile('fixed-inflation/FixedInflationFactory');
-        FixedInflationExtension = await compile('fixed-inflation/DFOBasedFixedInflationExtension');
+        FixedInflationExtension = await compile('fixed-inflation/dfo/DFOBasedFixedInflationExtension');
         FixedInflationDefaultExtension = await compile('fixed-inflation/FixedInflationExtension');
         FixedInflation = await compile('fixed-inflation/FixedInflation');
+
+        DFOBasedFixedInflationExtensionFactory = await compile('fixed-inflation/dfo/DFOBasedFixedInflationExtensionFactory');
+        DFOBasedFixedInflationExtension = await compile('fixed-inflation/dfo/DFOBasedFixedInflationExtension');
+
+        mainDFO = await dfoManager.createDFO("MyName", "MySymbol", 10000000, 100, 10);
 
         ethItemOrchestrator = new web3.eth.Contract(context.ethItemOrchestratorABI, context.ethItemOrchestratorAddress);
         uniswapV2Router = new web3.eth.Contract(context.uniswapV2RouterABI, context.uniswapV2RouterAddress);
@@ -194,7 +206,7 @@ describe("FixedInflation", () => {
         await dfo.votingToken.methods.transfer(dfo.mvdWalletAddress, utilities.toDecimals(300000, await dfo.votingToken.methods.decimals().call())).send(blockchainConnection.getSendingOptions());
     });
 
-    it("Load original factory", async() => {
+    /*it("Load original factory", async() => {
         fixedInflationFactory = new web3.eth.Contract(FixedInflationFactory.abi, context.fixedInflationFactoryAddress);
 
         dfo = await dfoManager.loadDFOByDoubleProxy(await fixedInflationFactory.methods._doubleProxy().call());
@@ -239,11 +251,21 @@ describe("FixedInflation", () => {
 
         console.log(await fixedInflationFactory.methods.fixedInflationImplementationAddress().call());
         assert.strictEqual(await fixedInflationFactory.methods.fixedInflationImplementationAddress().call(), newModel);
-    });
+    });*/
 
     it("Deploy all occurrency stuff", async() => {
 
-        fixedInflationExtension = await new web3.eth.Contract(FixedInflationExtension.abi).deploy({ data: FixedInflationExtension.bin }).send(blockchainConnection.getSendingOptions());
+        var dFOBasedFixedInflationExtensionModel = await new web3.eth.Contract(DFOBasedFixedInflationExtension.abi).deploy({data : DFOBasedFixedInflationExtension.bin}).send(blockchainConnection.getSendingOptions());
+
+        dFOBasedFixedInflationExtensionFactory = await new web3.eth.Contract(DFOBasedFixedInflationExtensionFactory.abi).deploy({data : DFOBasedFixedInflationExtensionFactory.bin, arguments : [mainDFO.doubleProxyAddress, dFOBasedFixedInflationExtensionModel.options.address]}).send(blockchainConnection.getSendingOptions());
+
+        var transaction = await dFOBasedFixedInflationExtensionFactory.methods.cloneModel().send(blockchainConnection.getSendingOptions());
+
+        var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
+
+        var fixedInflationExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
+
+        fixedInflationExtension = new web3.eth.Contract(DFOBasedFixedInflationExtension.abi, fixedInflationExtensionAddress);
 
         var newEntries = [{
             id: web3.utils.sha3('0'),
@@ -287,7 +309,7 @@ describe("FixedInflation", () => {
         await dfoManager.finalizeProposal(dfo, proposal);
     });
 
-    it("DFOHub Fixed Inflation", async() => {
+    /*it("DFOHub Fixed Inflation", async() => {
 
         fixedInflationExtension = await new web3.eth.Contract(FixedInflationExtension.abi, "0xaBeD2D0b63b274CccD772eFF18aeC52eF714C695");
 
@@ -656,7 +678,7 @@ describe("FixedInflation", () => {
         var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/fixed-inflation/dfo/ManageFixedInflationFunctionality.sol'), 'UTF-8').format(fixedInflationExtension.options.address);
         var proposal = await dfoManager.createProposal(dfo, "manageFixedInflation", true, code, "manageFixedInflation(address,uint256,address[],uint256[],uint256[],address)", false, true);
         await dfoManager.finalizeProposal(dfo, proposal);
-    });
+    });*/
 
     it("Cannot re-initialize already initialized contracts", async() => {
         try {

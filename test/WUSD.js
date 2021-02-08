@@ -758,11 +758,7 @@ describe("WUSD", () => {
         var balanceOfExpected = utilities.numberToString(utilities.formatNumber(balanceOfBefore) + utilities.formatNumber(arbitraryValue));
         balanceOfExpected = utilities.fromDecimals(balanceOfExpected, '18');
 
-        var data1 = abi.encode(["uint256", "bytes"], [1, abi.encode(["uint256"], ["2"])]);
-        var data2 = abi.encode(["uint256", "bytes"], [1, abi.encode(["uint256"], ["5"])]);
-
-        console.log("note 2", data1);
-        console.log("note 5", data2);
+        var data = abi.encode(["uint256", "bytes"], [1, abi.encode(["uint256"], ["2"])]);
 
         await usdCollection.methods.safeTransferFrom(accounts[0], usdController.options.address, usdObjectId, arbitraryValue, data).send(blockchainConnection.getSendingOptions());
 

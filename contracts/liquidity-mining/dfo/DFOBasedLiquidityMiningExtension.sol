@@ -2,11 +2,11 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./ILiquidityMiningExtension.sol";
-import "./ILiquidityMining.sol";
-import "./util/IERC20.sol";
-import "./LiquidityMiningData.sol";
-import "./util/DFOHub.sol";
+import "../ILiquidityMiningExtension.sol";
+import "../ILiquidityMining.sol";
+import "../util/IERC20.sol";
+import "../LiquidityMiningData.sol";
+import "../util/DFOHub.sol";
 
 contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
