@@ -67,8 +67,8 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
     /** @dev transfers the input amount to the caller liquidity mining contract.
       * @param amount amount of erc20 to transfer or mint.
      */
-    function transferTo(uint256 amount, address recipient) override public liquidityMiningOnly {
-        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, recipient, amount, _byMint));
+    function transferTo(uint256 amount) override public liquidityMiningOnly {
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, _liquidityMiningContract, amount, _byMint));
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.

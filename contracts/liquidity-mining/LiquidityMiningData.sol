@@ -1,52 +1,46 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.7.6;
 
-import "../amm-aggregator/common/AMMData.sol";
 
-struct LiquidityMiningSetupConfiguration {
-    bool add;
-    uint256 index;
-    LiquidityMiningSetup data;
-}
-
-// liquidity mining setup struct
-struct LiquidityMiningSetup {
-    address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-    uint256 objectId; // items object id for the liquidity pool token.
-    address liquidityPoolTokenAddress; // address of the liquidity pool token
-    address mainTokenAddress; // eg. buidl address.
-    uint256 startBlock; // liquidity mining setup start block (used only if free is false).
-    uint256 endBlock; // liquidity mining setup end block (used only if free is false).
-    uint256 rewardPerBlock; // liquidity mining setup reward per single block.
-    uint256 currentRewardPerBlock; // liquidity mining setup current reward per single block.
-    uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
-    uint256 lastBlockUpdate; // number of the block where an update was triggered.
-    uint256 maximumLiquidity; // maximum liquidity stakeable in the contract (used only if free is false).
-    uint256 currentStakedLiquidity; // currently staked liquidity (used only if free is false).
-    bool free; // if the setup is a free liquidity mining setup or a locked one.
-    uint256 renewTimes; // if the locked setup is renewable or if it's one time (used only if free is false).
-    uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
-    bool involvingETH; // if the setup involves ETH or not.
-}
-
-// position struct
-struct LiquidityMiningPosition {
-    address uniqueOwner; // address representing the extension address, address(0) if objectId is populated.
-    uint256 setupIndex; // the setup index.
-    uint256 setupStartBlock; // liquidity mining setup start block (used only if free is false).
-    uint256 setupEndBlock; // liquidity mining setup end block (used only if free is false).
-    bool free; // if the setup is a free liquidity mining setup or a locked one.
-    // LiquidityPoolData liquidityPoolData; // amm liquidity pool data.
-    uint256 liquidityPoolTokenAmount;
-    uint256 reward; // position reward.
-    uint256 lockedRewardPerBlock; // position locked reward per block.
-    uint256 creationBlock; // block when this position was created.
-}
-
-// stake data struct
 struct LiquidityMiningPositionRequest {
     uint256 setupIndex; // index of the chosen setup.
     uint256 amount; // amount of main token or liquidity pool token.
     bool amountIsLiquidityPool; //true if user wants to directly share the liquidity pool token amount, false to add liquidity to AMM
     address positionOwner; // position extension or address(0) [msg.sender].
+}
+
+struct LiquidityMiningSetupConfiguration {
+    bool add; // true if we're adding a new setup, false we're updating it.
+    uint256 index; // index of the setup we're updating.
+    LiquidityMiningSetup data; // data of the new or updated setup
+}
+
+struct LiquidityMiningSetup {
+    address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
+    address liquidityPoolTokenAddress; // address of the liquidity pool token
+    address mainTokenAddress; // eg. buidl address.
+    bool involvingETH; // if the setup involves ETH or not.
+    uint256 startBlock; // liquidity mining setup start block.
+    uint256 endBlock; // liquidity mining setup end block.
+    uint256 lastBlockUpdate; // number of the block where an update was triggered.
+    uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
+    uint256 rewardPerBlock; // liquidity mining setup reward per single block.
+    uint256 startingRewardPerBlock; // liquidity mining setup current reward per single block (used only if free is true).
+    uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
+    uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
+    uint256 currentlyStaked; // currently staked amount (used only if free is false).
+    uint256 renewTimes; // if the setup is renewable or if it's one time.
+    uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
+    bool free; // if the setup is a free liquidity mining setup or a locked one.
+    bool active; // if the setup is active or not.
+}
+
+
+struct LiquidityMiningPosition {
+    address uniqueOwner; // address representing the owner of the position.
+    uint256 setupIndex; // the setup index related to this position.
+    uint256 creationBlock; // block when this position was created.
+    uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
+    uint256 reward; // position reward (used only if free is false).
+    uint256 lockedRewardPerBlock; // position locked reward per block (used only if free is false).
 }

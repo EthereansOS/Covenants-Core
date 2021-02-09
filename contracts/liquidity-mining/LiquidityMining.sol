@@ -2,20 +2,18 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./ILiquidityMiningFactory.sol";
-import "./LiquidityMiningData.sol";
-import "./ILiquidityMiningExtension.sol";
 import "../amm-aggregator/common/IAMM.sol";
+import "./ILiquidityMining.sol";
+import "./ILiquidityMiningExtension.sol";
+import "./ILiquidityMiningFactory.sol";
 import "./util/IERC20.sol";
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/ERC1155Receiver.sol";
-import "./ILiquidityMining.sol";
 
 contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     uint256 public constant ONE_HUNDRED = 1e18;
-
     // event that tracks liquidity mining contracts deployed
     event RewardToken(address indexed rewardTokenAddress);
     // new liquidity mining position event
@@ -24,6 +22,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     event SetupToken(address indexed mainToken, address indexed involvedToken);
     // event that tracks farm tokens
     event FarmToken(uint256 indexed objectId, address indexed liquidityPoolToken, uint256 setupIndex, uint256 endBlock);
+    // event that tracks setup status changes
+    event SetupToggle(uint256 setupIndex, bool indexed status);
 
     // factory address that will create clones of this contract
     address public _factory;
@@ -31,24 +31,26 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     address public _extension;
     // address of the reward token
     address public override _rewardTokenAddress;
-    // liquidity farm token collection
+     // liquidity farm token collection
     address public _liquidityFarmTokenCollection;
     // array containing all the currently available liquidity mining setups
-    LiquidityMiningSetup[] private _setups;
+    mapping(uint256 => LiquidityMiningSetup) private _setups;
+    // total number of setups
+    uint256 public _setupsCount;
     // mapping containing all the positions
     mapping(uint256 => LiquidityMiningPosition) public _positions;
     // mapping containing the reward per token per setup per block
     mapping(uint256 => mapping(uint256 => uint256)) public _rewardPerTokenPerSetupPerBlock;
     // mapping containing all the blocks where an update has been triggered
     mapping(uint256 => uint256[]) public _setupUpdateBlocks;
-    // mapping containing whether a liquidity mining position has been redeemed or not
-    mapping(uint256 => bool) public _positionRedeemed;
     // mapping containing whether a liquidity mining position has been partially reedemed or not
     mapping(uint256 => uint256) public _partiallyRedeemed;
     // mapping containing whether a locked setup has ended or not and has been used for the rebalance
     mapping(uint256 => bool) public _finishedLockedSetups;
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
+    // mapping containing all the reward that has been rewarded from the setups
+    mapping(uint256 => uint256) private _rewards;
     // pinned setup index
     bool public _hasPinned;
     uint256 public _pinnedSetupIndex;
@@ -63,12 +65,20 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** @dev byPositionOwner modifier used to check for unauthorized accesses. */
     modifier byPositionOwner(uint256 positionId) {
-        require(_positions[positionId].uniqueOwner == msg.sender, "Not owned");
+        require(_positions[positionId].uniqueOwner == msg.sender && _positions[positionId].creationBlock != 0, "Not owned");
         _;
     }
 
+    /** @dev activeExtensionOnly modifier used to check for function calls only if the extension is active. */
     modifier activeExtensionOnly() {
         require(ILiquidityMiningExtension(_extension).active(), "not active extension");
+        _;
+    }
+
+    /** @dev activeSetupOnly modifier used to check for function calls only if the setup is active. */
+    modifier activeSetupOnly(uint256 setupIndex) {
+        require(_setups[setupIndex].active, "Setup not active");
+        require(_setups[setupIndex].startBlock >= block.number && _setups[setupIndex].endBlock < block.number, "Invalid setup");
         _;
     }
 
@@ -96,14 +106,15 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         _initLiquidityMiningSetups(liquidityMiningSetupsBytes, setPinned, pinnedIndex);
     }
 
-    /** @dev allows this contract to receive eth. */
-    receive() external payable { }
-
     /** @dev returns the liquidity mining setups.
       * @return array containing all the liquidity mining setups.
      */
     function setups() view public override returns (LiquidityMiningSetup[] memory) {
-        return _setups;
+        LiquidityMiningSetup[] memory setupsArray = new LiquidityMiningSetup[](_setupsCount);
+        for (uint256 i = 0; i < _setupsCount - 1; i++) {
+            setupsArray[i] = _setups[i];
+        }
+        return setupsArray;
     }
 
     /** @dev returns the liquidity mining position associated with the input id.
@@ -114,13 +125,40 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         return _positions[id];
     }
 
-    /** @dev returns the reward per token for the setup index at the given block number.
-      * @param setupIndex index of the setup.
-      * @param blockNumber block that wants to be inspected.
-      * @return reward per token.
+    /** @dev returns the setup index for the given objectId.
+      * @param objectId farm token object id.
+      * @return setupIndex index of the setup.
      */
-    function rewardPerToken(uint256 setupIndex, uint256 blockNumber) public view returns(uint256) {
-        return _rewardPerTokenPerSetupPerBlock[setupIndex][blockNumber];
+    function getObjectIdSetupIndex(uint256 objectId) public view returns (uint256 setupIndex) {
+        require(address(INativeV1(_liquidityFarmTokenCollection).asInteroperable(objectId)) != address(0), "Invalid objectId");
+        setupIndex = _objectIdSetup[objectId];
+    }
+
+    /** @dev this function allows any user to rebalance the pinned setup. */
+    function rebalancePinnedSetup() public {
+        uint256 amount;
+        for (uint256 i = 0; i < _setupsCount - 1; i++) {
+            // if (_setups[i].free) continue;
+            // this is a locked setup that it's currently active or it's a new one
+            if (block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock && !_setups[i].free) {
+                // the amount to add to the pinned is given by the difference between the reward per block and currently locked one
+                amount += _setups[i].rewardPerBlock - ((_setups[i].rewardPerBlock * (_setups[i].currentlyStaked * 1e18 / _setups[i].maxStakeable)) / 1e18);
+            // this is a locked setup that has expired
+            } else if (block.number >= _setups[i].endBlock) {
+                _setups[i].active = false;
+                // check if the setup is renewable
+                if (_setups[i].renewTimes > 0) {
+                    // if it is, we renew it and add the reward per block
+                    uint256 newIndex = _renewSetup(i);
+                    _setups[i].renewTimes = 0;
+                    amount += _setups[newIndex].rewardPerBlock;
+                } 
+            }
+        }
+        if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].startingRewardPerBlock;
+            _rebalanceRewardPerBlock(_pinnedSetupIndex, amount, true);
+        }
     }
 
     /** @dev allows the extension to set the liquidity mining setups.
@@ -137,19 +175,29 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         rebalancePinnedSetup();
     }
 
-    /** Public methods. */
+    /** @dev method used to activate or deactivate the setups.
+      * @param setupIndexes array of setup indexes.
+      * @param statuses array containing uint256 for each given setup index: if 1 is given, we're activating the setup, otherwise we're deactivating it.
+     */
+    function toggleSetups(uint256[] memory setupIndexes, uint256[] memory statuses) public virtual override byExtension {
+        for (uint256 i = 0; i < setupIndexes.length; i++) {
+            _toggleSetup(setupIndexes[i], statuses[i]);
+        }
+    }
 
     /** @dev function called by external users to open a new liquidity mining position.
       * @param request Liquidity Mining input data.
     */
-    function openPosition(LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly returns(uint256 positionId) {
-        require(request.setupIndex < _setups.length, "Invalid setup index");
+    function openPosition(LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
         // retrieve the setup
         LiquidityMiningSetup storage chosenSetup = _setups[request.setupIndex];
-        require(chosenSetup.free || (block.number >= chosenSetup.startBlock && block.number < chosenSetup.endBlock), "Setup not available");
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, request);
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
+        // create the position id
+        positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
+        require(_positions[positionId].creationBlock != 0, "Position already exists.");
+        // create the lp data for the amm
         LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
             chosenSetup.liquidityPoolTokenAddress,
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
@@ -158,7 +206,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             involvingETH,
             address(this)
         );
-
+        // check the input amount
         if (!liquidityPoolData.amountIsLiquidityPool) {
             // retrieve the poolTokenAmount from the amm
             if(liquidityPoolData.involvingETH) {
@@ -170,25 +218,18 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         } else {
             require(msg.value == 0, "ETH not involved");
         }
-        // create the position id
-        positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex, block.number)));
         // calculate the reward
         uint256 reward;
         uint256 lockedRewardPerBlock;
         if (!chosenSetup.free) {
             (reward, lockedRewardPerBlock) = calculateLockedLiquidityMiningSetupReward(request.setupIndex, mainTokenAmount, false, 0);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
-            ILiquidityMiningExtension(_extension).transferTo(reward, address(this));
-            chosenSetup.currentRewardPerBlock += lockedRewardPerBlock;
-            chosenSetup.currentStakedLiquidity += mainTokenAmount;
+            chosenSetup.currentlyStaked += mainTokenAmount;
             _mintLiquidity(uniqueOwner, liquidityPoolData.amount, request.setupIndex);
         }
         _positions[positionId] = LiquidityMiningPosition({
             uniqueOwner: uniqueOwner,
             setupIndex : request.setupIndex,
-            setupStartBlock : chosenSetup.startBlock,
-            setupEndBlock : chosenSetup.endBlock,
-            free : chosenSetup.free,
             liquidityPoolTokenAmount: liquidityPoolData.amount,
             reward: reward,
             lockedRewardPerBlock: lockedRewardPerBlock,
@@ -198,7 +239,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _rebalanceRewardPerToken(request.setupIndex, liquidityPoolData.amount, false);
         } else {
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maximumLiquidity)) / 1e18, false);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, (chosenSetup.rewardPerBlock * (mainTokenAmount * 1e18 / chosenSetup.maxStakeable)) / 1e18, false);
             }
         }
 
@@ -209,14 +250,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
       * @param positionId id of the liquidity mining position.
       * @param request update position request.
       */
-    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, LiquidityMiningPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        // check if liquidity mining position is valid
-        require(liquidityMiningPosition.free, "Invalid add liquidity");
         LiquidityMiningSetup memory chosenSetup = _setups[liquidityMiningPosition.setupIndex];
+        // check if liquidity mining position is valid
+        require(chosenSetup.free, "Invalid add liquidity");
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount, bool involvingETH) = _transferToMeAndCheckAllowance(chosenSetup, request);
-
+        // liquidity pool data struct for the AMM
         LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
             chosenSetup.liquidityPoolTokenAddress,
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
@@ -225,7 +266,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             involvingETH,
             address(this)
         );
-
+        // amount is lp check
         if (!liquidityPoolData.amountIsLiquidityPool) {
             // retrieve the poolTokenAmount from the amm
             if(liquidityPoolData.involvingETH) {
@@ -245,7 +286,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         liquidityMiningPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
         if (newReward > 0) {
             // transfer the reward
-            ILiquidityMiningExtension(_extension).transferTo(newReward, msg.sender);
+            _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, newReward) : payable(liquidityMiningPosition.uniqueOwner).transfer(newReward);
+            // update the rewards
+            _rewards[liquidityMiningPosition.setupIndex] += newReward;
         }
         // update the creation block to avoid blocks before the new add liquidity
         liquidityMiningPosition.creationBlock = block.number;
@@ -253,50 +296,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         _rebalanceRewardPerToken(liquidityMiningPosition.setupIndex, liquidityPoolData.amount, false);
     }
 
-    /** @dev this function allows a wallet to update the extension of the given liquidity mining position.
-      * @param to address of the new extension.
-      * @param positionId id of the liquidity mining position.
-     */
-    function transfer(address to, uint256 positionId) public byPositionOwner(positionId) {
-        // retrieve liquidity mining position
-        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        require(
-            to != address(0) &&
-            liquidityMiningPosition.setupStartBlock == _setups[liquidityMiningPosition.setupIndex].startBlock &&
-            liquidityMiningPosition.setupEndBlock == _setups[liquidityMiningPosition.setupIndex].endBlock,
-            "Invalid position"
-        );
-        liquidityMiningPosition.uniqueOwner = to;
-        emit Transfer(positionId, msg.sender, to);
-    }
-
-    /** @dev this function allows a extension to unlock its locked liquidity mining position receiving back its tokens or the lpt amount.
-      * @param positionId liquidity mining position id.
-      * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
-      */
-    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
-        // retrieve liquidity mining position
-        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
-        // require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
-        require(!liquidityMiningPosition.free && liquidityMiningPosition.setupEndBlock >= block.number, "Invalid unlock");
-        require(!_positionRedeemed[positionId], "Already redeemed");
-        uint256 rewardToGiveBack = _partiallyRedeemed[positionId];
-        // must pay a penalty fee
-        rewardToGiveBack += _setups[liquidityMiningPosition.setupIndex].penaltyFee == 0 ? 0 : (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / ONE_HUNDRED) / 1e18);
-        if (rewardToGiveBack > 0) {
-            // has partially redeemed, must pay a penalty fee
-            if(_rewardTokenAddress != address(0)) {
-                _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), rewardToGiveBack);
-                _safeApprove(_rewardTokenAddress, _extension, rewardToGiveBack);
-                ILiquidityMiningExtension(_extension).backToYou(rewardToGiveBack);
-            } else {
-                require(msg.value == rewardToGiveBack, "Invalid sent amount");
-                ILiquidityMiningExtension(_extension).backToYou{value : rewardToGiveBack}(rewardToGiveBack);
-            }
-        }
-        _burnLiquidity(_setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.liquidityPoolTokenAmount);
-        _removeLiquidity(positionId, _setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.setupIndex, unwrapPair, liquidityMiningPosition.liquidityPoolTokenAmount, true);
-    }
 
     /** @dev this function allows a user to withdraw the reward.
       * @param positionId liquidity mining position id.
@@ -305,14 +304,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // retrieve liquidity mining position
         LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
         // check if liquidity mining position is valid
-        // require(liquidityMiningPosition.liquidityPoolData.liquidityPoolAddress != address(0), "Invalid position");
+        require(_setups[liquidityMiningPosition.setupIndex].active, "Setup not active");
         uint256 reward = liquidityMiningPosition.reward;
-        if (!liquidityMiningPosition.free) {
+        if (!_setups[liquidityMiningPosition.setupIndex].free) {
             // check if reward is available
             require(liquidityMiningPosition.reward > 0, "No reward");
             // check if it's a partial reward or not
-            if (liquidityMiningPosition.setupEndBlock >= block.number) {
-            // calculate the reward from the liquidity mining position creation block to the current block multiplied by the reward per block
+            if (_setups[liquidityMiningPosition.setupIndex].endBlock > block.number) {
+                // calculate the reward from the liquidity mining position creation block to the current block multiplied by the reward per block
                 (reward,) = calculateLockedLiquidityMiningSetupReward(0, 0, true, positionId);
             }
             require(reward <= liquidityMiningPosition.reward, "Reward is bigger than expected");
@@ -324,24 +323,33 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             reward = calculateFreeLiquidityMiningSetupReward(positionId, false);
             require(reward > 0, "No reward?");
         }
+        // update the rewards
+        _rewards[liquidityMiningPosition.setupIndex] += reward;
         // transfer the reward
         if (reward > 0) {
-            if(!liquidityMiningPosition.free) {
-                _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);
-            } else {
-                _safeTransferTo(reward, liquidityMiningPosition.uniqueOwner);
-            }
+            _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);
         }
         // update the creation block for the position
         liquidityMiningPosition.creationBlock = block.number;
-        if (!liquidityMiningPosition.free) {
-            if (liquidityMiningPosition.reward == 0) {
-                // close the locked position after withdrawing all the reward
-                _positions[positionId] = _positions[0x0];
-            } else {
-                // set the partially redeemed amount
-                _partiallyRedeemed[positionId] += reward;
+        if (!_setups[liquidityMiningPosition.setupIndex].free && liquidityMiningPosition.reward == 0) {
+            // the locked setup must be considered finished
+            if (!_finishedLockedSetups[liquidityMiningPosition.setupIndex]) {
+                _finishedLockedSetups[liquidityMiningPosition.setupIndex] = true;
+                if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+                    _rebalanceRewardPerBlock(
+                        _pinnedSetupIndex, 
+                        _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - ((_setups[liquidityMiningPosition.setupIndex].rewardPerBlock * (_setups[liquidityMiningPosition.setupIndex].currentlyStaked * 1e18 / _setups[liquidityMiningPosition.setupIndex].maxStakeable)) / 1e18),
+                        false
+                    );
+                }
+                // if the setup is finished now, send back the excess reward and check the renewal
+                _checkExcessRewardAndRenewal(liquidityMiningPosition.setupIndex);
             }
+            // close the locked position after withdrawing all the reward
+            delete _positions[positionId];
+        } else if (!_setups[liquidityMiningPosition.setupIndex].free) {
+            // set the partially redeemed amount
+            _partiallyRedeemed[positionId] += reward;
         }
     }
 
@@ -353,57 +361,66 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
      */
     function withdrawLiquidity(uint256 positionId, uint256 objectId, bool unwrapPair, uint256 removedLiquidity) public {
         // retrieve liquidity mining position
-        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
         uint256 setupIndex = objectId != 0 ? getObjectIdSetupIndex(objectId) : liquidityMiningPosition.setupIndex;
-        require(positionId != 0 || (_setups[setupIndex].objectId == objectId || _finishedLockedSetups[objectId]), "Invalid position");
+        require((positionId != 0 && objectId == 0) || (objectId != 0 && positionId == 0 && _setups[setupIndex].objectId == objectId), "Invalid position");
         // current owned liquidity
         require(
             (
-                liquidityMiningPosition.free && 
+                _setups[setupIndex].free && 
+                liquidityMiningPosition.creationBlock != 0 &&
                 removedLiquidity <= liquidityMiningPosition.liquidityPoolTokenAmount &&
-                !_positionRedeemed[positionId] &&
                 liquidityMiningPosition.uniqueOwner == msg.sender
-            ) || (positionId == 0 && INativeV1(_liquidityFarmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity), "Invalid withdraw");
+            ) || INativeV1(_liquidityFarmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity, "Invalid withdraw");
         // check if liquidity mining position is valid
-        require(liquidityMiningPosition.free || (_setups[setupIndex].endBlock <= block.number || _finishedLockedSetups[objectId]), "Invalid withdraw");
+        require(_setups[setupIndex].free || (_setups[setupIndex].endBlock <= block.number), "Invalid withdraw");
         // burn the liquidity in the locked setup
         if (positionId == 0) {
             _burnLiquidity(objectId, removedLiquidity);
         } else {
-            _positionRedeemed[positionId] = removedLiquidity == liquidityMiningPosition.liquidityPoolTokenAmount;
-            withdrawReward(positionId);
+            if (_setups[setupIndex].active) withdrawReward(positionId);
             _setups[liquidityMiningPosition.setupIndex].totalSupply -= removedLiquidity;
         }
-        _removeLiquidity(positionId, objectId, setupIndex, unwrapPair, removedLiquidity, false);
+        _removeLiquidity(positionId, setupIndex, unwrapPair, removedLiquidity, false);
     }
 
-    /** @dev this function allows any user to rebalance the pinned setup. */
-    function rebalancePinnedSetup() public {
-        // if (!_hasPinned || !_setups[_pinnedSetupIndex].free) return;
-        uint256 amount;
-        for (uint256 i = 0; i < _setups.length; i++) {
-            if (_setups[i].free) continue;
-            // this is a locked setup that it's currently active or it's a new one
-            if (block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock) {
-                // the amount to add to the pinned is given by the difference between the reward per block and currently locked one
-                // in the case of a new setup, the currentRewardPerBlock is 0 so the difference is the whole rewardPerBlock
-                amount += _setups[i].rewardPerBlock - ((_setups[i].rewardPerBlock * (_setups[i].currentStakedLiquidity * 1e18 / _setups[i].maximumLiquidity)) / 1e18);
-            // this is a locked setup that has expired
-            } else if (block.number >= _setups[i].endBlock) {
-                _finishedLockedSetups[_setups[i].objectId] = true;
-                // check if the setup is renewable
-                if (_setups[i].renewTimes > 0) {
-                    _setups[i].renewTimes -= 1;
-                    // if it is, we renew it and add the reward per block
-                    _renewSetup(i);
-                    amount += _setups[i].rewardPerBlock;
-                }
+    /** @dev this function allows a extension to unlock its locked liquidity mining position receiving back its tokens or the lpt amount.
+      * @param positionId liquidity mining position id.
+      * @param unwrapPair if the caller wants to unwrap his pair from the liquidity pool token or not.
+    */
+    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
+        // retrieve liquidity mining position
+        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        require(!_setups[liquidityMiningPosition.setupIndex].free && _setups[liquidityMiningPosition.setupIndex].endBlock > block.number, "Invalid unlock");
+        uint256 rewardToGiveBack = _partiallyRedeemed[positionId];
+        // must pay a penalty fee
+        rewardToGiveBack += _setups[liquidityMiningPosition.setupIndex].penaltyFee == 0 ? 0 : (liquidityMiningPosition.reward * ((_setups[liquidityMiningPosition.setupIndex].penaltyFee * 1e18) / ONE_HUNDRED) / 1e18);
+        if (rewardToGiveBack > 0) {
+            // has partially redeemed, must pay a penalty fee
+            if(_rewardTokenAddress != address(0)) {
+                _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), rewardToGiveBack);
+            } else {
+                require(msg.value == rewardToGiveBack, "Invalid sent amount");
             }
         }
-        if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
-            _rebalanceRewardPerBlock(_pinnedSetupIndex, amount, true);
-        }
+        _burnLiquidity(_setups[liquidityMiningPosition.setupIndex].objectId, liquidityMiningPosition.liquidityPoolTokenAmount);
+        _removeLiquidity(positionId, liquidityMiningPosition.setupIndex, unwrapPair, liquidityMiningPosition.liquidityPoolTokenAmount, true);
+    }
+
+    /** @dev this function allows a wallet to update the extension of the given liquidity mining position.
+      * @param to address of the new extension.
+      * @param positionId id of the liquidity mining position.
+     */
+    function transfer(address to, uint256 positionId) public byPositionOwner(positionId) {
+        // retrieve liquidity mining position
+        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        require(
+            to != address(0) &&
+            liquidityMiningPosition.creationBlock != 0,
+            "Invalid position"
+        );
+        liquidityMiningPosition.uniqueOwner = to;
+        emit Transfer(positionId, msg.sender, to);
     }
 
     /** @dev function used to calculate the reward in a locked liquidity mining setup.
@@ -419,23 +436,22 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // retrieve the position
             LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
             // calculate the reward
-            reward = (block.number >= liquidityMiningPosition.setupEndBlock) ? liquidityMiningPosition.reward : ((block.number - liquidityMiningPosition.creationBlock) * liquidityMiningPosition.lockedRewardPerBlock);
+            reward = (block.number >= _setups[liquidityMiningPosition.setupIndex].endBlock) ? liquidityMiningPosition.reward : ((block.number - liquidityMiningPosition.creationBlock) * liquidityMiningPosition.lockedRewardPerBlock);
         } else {
             LiquidityMiningSetup memory setup = _setups[setupIndex];
             // check if main token amount is less than the stakeable liquidity
-            require(mainTokenAmount <= setup.maximumLiquidity - setup.currentStakedLiquidity, "Invalid liquidity");
+            require(mainTokenAmount <= setup.maxStakeable - setup.currentlyStaked, "Invalid liquidity");
             uint256 remainingBlocks = block.number > setup.endBlock ? 0 : setup.endBlock - block.number;
             // get amount of remaining blocks
             require(remainingBlocks > 0, "Setup ended");
             // get total reward still available (= 0 if rewardPerBlock = 0)
             require(setup.rewardPerBlock * remainingBlocks > 0, "No rewards");
             // calculate relativeRewardPerBlock
-            relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / setup.maximumLiquidity)) / 1e18;
+            relativeRewardPerBlock = (setup.rewardPerBlock * ((mainTokenAmount * 1e18) / setup.maxStakeable)) / 1e18;
             // check if rewardPerBlock is greater than 0
             require(relativeRewardPerBlock > 0, "Invalid rpb");
             // calculate reward by multiplying relative reward per block and the remaining blocks
             reward = relativeRewardPerBlock * remainingBlocks;
-            // check if the reward is still available
         }
     }
 
@@ -446,6 +462,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     function calculateFreeLiquidityMiningSetupReward(uint256 positionId, bool isExt) public view returns(uint256 reward) {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
         for (uint256 i = 0; i < _setupUpdateBlocks[liquidityMiningPosition.setupIndex].length; i++) {
+            if (_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i] > _setups[liquidityMiningPosition.setupIndex].endBlock) break;
             if (liquidityMiningPosition.creationBlock < _setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]) {
                 reward += (_rewardPerTokenPerSetupPerBlock[liquidityMiningPosition.setupIndex][_setupUpdateBlocks[liquidityMiningPosition.setupIndex][i]] * liquidityMiningPosition.liquidityPoolTokenAmount) / 1e18;
             }
@@ -456,13 +473,16 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
-    /** @dev returns the setup index for the given objectId.
-      * @param objectId farm token object id.
-      * @return setupIndex index of the setup.
-     */
-    function getObjectIdSetupIndex(uint256 objectId) public view returns (uint256 setupIndex) {
-        require(address(INativeV1(_liquidityFarmTokenCollection).asInteroperable(objectId)) != address(0), "Invalid objectId");
-        setupIndex = _objectIdSetup[objectId];
+    /** @dev function used to receive batch of erc1155 tokens. */
+    function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public view override returns(bytes4) {
+        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
+        return this.onERC1155BatchReceived.selector;
+    }
+
+    /** @dev function used to receive erc1155 tokens. */
+    function onERC1155Received(address, address, uint256, uint256, bytes memory) public view override returns(bytes4) {
+        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
+        return this.onERC1155Received.selector;
     }
 
     /** Private methods. */
@@ -483,7 +503,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         rebalancePinnedSetup();
     }
 
-    /** @dev helper method that given a liquidity mining setup adds it to the _setups array or updates it.
+     /** @dev helper method that given a liquidity mining setup adds it to the _setups array or updates it.
       * @param data new or updated liquidity mining setup.
       * @param add if we are adding the setup or updating it.
       * @param index liquidity mining setup index.
@@ -492,16 +512,21 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         LiquidityMiningSetup memory liquidityMiningSetup = add ? data : _setups[index];
         require(
             data.ammPlugin != address(0) &&
+            data.liquidityPoolTokenAddress != address(0) &&
+            data.startBlock < data.endBlock &&
             (
-                (data.free && data.liquidityPoolTokenAddress != address(0)) ||
-                (!data.free && data.liquidityPoolTokenAddress != address(0) && data.startBlock < data.endBlock)
+                !data.free && data.maxStakeable == 0
             ),
             "Invalid setup configuration"
         );
         require(!add || liquidityMiningSetup.ammPlugin != address(0), "Invalid setup index");
+        // retrieve the main token address
         address mainTokenAddress = add ? data.mainTokenAddress : liquidityMiningSetup.mainTokenAddress;
+        // retrieve the amm blugin
         address ammPlugin = add ? data.ammPlugin : liquidityMiningSetup.ammPlugin;
+        // call the AMM
         (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(data.liquidityPoolTokenAddress);
+        // check if the main token address is inside the liquidity pool token address provided
         bool found = false;
         for(uint256 z = 0; z < tokenAddresses.length; z++) {
             if(tokenAddresses[z] == mainTokenAddress) {
@@ -510,27 +535,37 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 emit SetupToken(mainTokenAddress, tokenAddresses[z]);
             }
         }
+        // require found to be true
         require(found, "No main token");
+        // we're adding a new setup
         if (add) {
+            // force default values
+            data.lastBlockUpdate = 0;
             data.totalSupply = 0;
-            data.currentRewardPerBlock = data.free ? data.rewardPerBlock : 0;
+            data.currentlyStaked = 0;
+            data.startingRewardPerBlock = data.free ? data.rewardPerBlock : 0;
+            data.active = false;
             // adding new liquidity mining setup
-            _setups.push(data);
+            _setups[_setupsCount] = data;
+            // try to toggle the setup
+            _toggleSetup(_setupsCount, 1);
+            _setupsCount += 1;
         } else {
-            if (liquidityMiningSetup.free) {
-                // update free liquidity mining setup reward per block
-                if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock < 0) {
-                    _rebalanceRewardPerBlock(index, liquidityMiningSetup.rewardPerBlock - data.rewardPerBlock, false);
-                } else {
-                    _rebalanceRewardPerBlock(index, data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock, true);
-                }
-                _setups[index].rewardPerBlock = data.rewardPerBlock;
-                _setups[index].currentRewardPerBlock = data.rewardPerBlock;
-            } else {
-                // update locked liquidity mining setup
-                _setups[index].rewardPerBlock = data.rewardPerBlock;
-                _setups[index].renewTimes = data.renewTimes;
+            uint256 difference = data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock ? liquidityMiningSetup.rewardPerBlock - data.rewardPerBlock : data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock;
+            uint256 duration = liquidityMiningSetup.endBlock - max(block.number, liquidityMiningSetup.startBlock);
+            uint256 amount = difference * duration;
+            if (amount > 0) {
+                data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock ? ILiquidityMiningExtension(_extension).backToYou(amount) : ILiquidityMiningExtension(_extension).transferTo(amount);
             }
+            if (liquidityMiningSetup.free && (data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock || data.rewardPerBlock > liquidityMiningSetup.rewardPerBlock)) {
+                _rebalanceRewardPerBlock(index, difference, data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock);
+            }
+            // update liquidity mining setup
+            if (data.rewardPerBlock - liquidityMiningSetup.rewardPerBlock != 0) {
+                _setups[index].rewardPerBlock = data.rewardPerBlock;
+                _setups[index].startingRewardPerBlock = data.free ? data.rewardPerBlock : 0;
+            }
+            _setups[index].renewTimes = data.renewTimes;
         }
     }
 
@@ -544,7 +579,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         if (clearPinned && _hasPinned) {
             _hasPinned = false;
             _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
-            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].currentRewardPerBlock;
+            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].startingRewardPerBlock;
         }
         // check if we're updating the pinned setup
         if (!clearPinned && setPinned) {
@@ -552,8 +587,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             uint256 oldBalancedRewardPerBlock;
             // check if we already have a free pinned setup
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block (aka currentRewardPerBlock)
-                oldBalancedRewardPerBlock = _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].currentRewardPerBlock;
+                // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block
+                oldBalancedRewardPerBlock = _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].startingRewardPerBlock;
                 // remove it from the current pinned setup
                 _rebalanceRewardPerBlock(_pinnedSetupIndex, oldBalancedRewardPerBlock, false);
             }
@@ -562,6 +597,86 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _pinnedSetupIndex = pinnedIndex;
         }
     }
+
+    /** @dev helper method used to toggle a setup (active/deactive).
+      * @param setupIndex index of the setup to activate/deactivate.
+      * @param status if it's 1 we're activating the setup, else we're deactivating it.
+     */
+    function _toggleSetup(uint256 setupIndex, uint256 status) private {
+        uint256 amount;
+        if (status == 1 && !_setups[setupIndex].active) {
+            amount = _setups[setupIndex].rewardPerBlock * (_setups[setupIndex].endBlock - _setups[setupIndex].startBlock);
+            try ILiquidityMiningExtension(_extension).transferTo(amount) {
+                // transaction successful, activate the setup
+                _setups[setupIndex].active = true;
+                SetupToggle(setupIndex, true);
+            } catch {}
+        } else if (status != 1 && _setups[setupIndex].active && (_setups[setupIndex].free || block.number < _setups[setupIndex].startBlock)) {
+            amount = _setups[setupIndex].rewardPerBlock * (_setups[setupIndex].endBlock - max(block.number, _setups[setupIndex].startBlock));
+            ILiquidityMiningExtension(_extension).backToYou(amount);
+            // we're deactivating the setup
+            _setups[setupIndex].active = false;
+            SetupToggle(setupIndex, false);
+        }
+    }
+
+    /** @dev Renews the setup with the given index.
+      * @param setupIndex index of the setup to renew.
+      * @return newIndex new setup index
+     */
+    function _renewSetup(uint256 setupIndex) private returns (uint256 newIndex) {
+        uint256 duration = _setups[setupIndex].endBlock - _setups[setupIndex].startBlock;
+        newIndex = _setupsCount;
+        _setups[newIndex] = _setups[setupIndex];
+        _setups[newIndex].startBlock = block.number + 1;
+        _setups[newIndex].endBlock = block.number + 1 + duration;
+        _setups[newIndex].startingRewardPerBlock = _setups[setupIndex].free ? _setups[setupIndex].startingRewardPerBlock : 0;
+        _setups[newIndex].currentlyStaked = 0;
+        _setups[newIndex].objectId = 0;
+        _setups[newIndex].renewTimes -= 1;
+        _setups[newIndex].active = false;
+        if (setupIndex == _pinnedSetupIndex && _hasPinned && _setups[_pinnedSetupIndex].free) {
+            _setups[newIndex].rewardPerBlock = _setups[setupIndex].rewardPerBlock;
+            _pinnedSetupIndex = newIndex;
+        }
+        _setupsCount += 1;
+        _toggleSetup(newIndex, 1);
+    }
+
+
+    /** @dev function used to rebalance the reward per block in the given free liquidity mining setup.
+      * @param setupIndex setup to rebalance.
+      * @param lockedRewardPerBlock new liquidity mining position locked reward per block that must be subtracted from the given free liquidity mining setup reward per block.
+      * @param fromExit if the rebalance is caused by an exit from the locked liquidity mining position or not.
+      */
+    function _rebalanceRewardPerBlock(uint256 setupIndex, uint256 lockedRewardPerBlock, bool fromExit) private {
+        LiquidityMiningSetup storage setup = _setups[setupIndex];
+        _rebalanceRewardPerToken(setupIndex, 0, fromExit);
+        fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
+    }
+
+    /** @dev function used to rebalance the reward per token in a free liquidity mining setup.
+      * @param setupIndex index of the setup to rebalance.
+      * @param liquidityPoolTokenAmount amount of liquidity pool token being added.
+      * @param fromExit if the rebalance is caused by an exit from the free liquidity mining position or not.
+     */
+    function _rebalanceRewardPerToken(uint256 setupIndex, uint256 liquidityPoolTokenAmount, bool fromExit) private {
+        LiquidityMiningSetup storage setup = _setups[setupIndex];
+        uint256 updateBlock = min(block.number, setup.endBlock);
+        if(setup.lastBlockUpdate > 0 && setup.totalSupply > 0) {
+            // add the block to the setup update blocks
+            if (updateBlock != setup.endBlock) {
+                _setupUpdateBlocks[setupIndex].push(updateBlock);
+                // update the reward token
+                _rewardPerTokenPerSetupPerBlock[setupIndex][updateBlock] = (((updateBlock - setup.lastBlockUpdate) * setup.rewardPerBlock) * 1e18) / setup.totalSupply;
+            }
+        }
+        // update the last block update variable
+        setup.lastBlockUpdate = updateBlock;
+        // update total supply in the setup AFTER the reward calculation - to let previous liquidity mining position holders to calculate the correct value
+        fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
+    }
+
 
     /** @dev this function performs the transfer of the tokens that will be staked, interacting with the AMM plugin.
       * @param setup the chosen setup.
@@ -614,7 +729,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             }
         }
     }
-
+      
     /** @dev mints a new PositionToken inside the collection for the given wallet.
       * @param uniqueOwner liquidityMiningPosition token extension.
       * @param amount amount of to mint for a farm token.
@@ -633,20 +748,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         INativeV1(_liquidityFarmTokenCollection).safeTransferFrom(address(this), uniqueOwner, _setups[setupIndex].objectId, amount, "");
     }
 
-    function _toString(address _addr) internal pure returns(string memory) {
-        bytes32 value = bytes32(uint256(_addr));
-        bytes memory alphabet = "0123456789abcdef";
-
-        bytes memory str = new bytes(42);
-        str[0] = '0';
-        str[1] = 'x';
-        for (uint i = 0; i < 20; i++) {
-            str[2+i*2] = alphabet[uint(uint8(value[i + 12] >> 4))];
-            str[3+i*2] = alphabet[uint(uint8(value[i + 12] & 0x0f))];
-        }
-        return string(str);
-    }
-
     /** @dev burns a farm token from the collection.
       * @param objectId object id where to burn liquidity.
       * @param amount amount of liquidity to burn.
@@ -661,13 +762,12 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** @dev helper function used to remove liquidity from a free position or to burn item liquidity tokens and retrieve their content.
       * @param positionId id of the position.
-      * @param objectId object id related to the item liquidity tokens to burn.
       * @param setupIndex index of the setup related to the item liquidity tokens.
       * @param unwrapPair whether to unwrap the liquidity pool tokens or not.
       * @param isUnlock if we're removing liquidity from an unlock method or not.
      */
-    function _removeLiquidity(uint256 positionId, uint256 objectId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
-        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+    function _removeLiquidity(uint256 positionId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
+        // create liquidity pool data struct for the AMM
         LiquidityPoolData memory lpData = LiquidityPoolData(
             _setups[setupIndex].liquidityPoolTokenAddress,
             removedLiquidity,
@@ -676,11 +776,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _setups[setupIndex].involvingETH,
             msg.sender
         );
+        // retrieve the position
+        LiquidityMiningPosition storage liquidityMiningPosition = _positions[positionId];
+        // remaining liquidity
         uint256 remainingLiquidity;
         // we are removing liquidity using the setup items
-        if (liquidityMiningPosition.free && positionId != 0) {
-            // update the setup index
-            setupIndex = liquidityMiningPosition.setupIndex;
+        if (_setups[liquidityMiningPosition.setupIndex].free && liquidityMiningPosition.creationBlock != 0 && positionId != 0) {
+            // update the remaining liquidity
             remainingLiquidity = liquidityMiningPosition.liquidityPoolTokenAmount - removedLiquidity;
         }
         // retrieve fee stuff
@@ -700,7 +802,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if (isUnlock) {
                 for (uint256 i = 0; i < tokens.length; i++) {
                     if (tokens[i] == _setups[setupIndex].mainTokenAddress) {
-                        _setups[setupIndex].currentStakedLiquidity -= amounts[0];
+                        _setups[setupIndex].currentlyStaked -= amounts[0];
                         break;
                     }
                 }
@@ -710,89 +812,72 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _safeTransfer(lpData.liquidityPoolAddress, lpData.receiver, lpData.amount);
         }
         // rebalance the setup if not free
-        if (!_setups[setupIndex].free && !_finishedLockedSetups[objectId]) {
-            // check if the setup has been updated or not
-            if (objectId == _setups[setupIndex].objectId) {
-                // check if it's finished (this is a withdraw) or not (a unlock)
-                if (!isUnlock) {
-                    // the locked setup must be considered finished only if it's not renewable
-                    _finishedLockedSetups[objectId] = true;
-                    if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                        _rebalanceRewardPerBlock(
-                            _pinnedSetupIndex, 
-                            _setups[setupIndex].rewardPerBlock - ((_setups[setupIndex].rewardPerBlock * (_setups[setupIndex].currentStakedLiquidity * 1e18 / _setups[setupIndex].maximumLiquidity)) / 1e18),
-                            false
-                        );
-                    }
-                    if (_setups[setupIndex].renewTimes > 0) {
-                        _setups[setupIndex].renewTimes -= 1;
-                        // renew the setup if renewable
-                        _renewSetup(setupIndex);
-                    }
-                } else {
-                    // this is an unlock, so we just need to provide back the reward per block
-                    if (_hasPinned && _setups[_pinnedSetupIndex].free) {
-                        _rebalanceRewardPerBlock(
-                            _pinnedSetupIndex, 
-                            _setups[setupIndex].rewardPerBlock * ((removedLiquidity * 1e18 / _setups[setupIndex].maximumLiquidity) / 1e18), 
-                            true
-                        );
-                    }
+        if (!_setups[setupIndex].free && !_finishedLockedSetups[setupIndex]) {
+            // check if it's finished (this is a withdraw) or not (a unlock)
+            if (isUnlock && _hasPinned && _setups[_pinnedSetupIndex].free) {
+                // this is an unlock, so we just need to provide back the reward per block
+                _rebalanceRewardPerBlock(
+                    _pinnedSetupIndex, 
+                    _setups[setupIndex].rewardPerBlock * ((removedLiquidity * 1e18 / _setups[setupIndex].maxStakeable) / 1e18), 
+                    true
+                );
+            } else if (!isUnlock) {
+                // the locked setup must be considered finished
+                _finishedLockedSetups[setupIndex] = true;
+                if (_hasPinned && _setups[_pinnedSetupIndex].free) {
+                    _rebalanceRewardPerBlock(
+                        _pinnedSetupIndex, 
+                        _setups[setupIndex].rewardPerBlock - ((_setups[setupIndex].rewardPerBlock * (_setups[setupIndex].currentlyStaked * 1e18 / _setups[setupIndex].maxStakeable)) / 1e18),
+                        false
+                    );
                 }
+                // if the setup is finished now, send back the excess reward and check the renewal
+                _checkExcessRewardAndRenewal(setupIndex);
             }
-        }
-        if (liquidityMiningPosition.free && positionId != 0) {
+        } else if (_setups[liquidityMiningPosition.setupIndex].free && positionId != 0) {
             // delete the liquidity mining position after the withdraw
             if (remainingLiquidity == 0) {
-                _positions[positionId] = _positions[0x0];
+                delete _positions[positionId];
             } else {
                 // update the creation block and amount
                 liquidityMiningPosition.creationBlock = block.number;
                 liquidityMiningPosition.liquidityPoolTokenAmount = remainingLiquidity;
             }
+            // check if setup is marked as finished or not
+            if (!_finishedLockedSetups[setupIndex]) {
+                // if it wasn't marked as finished before, do it if the end block is before the current block
+                _finishedLockedSetups[setupIndex] = _setups[setupIndex].endBlock <= block.number;
+                // if the setup is finished now, send back the excess reward and check the renewal
+                if (_finishedLockedSetups[setupIndex]) {
+                    _checkExcessRewardAndRenewal(setupIndex);
+                }
+            }
         }
     }
 
-    /** @dev Renews the setup with the given index.
-      * @param setupIndex index of the setup to renew.
+    /** @dev this methods checks and sends back any excess reward from the setup to the extension and check if it's renewable or not.
+      * @param setupIndex index of the setup to check.
      */
-    function _renewSetup(uint256 setupIndex) private {
-        uint256 duration = _setups[setupIndex].endBlock - _setups[setupIndex].startBlock;
-        _setups[setupIndex].startBlock = block.number + 1;
-        _setups[setupIndex].endBlock = block.number + 1 + duration;
-        _setups[setupIndex].currentRewardPerBlock = 0;
-        _setups[setupIndex].currentStakedLiquidity = 0;
-        _setups[setupIndex].objectId = 0;
-    }
-
-    /** @dev function used to rebalance the reward per block in the given free liquidity mining setup.
-      * @param setupIndex setup to rebalance.
-      * @param lockedRewardPerBlock new liquidity mining position locked reward per block that must be subtracted from the given free liquidity mining setup reward per block.
-      * @param fromExit if the rebalance is caused by an exit from the locked liquidity mining position or not.
-      */
-    function _rebalanceRewardPerBlock(uint256 setupIndex, uint256 lockedRewardPerBlock, bool fromExit) private {
-        LiquidityMiningSetup storage setup = _setups[setupIndex];
-        _rebalanceRewardPerToken(setupIndex, 0, fromExit);
-        fromExit ? setup.rewardPerBlock += lockedRewardPerBlock : setup.rewardPerBlock -= lockedRewardPerBlock;
-    }
-
-    /** @dev function used to rebalance the reward per token in a free liquidity mining setup.
-      * @param setupIndex index of the setup to rebalance.
-      * @param liquidityPoolTokenAmount amount of liquidity pool token being added.
-      * @param fromExit if the rebalance is caused by an exit from the free liquidity mining position or not.
-     */
-    function _rebalanceRewardPerToken(uint256 setupIndex, uint256 liquidityPoolTokenAmount, bool fromExit) private {
-        LiquidityMiningSetup storage setup = _setups[setupIndex];
-        if(setup.lastBlockUpdate > 0 && setup.totalSupply > 0) {
-            // add the block to the setup update blocks
-            _setupUpdateBlocks[setupIndex].push(block.number);
-            // update the reward token
-            _rewardPerTokenPerSetupPerBlock[setupIndex][block.number] = (((block.number - setup.lastBlockUpdate) * setup.rewardPerBlock) * 1e18) / setup.totalSupply;
+    function _checkExcessRewardAndRenewal(uint256 setupIndex) private {
+        uint256 excessReward = (_setups[setupIndex].rewardPerBlock * (_setups[setupIndex].endBlock - _setups[setupIndex].startBlock)) - _rewards[setupIndex];
+        // check if the excess reward
+        if (excessReward > 0) {
+            ILiquidityMiningExtension(_extension).backToYou(excessReward);
         }
-        // update the last block update variable
-        setup.lastBlockUpdate = block.number;
-        // update total supply in the setup AFTER the reward calculation - to let previous liquidity mining position holders to calculate the correct value
-        fromExit ? setup.totalSupply -= liquidityPoolTokenAmount : setup.totalSupply += liquidityPoolTokenAmount;
+        // empty the rewards mapping for this setup
+        _rewards[setupIndex] = 0;
+        // check if the setup is renewable
+        if (_setups[setupIndex].renewTimes > 0) {
+            // if it is, we renew it
+            _renewSetup(setupIndex);
+            _setups[setupIndex].renewTimes = 0;
+        } else {
+            _setups[setupIndex].active = false;
+            if (setupIndex == _pinnedSetupIndex && _hasPinned && _setups[_pinnedSetupIndex].free) {
+                _hasPinned = false;
+                _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].startingRewardPerBlock;
+            }
+        }
     }
 
     /** @dev function used to safely approve ERC20 transfers.
@@ -844,24 +929,36 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
-    /** @dev function used to receive batch of erc1155 tokens. */
-    function onERC1155BatchReceived(address, address, uint256[] memory, uint256[] memory, bytes memory) public view override returns(bytes4) {
-        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
-        return this.onERC1155BatchReceived.selector;
-    }
+    /** @dev returns the input address to string.
+      * @param _addr address to convert as string.
+      * @return address as string.
+     */
+    function _toString(address _addr) internal pure returns(string memory) {
+        bytes32 value = bytes32(uint256(_addr));
+        bytes memory alphabet = "0123456789abcdef";
 
-    /** @dev function used to receive erc1155 tokens. */
-    function onERC1155Received(address, address, uint256, uint256, bytes memory) public view override returns(bytes4) {
-        require(_liquidityFarmTokenCollection == msg.sender, "Invalid sender");
-        return this.onERC1155Received.selector;
-    }
-
-    function _safeTransferTo(uint256 amount, address receiver) private {
-        uint256 balance = _rewardTokenAddress == address(0) ? address(_extension).balance : IERC20(_rewardTokenAddress).balanceOf(_extension);
-        if(balance == 0) {
-            return;
+        bytes memory str = new bytes(42);
+        str[0] = '0';
+        str[1] = 'x';
+        for (uint i = 0; i < 20; i++) {
+            str[2+i*2] = alphabet[uint(uint8(value[i + 12] >> 4))];
+            str[3+i*2] = alphabet[uint(uint8(value[i + 12] & 0x0f))];
         }
-        ILiquidityMiningExtension(_extension).transferTo(amount > balance ? balance : amount, receiver);
+        return string(str);
+    }
+
+    /**
+     * @dev Returns the largest of two numbers.
+     */
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a >= b ? a : b;
+    }
+
+    /**
+     * @dev Returns the smallest of two numbers.
+     */
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a < b ? a : b;
     }
 
 }

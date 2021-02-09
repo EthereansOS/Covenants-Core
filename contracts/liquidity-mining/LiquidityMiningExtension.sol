@@ -51,26 +51,49 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         _byMint = byMint;
     }
 
-    function setActive(bool _active) public virtual hostOnly {
-        active = _active;
+    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
+        return (_liquidityMiningContract, _byMint, _host, _rewardTokenAddress);
     }
 
+    /** @dev method used to update the extension host.
+      * @param host new host address.
+     */
     function setHost(address host) public virtual override hostOnly {
         _host = host;
     }
 
-    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
-        return (_liquidityMiningContract, _byMint, _host, _rewardTokenAddress);
+    /** @dev method used to activate or deactivate the extension, called only by the host.
+      * @param _active true if we're activating the extension, false otherwise.
+     */
+    function setActive(bool _active) public virtual hostOnly {
+        active = _active;
+    }
+
+    /** @dev method used to activate or deactivate the setups inside the liquidity mining contract.
+      * @param setupIndexes array of setup indexes.
+      * @param statuses array containing uint256 for each given setup index: if 1 is given, we're activating the setup, otherwise we're deactivating it.
+     */
+    function toggleSetups(uint256[] memory setupIndexes, uint256[] memory statuses) public virtual override hostOnly {
+        ILiquidityMining(_liquidityMiningContract).toggleSetups(setupIndexes, statuses);
+    }
+
+    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
+      * @param liquidityMiningSetups array containing all the liquidity mining setups.
+      * @param setPinned if we're updating the pinned setup or not.
+      * @param pinnedIndex new pinned setup index.
+     */
+    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public virtual override hostOnly {
+        ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.
       * @param amount amount of erc20 to transfer or mint.
      */
-    function transferTo(uint256 amount, address recipient) public virtual override liquidityMiningOnly {
+    function transferTo(uint256 amount) public virtual override liquidityMiningOnly {
         if(_rewardTokenAddress != address(0)) {
-            return _byMint ? _mintAndTransfer(_rewardTokenAddress, recipient, amount) : _safeTransfer(_rewardTokenAddress, recipient, amount);
+            return _byMint ? _mintAndTransfer(_rewardTokenAddress, _liquidityMiningContract, amount) : _safeTransfer(_rewardTokenAddress, _liquidityMiningContract, amount);
         }
-        payable(recipient).transfer(amount);
+        payable(_liquidityMiningContract).transfer(amount);
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
@@ -85,15 +108,6 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         } else {
             require(msg.value == amount, "invalid sent amount");
         }
-    }
-
-    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
-      * @param liquidityMiningSetups array containing all the liquidity mining setups.
-      * @param setPinned if we're updating the pinned setup or not.
-      * @param pinnedIndex new pinned setup index.
-     */
-    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public virtual override hostOnly {
-        ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
     }
 
     /** INTERNAL METHODS */
@@ -137,6 +151,11 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
+    /** @dev calls the contract at the given location using the given payload and returns the returnData.
+      * @param location location to call.
+      * @param payload call payload.
+      * @return returnData call return data.
+     */
     function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
         assembly {
             let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
