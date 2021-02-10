@@ -71,6 +71,10 @@ contract FixedInflationFactory is IFixedInflationFactory {
         emit FixedInflationDefaultExtensionSet(fixedInflationDefaultExtension = _fixedInflationDefaultExtension);
     }
 
+    function cloneLiquidityMiningDefaultExtension() public override returns(address clonedExtension) {
+        emit ExtensionCloned(clonedExtension = _clone(fixedInflationDefaultExtension));
+    }
+
     /** @dev this function deploys a new FixedInflation contract and calls the encoded function passed as data.
      * @param data encoded initialize function for the fixed inflation contract (check FixedInflation contract code).
      * @return contractAddress new fixed inflation contract address.

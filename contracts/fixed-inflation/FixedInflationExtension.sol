@@ -14,6 +14,8 @@ contract FixedInflationExtension is IFixedInflationExtension {
 
     address private _fixedInflationContract;
 
+    bool public override active;
+
     modifier fixedInflationOnly() {
         require(_fixedInflationContract == msg.sender, "Unauthorized");
         _;
@@ -29,7 +31,7 @@ contract FixedInflationExtension is IFixedInflationExtension {
 
     function init(address host) override public {
         require(_host == address(0), "Already init");
-        _host = host;
+        require((_host = host) != address(0), "blank host");
         _fixedInflationContract = msg.sender;
     }
 
@@ -39,6 +41,10 @@ contract FixedInflationExtension is IFixedInflationExtension {
 
     function data() view public override returns(address fixedInflationContract, address host) {
         return(_fixedInflationContract, _host);
+    }
+
+    function setActive(bool _active) public override virtual hostOnly {
+        active = _active;
     }
 
     function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) public override fixedInflationOnly {

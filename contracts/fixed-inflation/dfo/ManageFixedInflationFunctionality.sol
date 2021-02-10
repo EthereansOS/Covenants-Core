@@ -24,6 +24,7 @@ contract ProposalCode {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
         stateHolder.setBool(_toStateHolderKey("fixedinflation.authorized", _toString({0})), true);
+        IFixedInflationExtension({0}).setActive(true);
     }
 
     function onStop(address) public {
@@ -102,4 +103,8 @@ interface IERC20 {
     function decimals() external view returns (uint8);
     function mint(uint256 amount) external;
     function burn(uint256 amount) external;
+}
+
+interface IFixedInflationExtension {
+    function setActive(bool _active) external;
 }

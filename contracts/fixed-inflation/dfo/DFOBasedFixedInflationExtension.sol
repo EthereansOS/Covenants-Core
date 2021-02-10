@@ -15,6 +15,8 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
     address private _fixedInflationContract;
 
+    bool public override active;
+
     modifier fixedInflationOnly() {
         require(_fixedInflationContract == msg.sender, "Unauthorized");
         _;
@@ -27,8 +29,7 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
     function init(address doubleProxyAddress) override public {
         require(_host == address(0), "Already init");
-        require(doubleProxyAddress != address(0), "blank host");
-        _host = doubleProxyAddress;
+        require((_host = doubleProxyAddress) != address(0), "blank host");
         _fixedInflationContract = msg.sender;
     }
 
@@ -38,6 +39,10 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
     function setHost(address host) public virtual override hostOnly {
         _host = host;
+    }
+
+    function setActive(bool _active) public override virtual hostOnly {
+        active = _active;
     }
 
     function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) public override fixedInflationOnly {

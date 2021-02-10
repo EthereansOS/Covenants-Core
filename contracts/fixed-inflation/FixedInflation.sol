@@ -54,6 +54,11 @@ contract FixedInflation is IFixedInflation {
         _;
     }
 
+    modifier activeExtensionOnly() {
+        require(IFixedInflationExtension(extension).active(), "not active extension");
+        _;
+    }
+
     function entry(bytes32 key) public view returns(FixedInflationEntry memory entriesArray, FixedInflationOperation[] memory operations) {
         return (_entries[key], _operations[key]);
     }
@@ -84,7 +89,7 @@ contract FixedInflation is IFixedInflation {
         return _entries[id].lastBlock == 0 ? block.number : (_entries[id].lastBlock + _entries[id].blockInterval);
     }
 
-    function execute(bytes32[] memory ids, bool[] memory earnByAmounts) public {
+    function execute(bytes32[] memory ids, bool[] memory earnByAmounts) public activeExtensionOnly {
         require(ids.length > 0 && ids.length == earnByAmounts.length, "Invalid input data");
         for(uint256 i = 0; i < ids.length; i++) {
             require(_entries[ids[i]].id == ids[i], "Invalid id");
