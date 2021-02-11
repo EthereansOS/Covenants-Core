@@ -30,7 +30,7 @@ struct LiquidityMiningSetup {
     uint256 startBlock; // liquidity mining setup start block.
     uint256 duration; // liquidity mining setup duration in end block.
     uint256 endBlock; // liquidity mining setup end block.
-    uint256 lastBlockUpdate; // number of the block where an update was triggered.
+    uint256 lastUpdateBlock; // number of the block where an update was triggered.
     uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
     uint256 rewardPerBlock; // liquidity mining setup reward per single block.
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
