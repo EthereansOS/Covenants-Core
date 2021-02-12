@@ -107,8 +107,8 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     function rebalancePinnedSetup() public {
         require(_hasPinned, "no pinned");
-        if(_setups[_pinnedSetupIndex].totalSupply == 0)) {
-            _executeEventualGiveBack(setup);
+        if(_setups[_pinnedSetupIndex].totalSupply == 0) {
+            _executeEventualGiveBack(_setups[_pinnedSetupIndex]);
             _setups[_pinnedSetupIndex].startBlock = block.number;
         }
         uint256 amount;
@@ -144,9 +144,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _setOrAddLiquidityMiningSetupInfo(liquidityMiningSetups[i].info, liquidityMiningSetups[i].add, liquidityMiningSetups[i].disable, liquidityMiningSetups[i].index);
         }
         _configurePinned(clearPinned, setPinned, pinnedIndex);
-        if(_hasPinned) {
-            rebalancePinnedSetup();
-        }
     }
 
     function toggleSetups(uint256[] memory setupIndexes, uint256[] memory statuses) public virtual override byExtension {
@@ -420,10 +417,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _setOrAddLiquidityMiningSetupInfo(liquidityMiningSetupInfos[i], true, false, 0);
         }
         _configurePinned(false, setPinned, pinnedIndex);
-        // rebalance the pinned setup
-        if(_hasPinned) {
-            rebalancePinnedSetup();
-        }
     }
 
     function _setOrAddLiquidityMiningSetupInfo(LiquidityMiningSetupInfo memory info, bool add, bool disable, uint256 index) private {
@@ -447,7 +440,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             address mainTokenAddress = liquidityMiningSetupInfo.mainTokenAddress;
             address ammPlugin = liquidityMiningSetupInfo.ammPlugin;
             (,,address[] memory tokenAddresses) = IAMM(ammPlugin).byLiquidityPool(liquidityMiningSetupInfo.liquidityPoolTokenAddress);
-            liquidityMiningSetupInfo.ethereumAddress = address(0); 
+            liquidityMiningSetupInfo.ethereumAddress = address(0);
             if(liquidityMiningSetupInfo.involvingETH) {
                 (liquidityMiningSetupInfo.ethereumAddress,,) = IAMM(ammPlugin).data();
             }
@@ -469,13 +462,50 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             return;
         }
 
+/*
         if(setup.active && (!liquidityMiningSetupInfo.free || setup.totalSupply == 0)) {
             _executeEventualGiveBack(setup);
             setup.startBlock = block.number;
         }
+*/
 
         if(disable) {
+            require(setup.active, "Not possible");
             require(!_hasPinned || _pinnedSetupIndex != index, "Clear or change pinned first");
+            if(setup.info.free) {
+                if(setup.totalSupply == 0) {
+                    _giveBack((block.number - setup.startBlock) * setup.rewardPerBlock);
+                    if(setup.endBlock > block.number) {
+                        _giveBack((setup.endBlock - block.number) * setup.rewardPerBlock);
+                    }
+                } else {
+                    if(setup.endBlock > block.number) {
+                        _giveBack((setup.endBlock - block.number) * setup.rewardPerBlock);
+                    }
+                }
+            } else {
+                if(_hasPinned) {
+                    if(setup.endBlock > block.number) {
+                        _giveBack((setup.endBlock - block.number) * setup.rewardPerBlock);
+                    }
+                } else {
+                    if(setup.totalSupply == 0) {
+                        _giveBack((block.number - setup.startBlock) * setup.rewardPerBlock);
+                        if(setup.endBlock > block.number) {
+                            _giveBack((setup.endBlock - block.number) * setup.rewardPerBlock);
+                        }
+                    } else {
+                        if(setup.startBlock < block.number) {
+                            uint256 availableToStake = setup.info.maxStakeable - setup.totalSupply;
+                            uint256 rewardToGiveBack = setup.rewardPerBlock * (((availableToStake * 1e18) / setup.info.maxStakeable) / 1e18);
+                            _giveBack((block.number - setup.startBlock) * rewardToGiveBack);
+                        }
+                        if(setup.endBlock > block.number) {
+                            _giveBack((setup.endBlock - block.number) * setup.rewardPerBlock);
+                        }
+                    }
+                }
+            }
             setup.active = false;
             setup.endBlock = block.number;
             liquidityMiningSetupInfo.renewTimes = 0;
@@ -483,11 +513,15 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             return;
         }
 
-        require(liquidityMiningSetupInfo.free && info.originalRewardPerBlock != liquidityMiningSetupInfo.originalRewardPerBlock && (!_hasPinned || index != _pinnedSetupIndex), "Cannot edit");
+        require(liquidityMiningSetupInfo.free && (!_hasPinned || index != _pinnedSetupIndex), "Cannot edit");
 
-        if (setup.active) {
+        if (setup.active && setup.endBlock < block.number) {
+            if(setup.totalSupply == 0) {
+                _giveBack((block.number - setup.startBlock) * setup.rewardPerBlock);
+                setup.startBlock = block.number;
+            }
             uint256 difference = info.originalRewardPerBlock < liquidityMiningSetupInfo.originalRewardPerBlock ? liquidityMiningSetupInfo.originalRewardPerBlock - info.originalRewardPerBlock : info.originalRewardPerBlock - liquidityMiningSetupInfo.originalRewardPerBlock;
-            uint256 duration = setup.endBlock - setup.startBlock;
+            uint256 duration = setup.endBlock - block.number;
             uint256 amount = difference * duration;
             if (amount > 0) {
                 if (info.originalRewardPerBlock < liquidityMiningSetupInfo.originalRewardPerBlock) {
@@ -495,25 +529,23 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 } else if(!_ensureTransfer(amount)){ 
                     return;
                 }
-            }
-            if (liquidityMiningSetupInfo.free && (info.originalRewardPerBlock < liquidityMiningSetupInfo.originalRewardPerBlock || info.originalRewardPerBlock > liquidityMiningSetupInfo.originalRewardPerBlock)) {
+                setup.startBlock = block.number;
                 _rebalanceRewardPerBlock(index, difference, info.originalRewardPerBlock < liquidityMiningSetupInfo.originalRewardPerBlock);
             }
         }
         liquidityMiningSetupInfo.originalRewardPerBlock = info.originalRewardPerBlock;
         setup.info = liquidityMiningSetupInfo;
-        setup.rewardPerBlock = info.originalRewardPerBlock;
     }
 
     function _configurePinned(bool clearPinned, bool setPinned, uint256 pinnedIndex) private {
         if (clearPinned && _hasPinned) {
             if (_setups[_pinnedSetupIndex].totalSupply == 0) {
                 _executeEventualGiveBack(_pinnedSetupIndex);
-                _setups[_pinnedSetupIndex].startBlock = block.number;
             }
             _hasPinned = false;
             _rebalanceRewardPerToken(_pinnedSetupIndex, 0, false);
             _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].info.originalRewardPerBlock;
+            _setups[_pinnedSetupIndex].startBlock = block.number;
             for (uint256 i = 0; i < _setupsCount - 1; i++) {
                 if (_setups[i].info.free) continue;
                 _setups[i].startBlock = block.number;
@@ -523,22 +555,33 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         if (!clearPinned && setPinned) {
             require(_setups[pinnedIndex].info.free && _setups[pinnedIndex].active, "Invalid pinned free setup");
             // check if we already have a free pinned setup
+            uint256 oldPinnedSurplus = 0;
             if (_hasPinned) {
+                oldPinnedSurplus = _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].info.originalRewardPerBlock;
                 // calculate the old balanced reward by subtracting from the current pinned reward per block the starting reward per block
                 // remove it from the current pinned setup
-                _rebalanceRewardPerBlock(_pinnedSetupIndex, _setups[_pinnedSetupIndex].rewardPerBlock - _setups[_pinnedSetupIndex].info.originalRewardPerBlock, false);
+                _rebalanceRewardPerBlock(_pinnedSetupIndex, oldPinnedSurplus, false);
                 if (_setups[_pinnedSetupIndex].totalSupply == 0) {
                     _executeEventualGiveBack(_pinnedSetupIndex);
-                    _setups[_pinnedSetupIndex].startBlock = block.number;
                 }
+                _setups[_pinnedSetupIndex].startBlock = block.number;
+            }
+            if(_setups[pinnedIndex].totalSupply == 0) {
+                _executeEventualGiveBack(pinnedIndex);
+                _setups[pinnedIndex].startBlock = block.number;
             }
             // update pinned setup index
             _hasPinned = true;
             _pinnedSetupIndex = pinnedIndex;
-            if(_setups[_pinnedSetupIndex].totalSupply == 0) {
-                _executeEventualGiveBack(_pinnedSetupIndex);
-                _setups[_pinnedSetupIndex].startBlock = block.number;
+            if(oldPinnedSurplus == 0) {
+                for (uint256 i = 0; i < _setupsCount - 1; i++) {
+                    if (!_setups[i].info.free && _setups[i].active && block.number >= _setups[i].startBlock && block.number < _setups[i].endBlock) {
+                        oldPinnedSurplus += _setups[i].rewardPerBlock - ((_setups[i].rewardPerBlock * (_setups[i].totalSupply * 1e18 / _setups[i].info.maxStakeable)) / 1e18);
+                    }
+                }
             }
+            _setups[_pinnedSetupIndex].rewardPerBlock = _setups[_pinnedSetupIndex].info.originalRewardPerBlock;
+            _rebalanceRewardPerBlock(_pinnedSetupIndex, oldPinnedSurplus, true);
         }
     }
 
@@ -924,7 +967,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _executeEventualGiveBack(setup);
         }
 
-        uint256 newStartBlock = info.initialStartBlock > block.number ? info.initialStartBlock : block.number;
+        uint256 newStartBlock = block.number;
 
         bool wasPinned = _hasPinned && _pinnedSetupIndex == setupIndex;
 

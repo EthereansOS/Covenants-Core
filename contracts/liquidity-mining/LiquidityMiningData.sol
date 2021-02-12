@@ -17,7 +17,6 @@ struct LiquidityMiningSetupConfiguration {
 
 struct LiquidityMiningSetupInfo {
     bool free; // if the setup is a free liquidity mining setup or a locked one.
-    uint256 initialStartBlock; // liquidity mining setup start block given by creator
     uint256 blockDuration; // duration of setup
     uint256 originalRewardPerBlock;
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
