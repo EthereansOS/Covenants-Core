@@ -6,7 +6,6 @@ struct LiquidityMiningLoadBalancer {
     bool active; // if the load balancer is active or not.
     uint256 setupIndex; // pinned setup index.
     uint256 rewardPerBlock; // total reward per block inside the load balancer.
-    uint256 lastToggleBlock; // last time the load balancer was toggled.
 }
 
 struct LiquidityMiningPositionRequest {
@@ -33,6 +32,7 @@ struct LiquidityMiningSetup {
     uint256 lastUpdateBlock; // number of the block where an update was triggered.
     uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
     uint256 rewardPerBlock; // liquidity mining setup reward per single block.
+    uint256 startingRewardPerBlock; // liquidity mining setup reward per single block.
     uint256 totalSupply; // current liquidity added in this setup (used only if free is true).
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
     uint256 currentlyStaked; // currently staked amount (used only if free is false).
@@ -47,6 +47,7 @@ struct LiquidityMiningPosition {
     uint256 setupIndex; // the setup index related to this position.
     uint256 creationBlock; // block when this position was created.
     uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
+    uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).
     uint256 reward; // position reward (used only if free is false).
     uint256 lockedRewardPerBlock; // position locked reward per block (used only if free is false).
 }
