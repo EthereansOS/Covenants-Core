@@ -482,7 +482,6 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
 
     /** Private methods */
 
-
     /** @dev initializes the liquidity mining setups during the contract initialization.
       * @param liquidityMiningSetupsBytes array of liquidity mining setups as bytes.
       * @param setPinned if we are setting the pinned setup or not.
@@ -552,7 +551,16 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
                 uint256 duration = liquidityMiningSetup.endBlock - max(block.number, liquidityMiningSetup.startBlock);
                 uint256 amount = difference * duration;
                 if (amount > 0) {
-                    data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock ? ILiquidityMiningExtension(_extension).backToYou(amount) : ILiquidityMiningExtension(_extension).transferTo(amount);
+                    if (data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock) {
+                        if (_rewardTokenAddress == address(0)) {
+                            ILiquidityMiningExtension(_extension).backToYou{value : amount}(amount);	
+                        } else {
+                            IERC20(_rewardTokenAddress).approve(_extension, amount);
+                            ILiquidityMiningExtension(_extension).backToYou(amount);		
+                        }
+                    } else {
+                        ILiquidityMiningExtension(_extension).transferTo(amount);
+                    }
                 }
                 if (liquidityMiningSetup.free && (data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock || data.rewardPerBlock > liquidityMiningSetup.rewardPerBlock)) {
                     _rebalanceRewardPerBlock(index, difference, data.rewardPerBlock < liquidityMiningSetup.rewardPerBlock);
@@ -576,10 +584,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // if we're clearing the pinned setup we must also remove the excess reward per block
         if (clearPinned && _hasPinned) {
             if (_setups[_pinnedSetupIndex].totalSupply == 0) {
-                uint256 eventualToGiveBack = (block.number - _setups[_pinnedSetupIndex].startBlock) * (_setups[_pinnedSetupIndex].rewardPerBlock);
-                if(eventualToGiveBack > 0) {
-                    _giveBack(eventualToGiveBack, 0);
-                }
+                _executeEventualGiveBack(_pinnedSetupIndex);
                 _setups[_pinnedSetupIndex].startBlock = block.number;
             }
             _hasPinned = false;
@@ -592,7 +597,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
         // check if we're updating the pinned setup
         if (!clearPinned && setPinned) {
-            require(_setups[pinnedIndex].free, "Invalid pinned free setup");
+            require(_setups[pinnedIndex].free && _setups[pinnedIndex].active, "Invalid pinned free setup");
             uint256 oldBalancedRewardPerBlock;
             // check if we already have a free pinned setup
             if (_hasPinned && _setups[_pinnedSetupIndex].free) {
@@ -605,10 +610,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             _hasPinned = true;
             _pinnedSetupIndex = pinnedIndex;
             if(_setups[_pinnedSetupIndex].totalSupply == 0) {
-                uint256 eventualToGiveBack = (block.number - _setups[_pinnedSetupIndex].startBlock) * _setups[_pinnedSetupIndex].rewardPerBlock;
-                if(eventualToGiveBack > 0) {
-                    _giveBack(eventualToGiveBack, 0);
-                }
+                _executeEventualGiveBack(_pinnedSetupIndex);
                 _setups[_pinnedSetupIndex].startBlock = block.number;
             }
         }
@@ -626,6 +628,11 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         return IERC20(tokenAddress).balanceOf(subject);
     }
 
+    /** @dev gives back the reward.
+      * @param amount to give back.
+      * @param initialBalanceInput initiale balance as input (can be 0).
+      * @return true if the expected balance matches, false otherwise.
+     */
     function _giveBack(uint256 amount, uint256 initialBalanceInput) private returns (bool) {
         uint256 initialBalance = initialBalanceInput != 0 ? initialBalanceInput : _balanceOf(address(this), _rewardTokenAddress);
         uint256 expectedBalance = initialBalance - amount;
@@ -638,6 +645,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         return expectedBalance == _balanceOf(address(this), _rewardTokenAddress);
     }
 
+    /** @dev executes eventual give back function.
+      * @param setupIndex index of the setup.
+     */
     function _executeEventualGiveBack(uint256 setupIndex) private {
         uint256 eventualToGiveBack = (block.number - _setups[setupIndex].startBlock) * _calculateRewardPerBlock(setupIndex);
         if (eventualToGiveBack > 0) {
@@ -645,6 +655,10 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
+    /** @dev calculates the reward per block for credit/debt purposes.
+      * @param setupIndex index of the setup.
+      * @return toGiveBackRewardPerBlock reward per block to give back.
+     */
     function _calculateRewardPerBlock(uint256 setupIndex) private view returns (uint256 toGiveBackRewardPerBlock) {
         if ( _setups[setupIndex].free &&  _setups[setupIndex].totalSupply == 0) {
             toGiveBackRewardPerBlock =  _setups[setupIndex].rewardPerBlock;
@@ -653,9 +667,13 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
     }
 
+    /** @dev calculates the locked reward per block for credit/debt purposes.
+      * @param setupIndex index of the setup.
+      * @return reward per block.
+     */
     function _calculateLockedRewardPerBlock(uint256 setupIndex) private view returns (uint256) {
         uint256 availableToStake =  _setups[setupIndex].maxStakeable -  _setups[setupIndex].currentlyStaked;
-        return  _setups[setupIndex].currentlyStaked == 0 ?  _setups[setupIndex].rewardPerBlock :  _setups[setupIndex].rewardPerBlock * (((availableToStake * 1e18) /  _setups[setupIndex].maxStakeable) / 1e18);
+        return _setups[setupIndex].currentlyStaked == 0 ?  _setups[setupIndex].rewardPerBlock :  _setups[setupIndex].rewardPerBlock * (((availableToStake * 1e18) /  _setups[setupIndex].maxStakeable) / 1e18);
     }   
 
     /** @dev function used to rebalance the reward per block in the given free liquidity mining setup.
