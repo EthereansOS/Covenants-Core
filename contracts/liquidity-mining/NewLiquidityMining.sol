@@ -150,22 +150,20 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             creationBlock: block.number
         });
         if (chosenSetup.info.free) {
-            uint256 lastUpdate = max(chosenSetup.startBlock, chosenSetup.lastUpdateBlock);
-            if (lastUpdate != chosenSetup.startBlock && chosenSetup.totalSupply != 0) {
-                _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - lastUpdate) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+            if (chosenSetup.totalSupply != 0) {
+                _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - _setups[request.setupIndex].startBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
             }
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[request.setupIndex];
             // update the last block update variable
-            chosenSetup.lastUpdateBlock = block.number;
+            chosenSetup.startBlock = block.number;
             chosenSetup.totalSupply += liquidityPoolData.amount;
         } else {
             if (_hasPinned && _setups[_pinnedSetupIndex].info.free) {
                 chosenSetup = _setups[_pinnedSetupIndex];
-                uint256 lastUpdate = max(chosenSetup.startBlock, chosenSetup.lastUpdateBlock);
-                if (lastUpdate != chosenSetup.startBlock && chosenSetup.totalSupply != 0) {
-                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - lastUpdate) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+                if (chosenSetup.totalSupply != 0) {
+                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - _setups[_pinnedSetupIndex].startBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
                     // update the last block update variable
-                    chosenSetup.lastUpdateBlock = block.number;
+                    chosenSetup.startBlock = block.number;
                 }
                 chosenSetup.rewardPerBlock -= lockedRewardPerBlock;
             }
@@ -203,11 +201,11 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             require(msg.value == 0, "ETH not involved");
         }
         // rebalance the reward per token
-        _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+        _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - chosenSetup.startBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
         liquidityMiningPosition.reward = calculateFreeLiquidityMiningSetupReward(positionId, false);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[request.setupIndex];
         // update the last block update variable
-        chosenSetup.lastUpdateBlock = block.number;
+        chosenSetup.startBlock = block.number;
         chosenSetup.totalSupply += liquidityPoolData.amount;
     }
 
@@ -232,10 +230,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             liquidityMiningPosition.reward = liquidityMiningPosition.reward - reward;
         } else {
             // rebalance setup
-            uint256 updateBlock = min(block.number, _setups[liquidityMiningPosition.setupIndex].lastUpdateBlock);
-            _rewardPerTokenPerSetup[liquidityMiningPosition.setupIndex] += (((updateBlock - _setups[liquidityMiningPosition.setupIndex].lastUpdateBlock) * _setups[liquidityMiningPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[liquidityMiningPosition.setupIndex].totalSupply;
+            _rewardPerTokenPerSetup[liquidityMiningPosition.setupIndex] += (((block.number - _setups[liquidityMiningPosition.setupIndex].startBlock) * _setups[liquidityMiningPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[liquidityMiningPosition.setupIndex].totalSupply;
              // update the last block update variable
-            _setups[liquidityMiningPosition.setupIndex].lastUpdateBlock = updateBlock;
+            _setups[liquidityMiningPosition.setupIndex].startBlock = block.number;
             reward = calculateFreeLiquidityMiningSetupReward(positionId, false);
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[liquidityMiningPosition.setupIndex];
             require(reward > 0, "No reward?");
@@ -251,11 +248,10 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             // the locked setup must be considered finished
             if (_setups[liquidityMiningPosition.setupIndex].active && _hasPinned && _setups[_pinnedSetupIndex].info.free) {
                 LiquidityMiningSetup storage pinnedSetup = _setups[_pinnedSetupIndex];
-                uint256 lastUpdate = max(pinnedSetup.startBlock, pinnedSetup.lastUpdateBlock);
-                if (lastUpdate != pinnedSetup.startBlock && pinnedSetup.totalSupply != 0) {
-                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - lastUpdate) * pinnedSetup.rewardPerBlock) * 1e18) / pinnedSetup.totalSupply;
+                if (pinnedSetup.totalSupply != 0) {
+                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - pinnedSetup.startBlock) * pinnedSetup.rewardPerBlock) * 1e18) / pinnedSetup.totalSupply;
                     // update the last block update variable
-                    pinnedSetup.lastUpdateBlock = block.number;
+                    pinnedSetup.startBlock = block.number;
                 }
                 pinnedSetup.rewardPerBlock -= _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - ((_setups[liquidityMiningPosition.setupIndex].rewardPerBlock * (_setups[liquidityMiningPosition.setupIndex].totalSupply * 1e18 / _setups[liquidityMiningPosition.setupIndex].info.maxStakeable)) / 1e18);
             }
@@ -367,7 +363,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         LiquidityMiningPosition memory liquidityMiningPosition = _positions[positionId];
         reward = ((_rewardPerTokenPerSetup[liquidityMiningPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * liquidityMiningPosition.liquidityPoolTokenAmount) / 1e18;
         if (isExt) {
-            uint256 rpt = (((block.number - _setups[liquidityMiningPosition.setupIndex].lastUpdateBlock) * _setups[liquidityMiningPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[liquidityMiningPosition.setupIndex].totalSupply;
+            uint256 rpt = (((block.number - _setups[liquidityMiningPosition.setupIndex].startBlock) * _setups[liquidityMiningPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[liquidityMiningPosition.setupIndex].totalSupply;
             reward += ((rpt - _rewardPerTokenPaid[positionId]) * liquidityMiningPosition.liquidityPoolTokenAmount) / 1e18;
         }
         reward += liquidityMiningPosition.reward;
@@ -508,22 +504,20 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             if (isUnlock && _hasPinned && _setups[_pinnedSetupIndex].info.free) {
                 // this is an unlock, so we just need to provide back the reward per block
                 _setups[_pinnedSetupIndex];
-                uint256 lastUpdate = max(_setups[_pinnedSetupIndex].startBlock, _setups[_pinnedSetupIndex].lastUpdateBlock);
-                if (lastUpdate != _setups[_pinnedSetupIndex].startBlock && _setups[_pinnedSetupIndex].totalSupply != 0) {
-                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - lastUpdate) * _setups[_pinnedSetupIndex].rewardPerBlock) * 1e18) / _setups[_pinnedSetupIndex].totalSupply;
+                if (_setups[_pinnedSetupIndex].totalSupply != 0) {
+                    _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - _setups[_pinnedSetupIndex].startBlock) * _setups[_pinnedSetupIndex].rewardPerBlock) * 1e18) / _setups[_pinnedSetupIndex].totalSupply;
                     // update the last block update variable
-                    _setups[_pinnedSetupIndex].lastUpdateBlock = block.number;
+                    _setups[_pinnedSetupIndex].startBlock = block.number;
                 }
                 _setups[_pinnedSetupIndex].rewardPerBlock += _setups[setupIndex].rewardPerBlock * ((removedLiquidity * 1e18 / _setups[setupIndex].info.maxStakeable) / 1e18);
             } else if (!isUnlock) {
                 // the locked setup must be considered finished
                 if (_hasPinned && _setups[_pinnedSetupIndex].info.free) {
                     LiquidityMiningSetup storage pinnedSetup = _setups[_pinnedSetupIndex];
-                    uint256 lastUpdate = max(pinnedSetup.startBlock, pinnedSetup.lastUpdateBlock);
-                    if (lastUpdate != pinnedSetup.startBlock && pinnedSetup.totalSupply != 0) {
-                        _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - lastUpdate) * pinnedSetup.rewardPerBlock) * 1e18) / pinnedSetup.totalSupply;
+                    if (pinnedSetup.totalSupply != 0) {
+                        _rewardPerTokenPerSetup[_pinnedSetupIndex] += (((block.number - pinnedSetup.startBlock) * pinnedSetup.rewardPerBlock) * 1e18) / pinnedSetup.totalSupply;
                         // update the last block update variable
-                        pinnedSetup.lastUpdateBlock = block.number;
+                        pinnedSetup.startBlock = block.number;
                     }
                     pinnedSetup.rewardPerBlock -= _setups[liquidityMiningPosition.setupIndex].rewardPerBlock - ((_setups[liquidityMiningPosition.setupIndex].rewardPerBlock * (_setups[liquidityMiningPosition.setupIndex].totalSupply * 1e18 / _setups[liquidityMiningPosition.setupIndex].info.maxStakeable)) / 1e18);
                 } else {
