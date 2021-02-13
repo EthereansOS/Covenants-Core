@@ -43,6 +43,8 @@ struct LiquidityMiningSetup {
 struct LiquidityMiningPosition {
     address uniqueOwner; // address representing the owner of the position.
     uint256 setupIndex; // the setup index related to this position.
+    uint256 setupStartBlock; // the setup start block related to this position.
+    uint256 setupEndBlock; // the setup end block related to this position.
     uint256 creationBlock; // block when this position was created.
     uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
     uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).
