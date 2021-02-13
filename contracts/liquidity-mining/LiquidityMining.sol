@@ -12,6 +12,9 @@ import "./util/INativeV1.sol";
 import "./util/ERC1155Receiver.sol";
 
 contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
+
+    uint256 public constant MAX_CONTEMPORARY_LOCKED = 5;
+
     uint256 public constant ONE_HUNDRED = 1e18;
     // event that tracks liquidity mining contracts deployed
     event RewardToken(address indexed rewardTokenAddress);
@@ -146,7 +149,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         _configurePinned(clearPinned, setPinned, pinnedIndex);
     }
 
-    function toggleSetups(uint256[] memory setupIndexes, uint256[] memory statuses) public virtual override byExtension {
+    function toggleSetups(uint256[] memory setupIndexes) public virtual override byExtension {
         for (uint256 i = 0; i < setupIndexes.length; i++) {
             // TODO: add toggle
         }
@@ -601,6 +604,9 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
       * @param amount to give back.
      */
     function _giveBack(uint256 amount) private {
+        if(amount == 0) {
+            return;
+        }
         if (_rewardTokenAddress == address(0)) {
             try ILiquidityMiningExtension(_extension).backToYou{value : amount}(amount) {
             } catch {}
@@ -948,7 +954,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
     function _calculateToGiveBackRewardPerBlock(LiquidityMiningSetup memory setup) private pure returns (uint256 toGiveBackRewardPerBlock) {
         if(!setup.info.free) {
             toGiveBackRewardPerBlock = _calculateLockedRewardPerBlock(setup);
-        } else if (setup.totalSupply == 0){
+        } else if (setup.totalSupply == 0) {
             toGiveBackRewardPerBlock = setup.rewardPerBlock;
         }
     }
@@ -964,35 +970,65 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         require(!setup.active || block.number >= setup.endBlock, "Not valid activation");
 
         if(setup.active && block.number >= setup.endBlock) {
-            _executeEventualGiveBack(setup);
+            if(!_hasPinned && setup.totalSupply == 0) {
+                _giveBack((setup.endBlock - setup.startBlock) * setup.rewardPerBlock);
+            }
+            if(!setup.info.free && !_hasPinned && setup.totalSupply != 0) {
+                uint256 availableToStake = setup.info.maxStakeable - setup.totalSupply;
+                uint256 relativeRewardPerBlock = setup.rewardPerBlock * (((availableToStake * 1e18) / setup.info.maxStakeable) / 1e18);
+                _giveBack((setup.endBlock - setup.startBlock) * relativeRewardPerBlock);
+            }
+            if(!setup.info.free && _hasPinned) {
+                //Send to pinned the block end info
+            }
+            if(_hasPinned && setupIndex == _pinnedSetupIndex && setup.totalSupply == 0) {
+                _giveBack((block.number - setup.startBlock) * setup.rewardPerBlock);
+            }
         }
 
-        uint256 newStartBlock = block.number;
-
-        bool wasPinned = _hasPinned && _pinnedSetupIndex == setupIndex;
-
-        if(wasPinned) {
-            _giveBack(0 * (block.number - setup.endBlock));
+        if(info.renewTimes != 0 && !setup.info.free) {
+            uint256 count = 0;
+            for(uint256 i = 0; i < _setupsCount; i++) {
+                if(_setups[i].info.free || i == setupIndex) continue;
+                if(_setups[i].active) {
+                    count++;
+                }
+            }
+            if(count > MAX_CONTEMPORARY_LOCKED) {
+                info.renewTimes = 0;
+                setup.info = info;
+            }
         }
 
-        _hasPinned = _hasPinned && wasPinned ? false : _hasPinned;
-        setup.active = false;
+        if(info.renewTimes != 0 && _ensureTransfer(info.blockDuration * setup.rewardPerBlock) == false) {
+            info.renewTimes = 0;
+            setup.info = info;
+        }
 
         if(info.renewTimes == 0) {
+            setup.active = false;
+            if(_hasPinned && setupIndex == _pinnedSetupIndex) {
+                _hasPinned = false;
+                setup.rewardPerBlock = setup.info.originalRewardPerBlock;
+                for(uint256 i = 0; i < _setupsCount; i++) {
+                    if(_setups[i].info.free) continue;
+                    _setups[i].startBlock = block.number;
+                }
+            }
             return;
         }
 
-        if(!_ensureTransfer(info.blockDuration * setup.rewardPerBlock)) {
-            setup.info.renewTimes = 0;
-            setup.info = info;
-            return;
+        if(_hasPinned && setupIndex == _pinnedSetupIndex && setup.totalSupply != 0) {
+            _giveBack((block.number - setup.endBlock) * setup.rewardPerBlock);
         }
 
-        _hasPinned = wasPinned ? true : _hasPinned;
+        if(!setup.info.free && _hasPinned && setupIndex == _pinnedSetupIndex && setup.totalSupply != 0) {
+            //Notify pinned that there's a new locked setup
+        }
 
         info.renewTimes = info.renewTimes - 1;
         setup.info = info;
-        setup.startBlock = newStartBlock;
+        setup.startBlock = block.number;
         setup.endBlock = setup.startBlock + info.blockDuration;
         setup.totalSupply = 0;
         setup.active = true;

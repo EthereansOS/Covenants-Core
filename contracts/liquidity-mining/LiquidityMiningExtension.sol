@@ -71,10 +71,9 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** @dev method used to activate or deactivate the setups inside the liquidity mining contract.
       * @param setupIndexes array of setup indexes.
-      * @param statuses array containing uint256 for each given setup index: if 1 is given, we're activating the setup, otherwise we're deactivating it.
      */
-    function toggleSetups(uint256[] memory setupIndexes, uint256[] memory statuses) public virtual override hostOnly {
-        ILiquidityMining(_liquidityMiningContract).toggleSetups(setupIndexes, statuses);
+    function toggleSetups(uint256[] memory setupIndexes) public virtual override hostOnly {
+        ILiquidityMining(_liquidityMiningContract).toggleSetups(setupIndexes);
     }
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
