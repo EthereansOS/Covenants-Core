@@ -10,4 +10,6 @@ interface ILiquidityMiningFactory {
     function cloneLiquidityMiningDefaultExtension() external returns(address);
     function getLiquidityFarmTokenCollectionURI() external view returns (string memory);
     function getLiquidityFarmTokenURI() external view returns (string memory);
+
+    function giveAndTransferCalculator() external view returns(address);
 }
