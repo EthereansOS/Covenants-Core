@@ -161,30 +161,12 @@ contract FarmMath is IFarmMath {
 
     //6
     function _openPositionOrAddLiquidity(LiquidityMiningSetup memory setup, uint256 setupIndex, bool _hasPinned, uint256 _pinnedIndex, bytes memory) private view returns(LiquidityMiningSetup memory newSetup, uint256 toGive, uint256 toTransfer) {
-        if(_hasPinned && pinnedIndex == _pinnedIndex) {
-            for (uint256 i = 0; i < _setups.length; i++) {
-                LiquidityMiningSetup memory lockedSetup = _setups[i];
-                if(lockedSetup.info.free || !lockedSetup.active) continue;
-                if(lockedSetup.endBlock < block.number) {
-                    
-                } else {
-                    if(lockedSetup.totalSupply == 0) {
-                        toGive += (block.number - lockedSetup.startBlock) * lockedSetup.rewardPerBlock;
-                    } else {
-                        uint256 availableToStake = lockedSetup.info.maxStakeable - lockedSetup.totalSupply;
-                        uint256 relativeRewardPerBlock = lockedSetup.rewardPerBlock * (((availableToStake * 1e18) / lockedSetup.info.maxStakeable) / 1e18);
-                        toGive += ((block.number - lockedSetup.startBlock) * relativeRewardPerBlock);
-                    }
-                }
-            }
-        } else {
-            if(setup.totalSupply == 0) {
-                toGive = ((block.number - setup.startBlock) * setup.rewardPerBlock);
-            } else if(!setup.info.free) {
-                uint256 availableToStake = setup.info.maxStakeable - setup.totalSupply;
-                uint256 relativeRewardPerBlock = setup.rewardPerBlock * (((availableToStake * 1e18) / setup.info.maxStakeable) / 1e18);
-                toGive = ((block.number - setup.startBlock) * relativeRewardPerBlock);
-            }
+        if(setup.totalSupply == 0) {
+            toGive = ((block.number - setup.startBlock) * setup.rewardPerBlock);
+        } else if(!setup.info.free) {
+            uint256 availableToStake = setup.info.maxStakeable - setup.totalSupply;
+            uint256 relativeRewardPerBlock = setup.rewardPerBlock * (((availableToStake * 1e18) / setup.info.maxStakeable) / 1e18);
+            toGive = ((block.number - setup.startBlock) * relativeRewardPerBlock);
         }
     }
 }
