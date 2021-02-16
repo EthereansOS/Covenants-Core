@@ -10,6 +10,7 @@ var fs = require('fs');
 
 var LiquidityMining;
 var LiquidityMiningFactory;
+var FarmMath;
 var UniswapV2AMMV1;
 
 var byMint;
@@ -46,6 +47,9 @@ describe("LiquidityMining", () => {
         try {
             await blockchainConnection.init;
             LiquidityMining = await compile('liquidity-mining/LiquidityMining');
+
+            const size = Buffer.byteLength(LiquidityMining.bin, 'utf8') / 2;
+            console.log(`lm contract size is ${size}`);
             LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
             DFOBasedLiquidityMiningExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtensionFactory');
             DFOBasedLiquidityMiningExtension = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtension');
@@ -72,7 +76,7 @@ describe("LiquidityMining", () => {
             mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
             // mainToken = utilities.voidEthereumAddress;
             secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdtTokenAddress);
-            secondaryToken = utilities.voidEthereumAddress;
+            // secondaryToken = utilities.voidEthereumAddress;
 
             liquidityPool = new web3.eth.Contract(context.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, secondaryToken != utilities.voidEthereumAddress ? secondaryToken.options.address : wethToken.options.address).call());
 
@@ -188,15 +192,14 @@ describe("LiquidityMining", () => {
         }
     }
 
-    async function logSetups() {
-    }
-
     it("New LiquidityMining Contract by Factory by extension", async () => {
 
         rewardDestination = dfo.mvdWalletAddress;
 
+        console.log('to mare roia 1');
         var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
 
+        console.log('to mare roia 2');
         var liquidityMiningDefaultExtensionModel = await new web3.eth.Contract(LiquidityMiningDefaultExtension.abi).deploy({data : LiquidityMiningDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
 
         liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
@@ -223,6 +226,18 @@ describe("LiquidityMining", () => {
         var clonedDefaultLiquidityMiningAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
 
         var setups = [[
+            true,
+            1000,
+            "500000000000000000",
+            0,
+            0,
+            uniswapAMM.options.address,
+            liquidityPool.options.address,
+            mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address,
+            utilities.voidEthereumAddress,
+            false,
+            0,
+            /*
             uniswapAMM.options.address,
             0,
             liquidityPool.options.address,
@@ -239,7 +254,9 @@ describe("LiquidityMining", () => {
             0,
             0,
             mainToken == utilities.voidEthereumAddress || secondaryToken == utilities.voidEthereumAddress
+            */
         ],
+        /*
         [
             uniswapAMM.options.address,
             0,
@@ -257,7 +274,8 @@ describe("LiquidityMining", () => {
             0,
             0,
             mainToken == utilities.voidEthereumAddress || secondaryToken == utilities.voidEthereumAddress
-        ]];
+        ]
+    */  ];
 
         var types = [
             "address",
@@ -273,7 +291,7 @@ describe("LiquidityMining", () => {
             "0x",
             ethItemOrchestrator.options.address,
             rewardToken != utilities.voidEthereumAddress ? rewardToken.options.address : utilities.voidEthereumAddress,
-            abi.encode(["tuple(address,uint256,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,bool,uint256,uint256,bool)[]"], [setups]),
+            abi.encode(["tuple(bool,uint256,uint256,uint256,uint256,address,address,address,address,bool,uint256)[]"], [setups]),
             true,
             0
         ];
@@ -287,9 +305,9 @@ describe("LiquidityMining", () => {
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
         
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
+        console.log('to mare roia');
         var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address,bytes)"))[0].topics[1]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
-        
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);
         oneHundred = await liquidityMiningContract.methods.ONE_HUNDRED().call();
 
@@ -301,7 +319,7 @@ describe("LiquidityMining", () => {
         assert.notStrictEqual(await liquidityMiningContract.methods._extension().call(), utilities.voidEthereumAddress);
 
         var setups = await liquidityMiningContract.methods.setups().call();
-        assert.strictEqual(setups[0].rewardPerBlock, "500000000000000005");
+        // assert.strictEqual(setups[0].rewardPerBlock, "500000000000000005");
 
         for(var actor of Object.values(actors)) {
             if (mainToken != utilities.voidEthereumAddress) await mainToken.methods.approve(liquidityMiningContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);

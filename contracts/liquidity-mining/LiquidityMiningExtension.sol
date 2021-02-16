@@ -6,7 +6,6 @@ import "./ILiquidityMiningExtension.sol";
 import "./ILiquidityMining.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
-import "./LiquidityMiningData.sol";
 
 contract LiquidityMiningExtension is ILiquidityMiningExtension {
 

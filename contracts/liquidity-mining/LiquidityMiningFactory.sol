@@ -19,8 +19,6 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     // liquidity mining farm token uri
     string public liquidityFarmTokenURI;
 
-    address public override giveAndTransferCalculator;
-
     // event that tracks liquidity mining contracts deployed
     event LiquidityMiningDeployed(address indexed liquidityMiningAddress, address indexed sender, bytes liquidityMiningInitResultData);
     // event that tracks logic contract address change
@@ -30,16 +28,13 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    event GiveAndTransferCalculatorSet(address indexed);
-
-    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, address _giveAndTransferCalculator, uint256 feePercentage, string memory liquidityFarmTokenCollectionUri, string memory liquidityFarmTokenUri) {
+    constructor(address doubleProxy, address _liquidityMiningImplementationAddress, address _liquidityMiningDefaultExtension, uint256 feePercentage, string memory liquidityFarmTokenCollectionUri, string memory liquidityFarmTokenUri) {
         _doubleProxy = doubleProxy;
         liquidityFarmTokenCollectionURI = liquidityFarmTokenCollectionUri;
         liquidityFarmTokenURI = liquidityFarmTokenUri;
         emit LiquidityMiningLogicSet(liquidityMiningImplementationAddress = _liquidityMiningImplementationAddress);
         emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtension);
         emit FeePercentageSet(_feePercentage = feePercentage);
-        emit GiveAndTransferCalculatorSet(_giveAndTransferCalculator = giveAndTransferCalculator);
     }
 
     /** PUBLIC METHODS */
@@ -74,10 +69,6 @@ contract LiquidityMiningFactory is ILiquidityMiningFactory {
      */
     function updateDefaultExtensionAddress(address _liquidityMiningDefaultExtensionAddress) public onlyDFO {
         emit LiquidityMiningDefaultExtensionSet(liquidityMiningDefaultExtension = _liquidityMiningDefaultExtensionAddress);
-    }
-
-    function updateGiveAndTransferCalculator(address _giveAndTransferCalculator) public onlyDFO {
-        emit GiveAndTransferCalculatorSet(_giveAndTransferCalculator = giveAndTransferCalculator);
     }
 
     /** @dev allows the factory owner to update the liquidity farm token collection uri.

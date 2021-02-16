@@ -12,7 +12,7 @@ module.exports = {
             };
             if (process.env.blockchain_connection_string) {
                 options.fork = process.env.blockchain_connection_string;
-                options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 0.85);
+                options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 1);
             }
             global.gasLimit = options.gasLimit;
             global.accounts = await (global.web3 = new Web3(global.blockchainProvider = require("ganache-cli").provider(options), null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
