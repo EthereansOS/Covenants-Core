@@ -92,7 +92,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
       * @param rewardTokenAddress address of the reward token.
       * @return extensionReturnCall result of the extension initialization function, if it was called.  
      */
-    function init(address extension, bytes memory extensionInitData, address orchestrator, address rewardTokenAddress/*, bytes memory liquidityMiningSetupInfosBytes, bool setPinned, uint256 pinnedIndex*/) public returns(bytes memory extensionReturnCall) {
+    function init(address extension, bytes memory extensionInitData, address orchestrator, address rewardTokenAddress, bytes memory liquidityMiningSetupInfosBytes, bool setPinned, uint256 pinnedIndex) public returns(bytes memory extensionReturnCall) {
         require(_factory == address(0), "Already initialized");
         require((_extension = extension) != address(0), "extension");
         _factory = msg.sender;
@@ -101,14 +101,14 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
         (_liquidityFarmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, ILiquidityMiningFactory(_factory).getLiquidityFarmTokenCollectionURI(), address(this), ""), "");
-        /*
+
         LiquidityMiningSetupInfo[] memory liquidityMiningSetupInfos = abi.decode(liquidityMiningSetupInfosBytes, (LiquidityMiningSetupInfo[]));
         require(liquidityMiningSetupInfos.length > 0, "Invalid length");
         for(uint256 i = 0; i < liquidityMiningSetupInfos.length; i++) {
             _setOrAddLiquidityMiningSetupInfo(liquidityMiningSetupInfos[i], true, false, 0);
         }
         _configurePinned(false, setPinned, pinnedIndex);
-        */
+
     }
 
     function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override byExtension {
