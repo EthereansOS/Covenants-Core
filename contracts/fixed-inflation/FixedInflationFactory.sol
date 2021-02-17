@@ -71,7 +71,7 @@ contract FixedInflationFactory is IFixedInflationFactory {
         emit FixedInflationDefaultExtensionSet(fixedInflationDefaultExtension = _fixedInflationDefaultExtension);
     }
 
-    function cloneLiquidityMiningDefaultExtension() public override returns(address clonedExtension) {
+    function cloneFixedInflationDefaultExtension() public override returns(address clonedExtension) {
         emit ExtensionCloned(clonedExtension = _clone(fixedInflationDefaultExtension));
     }
 

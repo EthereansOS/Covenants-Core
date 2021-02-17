@@ -266,7 +266,7 @@ describe("FixedInflation", () => {
         var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
         var dFOBasedFixedInflationExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
 
-        transaction = await fixedInflationFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());
+        transaction = await fixedInflationFactory.methods.cloneFixedInflationDefaultExtension().send(blockchainConnection.getSendingOptions());
         receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
         var fixedInflationExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
 
