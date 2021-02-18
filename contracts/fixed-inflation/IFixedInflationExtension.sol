@@ -14,7 +14,11 @@ interface IFixedInflationExtension {
 
     function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) external;
 
-    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) external;
+    function flushBack(address[] memory tokenAddresses) external;
+
+    function deactivationByFailure() external;
+
+    function setEntry(FixedInflationEntry memory entryData, FixedInflationOperation[] memory operations) external;
 
     function active() external view returns(bool);
 

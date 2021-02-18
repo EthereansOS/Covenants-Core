@@ -11,24 +11,25 @@ import "./IFixedInflation.sol";
 
 contract FixedInflation is IFixedInflation {
 
-    event Entry(bytes32 indexed id);
+    event Executed(bool);
 
     uint256 public constant ONE_HUNDRED = 1e18;
 
     address public _factory;
 
     mapping(address => uint256) private _tokenIndex;
-    mapping(address => uint256) private _tokenTotalSupply;
     address[] private _tokensToTransfer;
+    uint256[] private _tokenTotalSupply;
     uint256[] private _tokenAmounts;
     uint256[] private _tokenMintAmounts;
+    uint256[] private _tokenBalanceOfBefore;
 
     address public extension;
 
-    mapping(bytes32 => FixedInflationEntry) private _entries;
-    mapping(bytes32 => FixedInflationOperation[]) private _operations;
+    FixedInflationEntry private _entry;
+    FixedInflationOperation[] private _operations;
 
-    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry[] memory newEntries, FixedInflationOperation[][] memory operationSets) public returns(bytes memory extensionInitResult) {
+    function init(address _extension, bytes memory extensionPayload, FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) public returns(bytes memory extensionInitResult) {
         require(_factory == address(0), "Already init");
         require(_extension != address(0), "Blank extension");
         _factory = msg.sender;
@@ -39,11 +40,7 @@ contract FixedInflation is IFixedInflation {
         if(keccak256(extensionPayload) != keccak256("")) {
             extensionInitResult = _call(_extension, extensionPayload);
         }
-        require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
-        (uint256 dfoFeePercentage,) = IFixedInflationFactory(_factory).feePercentageInfo();
-        for(uint256 i = 0; i < newEntries.length; i++) {
-            _add(newEntries[i], operationSets[i], dfoFeePercentage);
-        }
+        _set(newEntry, newOperations);
     }
 
     receive() external payable {
@@ -59,55 +56,56 @@ contract FixedInflation is IFixedInflation {
         _;
     }
 
-    function entry(bytes32 key) public view returns(FixedInflationEntry memory entriesArray, FixedInflationOperation[] memory operations) {
-        return (_entries[key], _operations[key]);
+    function entry() public view returns(FixedInflationEntry memory, FixedInflationOperation[] memory) {
+        return (_entry, _operations);
     }
 
-    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public override extensionOnly {
-        require(newEntries.length > 0 && newEntries.length == operationSets.length, "Same length > 0");
-        (uint256 dfoFeePercentage,) = IFixedInflationFactory(_factory).feePercentageInfo();
-        for(uint256 i = 0; i < newEntries.length; i++) {
-            FixedInflationEntryConfiguration memory entryConfiguration = newEntries[i];
-            if(entryConfiguration.add) {
-                _add(entryConfiguration.data, operationSets[i], dfoFeePercentage);
-                continue;
-            }
-            require(_entries[entryConfiguration.data.id].id == entryConfiguration.data.id, "Invalid id");
-            if(entryConfiguration.remove) {
-                _remove(entryConfiguration.data.id);
-                continue;
-            }
-            entryConfiguration.data.lastBlock = _entries[entryConfiguration.data.id].lastBlock;
-            _entries[entryConfiguration.data.id] = entryConfiguration.data;
-            if(operationSets[i].length > 0) {
-                _setOperations(entryConfiguration.data.id, operationSets[i]);
-            }
+    function setEntry(FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) public override extensionOnly {
+        _set(newEntry, newOperations);
+    }
+
+    function nextBlock() public view returns(uint256) {
+        return _entry.lastBlock == 0 ? block.number : (_entry.lastBlock + _entry.blockInterval);
+    }
+
+    function flushBack(address[] memory tokenAddresses) public override extensionOnly {
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            _transferTo(tokenAddresses[i], extension, _balanceOf(tokenAddresses[i]));
         }
     }
 
-    function nextBlock(bytes32 id) public view returns(uint256) {
-        return _entries[id].lastBlock == 0 ? block.number : (_entries[id].lastBlock + _entries[id].blockInterval);
-    }
-
-    function execute(bytes32[] memory ids, bool[] memory earnByAmounts) public activeExtensionOnly {
-        require(ids.length > 0 && ids.length == earnByAmounts.length, "Invalid input data");
-        for(uint256 i = 0; i < ids.length; i++) {
-            require(_entries[ids[i]].id == ids[i], "Invalid id");
-            require(block.number >= nextBlock(ids[i]), "Too early to call index");
-            FixedInflationEntry storage fixedInflationEntry = _entries[ids[i]];
-            fixedInflationEntry.lastBlock = block.number;
-            _collectFixedInflationOperationsTokens(_operations[ids[i]]);
-        }
-        IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer, _tokenAmounts, _tokenMintAmounts);
-        for(uint256 i = 0; i < ids.length; i++) {
-            _execute(_entries[ids[i]], _operations[ids[i]], earnByAmounts[i], msg.sender);
+    function execute(bool earnByAmounts) public activeExtensionOnly returns(bool executed) {
+        require(block.number >= nextBlock(), "Too early to execute");
+        require(_operations.length > 0, "No operations");
+        emit Executed(executed = _ensureExecute());
+        if(executed) {
+            _entry.lastBlock = block.number;
+            _execute(earnByAmounts, msg.sender);
+        } else {
+            try IFixedInflationExtension(extension).deactivationByFailure() {
+            } catch {
+            }
         }
         _clearVars();
     }
 
-    function _collectFixedInflationOperationsTokens(FixedInflationOperation[] memory operations) private {
-        for(uint256 i = 0; i < operations.length; i++) {
-            FixedInflationOperation memory operation = operations[i];
+    function _ensureExecute() private returns(bool) {
+        _collectFixedInflationOperationsTokens();
+        try IFixedInflationExtension(extension).receiveTokens(_tokensToTransfer, _tokenAmounts, _tokenMintAmounts) {
+        } catch {
+            return false;
+        }
+        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
+            if(_balanceOf(_tokensToTransfer[i]) != (_tokenBalanceOfBefore[i] + _tokenAmounts[i] + _tokenMintAmounts[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function _collectFixedInflationOperationsTokens() private {
+        for(uint256 i = 0; i < _operations.length; i++) {
+            FixedInflationOperation memory operation = _operations[i];
             _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, operation.inputTokenAmountIsByMint);
         }
     }
@@ -124,6 +122,8 @@ contract FixedInflation is IFixedInflation {
             _tokensToTransfer.push(inputTokenAddress);
             _tokenAmounts.push(0);
             _tokenMintAmounts.push(0);
+            _tokenBalanceOfBefore.push(_balanceOf(inputTokenAddress));
+            _tokenTotalSupply.push(0);
         }
         uint256 amount = _calculateTokenAmount(inputTokenAddress, inputTokenAmount, inputTokenAmountIsPercentage);
         if(inputTokenAmountIsByMint) {
@@ -133,22 +133,41 @@ contract FixedInflation is IFixedInflation {
         }
     }
 
+    function _balanceOf(address tokenAddress) private view returns (uint256) {
+        if(tokenAddress == address(0)) {
+            return address(this).balance;
+        }
+        return IERC20(tokenAddress).balanceOf(address(this));
+    }
+
     function _calculateTokenAmount(address tokenAddress, uint256 tokenAmount, bool tokenAmountIsPercentage) private returns(uint256) {
         if(!tokenAmountIsPercentage) {
             return tokenAmount;
         }
-        _tokenTotalSupply[tokenAddress] = _tokenTotalSupply[tokenAddress] != 0 ? _tokenTotalSupply[tokenAddress] : IERC20(tokenAddress).totalSupply();
-        return (_tokenTotalSupply[tokenAddress] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
+        uint256 tokenIndex = _tokenIndex[tokenAddress];
+        _tokenTotalSupply[tokenIndex] = _tokenTotalSupply[tokenIndex] != 0 ? _tokenTotalSupply[tokenIndex] : IERC20(tokenAddress).totalSupply();
+        return (_tokenTotalSupply[tokenIndex] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
     }
 
-    function _execute(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, bool earnByInput, address rewardReceiver) private {
-        for(uint256 i = 0 ; i < operations.length; i++) {
-            FixedInflationOperation memory operation = operations[i];
+    function _clearVars() private {
+        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
+            delete _tokenIndex[_tokensToTransfer[i]];
+        }
+        delete _tokensToTransfer;
+        delete _tokenTotalSupply;
+        delete _tokenAmounts;
+        delete _tokenMintAmounts;
+        delete _tokenBalanceOfBefore;
+    }
+
+    function _execute(bool earnByInput, address rewardReceiver) private {
+        for(uint256 i = 0 ; i < _operations.length; i++) {
+            FixedInflationOperation memory operation = _operations[i];
             uint256 amountIn = _calculateTokenAmount(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage);
             if(operation.ammPlugin == address(0)) {
-                _transferTo(operation.inputTokenAddress, amountIn, rewardReceiver, fixedInflationEntry.callerRewardPercentage, operation.receivers, operation.receiversPercentages);
+                _transferTo(operation.inputTokenAddress, amountIn, rewardReceiver, _entry.callerRewardPercentage, operation.receivers, operation.receiversPercentages);
             } else {
-                _swap(operation, amountIn, rewardReceiver, fixedInflationEntry.callerRewardPercentage, earnByInput);
+                _swap(operation, amountIn, rewardReceiver, _entry.callerRewardPercentage, earnByInput);
             }
         }
     }
@@ -252,29 +271,16 @@ contract FixedInflation is IFixedInflation {
         }
     }
 
-    function _clearVars() private {
-        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
-            if(_tokensToTransfer[i] == address(0) && _tokenAmounts[i] == 0 && _tokenMintAmounts[i] == 0) {
-                break;
-            }
-            delete _tokenIndex[_tokensToTransfer[i]];
-            delete _tokenTotalSupply[_tokensToTransfer[i]];
-        }
-        delete _tokensToTransfer;
-        delete _tokenAmounts;
-        delete _tokenMintAmounts;
+    function _set(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations) private {
+        require(keccak256(bytes(fixedInflationEntry.name)) != keccak256(""), "Name");
+        require(fixedInflationEntry.blockInterval > 0, "Interval");
+        require(fixedInflationEntry.callerRewardPercentage < ONE_HUNDRED, "Percentage");
+        _entry = fixedInflationEntry;
+        _setOperations(operations);
     }
 
-    function _add(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations, uint256 dfoFeePercentage) private {
-        emit Entry(fixedInflationEntry.id = keccak256(abi.encode(fixedInflationEntry, operations, dfoFeePercentage, msg.sender, block.number, block.timestamp)));
-        _entries[fixedInflationEntry.id] = fixedInflationEntry;
-        _setOperations(fixedInflationEntry.id, operations);
-    }
-
-    function _setOperations(bytes32 id, FixedInflationOperation[] memory operations) private {
-        require(_entries[id].id == id, "Invalid id");
-        require(operations.length > 0, "Length > 0");
-        delete _operations[id];
+    function _setOperations(FixedInflationOperation[] memory operations) private {
+        delete _operations;
         for(uint256 i = 0; i < operations.length; i++) {
             FixedInflationOperation memory operation = operations[i];
             require(operation.receivers.length > 0, "No receivers");
@@ -286,14 +292,8 @@ contract FixedInflation is IFixedInflation {
             }
             require(operation.receivers[operation.receivers.length - 1] != address(0), "Void receiver");
             require(percentage < ONE_HUNDRED, "More than one hundred");
-            _operations[id].push(operations[i]);
+            _operations.push(operation);
         }
-    }
-
-    function _remove(bytes32 id) private {
-        require(_entries[id].id == id, "Invalid id");
-        delete _entries[id];
-        delete _operations[id];
     }
 
     /** @dev clones the input contract address and returns the copied contract address.
