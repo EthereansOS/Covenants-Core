@@ -19,6 +19,7 @@ struct LiquidityMiningSetupInfo {
     bool free; // if the setup is a free liquidity mining setup or a locked one.
     uint256 blockDuration; // duration of setup
     uint256 originalRewardPerBlock;
+    uint256 minStakeable; // minimum amount of staking tokens.
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
     uint256 renewTimes; // if the setup is renewable or if it's one time.
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
