@@ -606,7 +606,7 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         // update the last block update variable
         _setups[setupIndex].lastUpdateBlock = block.number;
         if (positionId != 0) {
-        _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[setupIndex];
+            _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[setupIndex];
         }
         if (amount > 0) {
             fromExit ? _setups[setupIndex].totalSupply -= amount : _setups[setupIndex].totalSupply += amount;
