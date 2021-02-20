@@ -109,6 +109,22 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
 
     /** Public methods */
 
+    /** @dev returns the position with the given id.
+      * @param positionId id of the position.
+      * @returns farming position with the given id.
+     */
+    function position(uint256 positionId) public view returns (FarmingPosition memory) {
+        return _positions(positionId);
+    }
+
+    function setups() public view returns (FarmingSetup[] memory) {
+        FarmingSetup[] memory setups = new FarmingSetup[](_farmingSetupsCount);
+        for (uint256 i = 0; i < _farmingSetupsCount; i++) {
+            setups[i] = _setups[i];
+        }
+        return setups;
+    }
+
     function openPosition(FarmingPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _setups[request.setupIndex];
@@ -378,6 +394,7 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
         require(request.amount > 0, "No amount");
         // retrieve the values
         amm = IAMM(setup.info.ammPlugin);
+        require(request.amount >= setup.info.minStakeable, "Invalid liquidity.");
         liquidityPoolAmount = request.amountIsLiquidityPool ? request.amount : 0;
         mainTokenAmount = request.amountIsLiquidityPool ? 0 : request.amount;
         address[] memory tokens;
