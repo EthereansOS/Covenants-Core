@@ -19,6 +19,7 @@ struct FarmingSetupInfo {
     bool free; // if the setup is a free liquidity mining setup or a locked one.
     uint256 blockDuration; // duration of setup
     uint256 originalRewardPerBlock;
+    uint256 minStakeable; // minimum amount of staking tokens.
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
     uint256 renewTimes; // if the setup is renewable or if it's one time.
     address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
@@ -43,8 +44,6 @@ struct FarmingSetup {
 struct FarmingPosition {
     address uniqueOwner; // address representing the owner of the position.
     uint256 setupIndex; // the setup index related to this position.
-    uint256 setupStartBlock; // the setup start block related to this position.
-    uint256 setupEndBlock; // the setup end block related to this position.
     uint256 creationBlock; // block when this position was created.
     uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
     uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).

@@ -154,8 +154,6 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
         _positions[positionId] = FarmingPosition({
             uniqueOwner: uniqueOwner,
             setupIndex : request.setupIndex,
-            setupStartBlock: chosenSetup.startBlock,
-            setupEndBlock: chosenSetup.endBlock,
             liquidityPoolTokenAmount: liquidityPoolData.amount,
             mainTokenAmount: mainTokenAmount,
             reward: reward,
@@ -574,9 +572,10 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
             }
         }
 
+        bool wasActive = setup.active;
         setup.active = _ensureTransfer(setup.rewardPerBlock * setup.info.blockDuration);
 
-        if (setup.active) {
+        if (setup.active && wasActive) {
             // set new setup
             _setups[_farmingSetupsCount] = setup;
             // update old setup
@@ -589,7 +588,13 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
             _setups[_farmingSetupsCount].totalSupply = 0;
             // update farming setups count
             _farmingSetupsCount += 1;
-        } else {
+        } else if (setup.active && !wasActive) {
+            // update new setup
+            _setups[setupIndex].info.renewTimes -= 1;
+            _setups[setupIndex].startBlock = block.number;
+            _setups[setupIndex].endBlock = _setups[setupIndex].startBlock + _setups[setupIndex].info.blockDuration;
+            _setups[setupIndex].totalSupply = 0;
+        } else if (!wasActive) {
             setup.info.renewTimes = 0;
         }
     }
