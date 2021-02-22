@@ -46,7 +46,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
     // mapping containing whether a liquidity mining position has been partially reedemed or not
     mapping(uint256 => uint256) private _partiallyRedeemed;
     // mapping containing object id to setup index
-    mapping(uint256 => uint256) public _objectIdSetup;
+    mapping(uint256 => uint256) private _objectIdSetup;
     // counter for all opened positions
     uint256 private _positionsCount;
 
@@ -99,8 +99,8 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         (_farmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, IFarmFactory(_factory).getFarmTokenCollectionURI(), address(this), ""), "");
         FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
         require(farmingSetupInfos.length > 0, "Invalid length");
-        (uint256 minStakeable, address ammPlugin, address lptAddress, address ethereumAddress, bool involvingETH) = abi.decode(loadBalanceData, (tuple(uint256, address, address, address, bool)));
-        _setups[0] = FarmingSetup(FarmingSetupInfo(true, 0, 0, 0, minStakeable, 0, 0, ammPlugin, lptAddress, address(0), ethereumAddress, involvingETH, 0), true, 0, 0, 0, 0, 0, 0);
+        (uint256 minStakeable, address ammPlugin, address lptAddress, address ethereumAddress, bool involvingETH) = abi.decode(loadBalancerData, (uint256, address, address, address, bool));
+        _setups[0] = FarmingSetup(FarmingSetupInfo(true, 0, 0, minStakeable, 0, 0, ammPlugin, lptAddress, address(0), ethereumAddress, involvingETH, 0), true, 0, 0, 0, 0, 0, 0);
         _farmingSetupsCount += 1;
         for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
             _setOrAddFarmingSetupInfo(farmingSetupInfos[i], true, false, 0);
@@ -125,18 +125,18 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
 
     /** @dev returns the position with the given id.
       * @param positionId id of the position.
-      * @returns farming position with the given id.
+      * @return farming position with the given id.
      */
     function position(uint256 positionId) public view returns (FarmingPosition memory) {
-        return _positions(positionId);
+        return _positions[positionId];
     }
 
     function setups() public view returns (FarmingSetup[] memory) {
-        FarmingSetup[] memory setups = new FarmingSetup[](_farmingSetupsCount);
+        FarmingSetup[] memory farmingSetups = new FarmingSetup[](_farmingSetupsCount);
         for (uint256 i = 0; i < _farmingSetupsCount; i++) {
-            setups[i] = _setups[i];
+            farmingSetups[i] = _setups[i];
         }
-        return setups;
+        return farmingSetups;
     }
 
     function openPosition(FarmingPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
@@ -147,11 +147,11 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         // create the position id
         positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
         // create the lp data for the amm
-        LiquidityPoolData memory liquidityPoolData = _addLiquidity(request.setupIndex, request);
+        (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
         // calculate the reward
         uint256 reward;
         uint256 lockedRewardPerBlock;
-        uint256 lastBlockUpdate = chosenSetup.lastBlockUpdate == 0 ? chosenSetup.startBlock : chosenSetup.lastBlockUpdate;
+        uint256 lastBlockUpdate = chosenSetup.lastUpdateBlock == 0 ? chosenSetup.startBlock : chosenSetup.lastUpdateBlock;
         if (!chosenSetup.info.free) {
             (reward, lockedRewardPerBlock) = calculateLockedFarmingReward(request.setupIndex, mainTokenAmount, false, 0);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
@@ -187,7 +187,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         // check if farmoing position is valid
         require(chosenSetup.info.free, "Invalid add liquidity");
         // create the lp data for the amm
-        LiquidityPoolData memory liquidityPoolData = _addLiquidity(request.setupIndex, request);
+        (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(request.setupIndex, request);
         // rebalance the reward per token
         _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
         farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
@@ -211,7 +211,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
             // check if it's a partial reward or not
             if (_setups[farmingPosition.setupIndex].endBlock > block.number) {
                 // calculate the reward from the farming position creation block to the current block multiplied by the reward per block
-                (reward,) = calculateLockedLiquidityMiningSetupReward(0, 0, true, positionId);
+                (reward,) = calculateLockedFarmingReward(0, 0, true, positionId);
             }
             require(reward <= farmingPosition.reward, "Reward is bigger than expected");
             // remove the partial reward from the liquidity mining position total reward
@@ -221,7 +221,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
             _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.number - _setups[farmingPosition.setupIndex].lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
              // update the last block update variable
             _setups[farmingPosition.setupIndex].lastUpdateBlock = block.number;
-            reward = calculateFreeLiquidityMiningSetupReward(positionId, false);
+            reward = calculateFreeFarmingReward(positionId, false);
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
             require(reward > 0, "No reward?");
             farmingPosition.reward = 0;
@@ -247,7 +247,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         // retrieve farming position
         FarmingPosition memory farmingPosition = _positions[positionId];
         uint256 setupIndex = farmingPosition.setupIndex;
-        if (objectId != 0 && address(INativeV1(_liquidityFarmTokenCollection).asInteroperable(objectId)) != address(0)) {
+        if (objectId != 0 && address(INativeV1(_farmTokenCollection).asInteroperable(objectId)) != address(0)) {
             setupIndex = _objectIdSetup[objectId];
         }
         require((positionId != 0 && objectId == 0) || (objectId != 0 && positionId == 0 && _setups[setupIndex].objectId == objectId), "Invalid position");
@@ -258,12 +258,12 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
                 farmingPosition.creationBlock != 0 &&
                 removedLiquidity <= farmingPosition.liquidityPoolTokenAmount &&
                 farmingPosition.uniqueOwner == msg.sender
-            ) || INativeV1(_liquidityFarmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity, "Invalid withdraw");
+            ) || INativeV1(_farmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity, "Invalid withdraw");
         // check if liquidity mining position is valid
         require(_setups[setupIndex].info.free || (_setups[setupIndex].endBlock <= block.number), "Invalid withdraw");
         // burn the liquidity in the locked setup
         if (positionId == 0) {
-            _burnLiquidity(objectId, removedLiquidity);
+            _burnFarmTokenAmount(objectId, removedLiquidity);
         } else {
             withdrawReward(positionId);
             _setups[farmingPosition.setupIndex].totalSupply -= removedLiquidity;
@@ -275,7 +275,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
     function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         FarmingPosition storage farmingPosition = _positions[positionId];
-        require(!_setups[farmingPosition.setupIndex].info.free && farmingPosition.setupEndBlock > block.number, "Invalid unlock");
+        require(!_setups[farmingPosition.setupIndex].info.free && _setups[farmingPosition.setupIndex].endBlock > block.number, "Invalid unlock");
         uint256 rewardToGiveBack = _partiallyRedeemed[positionId];
         // must pay a penalty fee
         rewardToGiveBack += _setups[farmingPosition.setupIndex].info.penaltyFee == 0 ? 0 : (farmingPosition.reward * ((_setups[farmingPosition.setupIndex].info.penaltyFee * 1e18) / ONE_HUNDRED) / 1e18);
@@ -290,7 +290,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         _setups[0].rewardPerBlock += farmingPosition.lockedRewardPerBlock;
         _setups[0].lastUpdateBlock = block.number;
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
-        _burnLiquidity(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
+        _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
         _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
     }
 
@@ -341,8 +341,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
     /** Private methods */
 
     function _setOrAddFarmingSetupInfo(FarmingSetupInfo memory info, bool add, bool disable, uint256 setupIndex) private {
-        FarmingSetup storage setup = _setups[setupIndex];
-        FarmingSetupInfo memory farmingSetupInfo = add ? info : setup.info;
+        FarmingSetupInfo memory farmingSetupInfo = info;
         require(
             farmingSetupInfo.ammPlugin != address(0) &&
             farmingSetupInfo.liquidityPoolTokenAddress != address(0) &&
@@ -352,7 +351,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         );
         if(add || !disable) {
             farmingSetupInfo.renewTimes = farmingSetupInfo.renewTimes + 1;
-            if(farmingSetupInfo.renewTimes == 0) {
+            if(farmingSetupInfo.renewTimes != 0) {
                 farmingSetupInfo.renewTimes = farmingSetupInfo.renewTimes - 1;
             }
         }
@@ -384,6 +383,8 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
             _farmingSetupsCount += 1;
             return;
         }
+        FarmingSetup storage setup = _setups[setupIndex];
+        farmingSetupInfo = setup.info;
 
         if(disable) {
             require(setup.active && setupIndex != 0, "Not possible");
@@ -403,7 +404,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
                     } else {
                         require(_ensureTransfer(amount), "Insufficient reward in extension.");
                     }
-                    _updateFreeSetup(setupIndex, 0, 0, difference, info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock);
+                    _updateFreeSetup(setupIndex, difference, 0, info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock);
                 }
             }
             farmingSetupInfo.originalRewardPerBlock = info.originalRewardPerBlock;
@@ -450,7 +451,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function _addLiquidity(uint256 setupIndex, FarmingPositionRequest memory request) private returns(LiquidityPoolData memory liquidityPoolData) {
+    function _addLiquidity(uint256 setupIndex, FarmingPositionRequest memory request) private returns(LiquidityPoolData memory liquidityPoolData, uint256 tokenAmount) {
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount) = _transferToMeAndCheckAllowance(_setups[setupIndex], request);
         // liquidity pool data struct for the AMM
         liquidityPoolData = LiquidityPoolData(
@@ -461,6 +462,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
             _setups[setupIndex].info.involvingETH,
             address(this)
         );
+        tokenAmount = mainTokenAmount;
         // amount is lp check
         if (!liquidityPoolData.amountIsLiquidityPool) {
             // retrieve the poolTokenAmount from the amm
@@ -501,7 +503,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
             remainingLiquidity = farmingPosition.liquidityPoolTokenAmount - removedLiquidity;
         }
         // retrieve fee stuff
-        (uint256 exitFeePercentage, address exitFeeWallet) = ILiquidityMiningFactory(_factory).feePercentageInfo();
+        (uint256 exitFeePercentage, address exitFeeWallet) = IFarmFactory(_factory).feePercentageInfo();
         // pay the fees!
         if (exitFeePercentage > 0) {
             uint256 fee = (lpData.amount * ((exitFeePercentage * 1e18) / ONE_HUNDRED)) / 1e18;
@@ -548,7 +550,8 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
     /** @dev updates the free setup with the given index.
       * @param setupIndex index of the setup that we're updating.
       * @param amount amount of liquidity that we're adding/removeing.
-      * @param positionId 
+      * @param positionId position id.
+      * @param fromExit if it's from an exit or not.
      */
     function _updateFreeSetup(uint256 setupIndex, uint256 amount, uint256 positionId, bool fromExit) private {
         if (_setups[setupIndex].totalSupply != 0) {
@@ -589,7 +592,7 @@ contract PinnedFarmMain is IFarmMain, ERC1155Receiver {
         if (!setup.info.free) {
             // count the number of currently active locked setups
             uint256 count = 0;
-            for(uint256 i = 0; i < _setups.length; i++) {
+            for(uint256 i = 0; i < _farmingSetupsCount; i++) {
                 if(_setups[i].info.free || i == setupIndex) continue;
                 if(_setups[i].active) {
                     // increase the counter

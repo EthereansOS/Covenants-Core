@@ -3,7 +3,7 @@ pragma solidity ^0.7.6;
 
 import "../util/DFOHub.sol";
 
-contract DFOBasedLiquidityMiningExtensionFactory {
+contract DFOBasedFarmExtensionFactory {
 
     address public doubleProxy;
 
