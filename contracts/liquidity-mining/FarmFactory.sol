@@ -34,7 +34,7 @@ contract FarmFactory is IFarmFactory {
 
     constructor(address doubleProxy, address _simpleFarmMainImplAddress, address _pinnedFarmMainImplAddress, address _farmDefaultExtension, uint256 feePercentage, string memory farmTokenCollectionUri, string memory farmTokenUri) {
         _doubleProxy = doubleProxy;
-        farmTokenCollectionUri = farmTokenCollectionUri;
+        farmTokenCollectionURI = farmTokenCollectionUri;
         farmTokenURI = farmTokenUri;
         emit SimpleFarmMainLogicSet(simpleFarmMainImplAddress = _simpleFarmMainImplAddress);
         emit PinnedFarmMainLogicSet(pinnedFarmMainImplAddress = _pinnedFarmMainImplAddress);

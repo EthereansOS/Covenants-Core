@@ -2,13 +2,13 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "../ILiquidityMiningExtension.sol";
-import "../ILiquidityMining.sol";
+import "../IFarmExtension.sol";
+import "../IFarmMain.sol";
 import "../util/IERC20.sol";
-import "../LiquidityMiningData.sol";
+import "../FarmData.sol";
 import "../util/DFOHub.sol";
 
-contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
+contract DFOBasedFarmExtension is IFarmExtension {
 
     string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
 
@@ -45,7 +45,7 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
     function init(bool byMint, address host) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
         require((_doubleProxy = host) != address(0), "blank host");
-        _rewardTokenAddress = ILiquidityMining(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
+        _rewardTokenAddress = IFarmMain(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
     }
 
@@ -86,11 +86,9 @@ contract DFOBasedLiquidityMiningExtension is ILiquidityMiningExtension {
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
       * @param liquidityMiningSetups array containing all the liquidity mining setups.
-      * @param setPinned if we're updating the pinned setup or not.
-      * @param pinnedIndex new pinned setup index.
      */
-    function setLiquidityMiningSetups(LiquidityMiningSetupConfiguration[] memory liquidityMiningSetups, bool clearPinned, bool setPinned, uint256 pinnedIndex) public override hostOnly {
-        ILiquidityMining(_liquidityMiningContract).setLiquidityMiningSetups(liquidityMiningSetups, clearPinned, setPinned, pinnedIndex);
+    function setFarmingSetups(FarmingSetupConfiguration[] memory liquidityMiningSetups) public override hostOnly {
+        IFarmMain(_liquidityMiningContract).setFarmingSetups(liquidityMiningSetups);
     }
 
     /** PRIVATE METHODS */

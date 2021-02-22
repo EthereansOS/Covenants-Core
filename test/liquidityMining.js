@@ -48,8 +48,6 @@ describe("LiquidityMining", () => {
             await blockchainConnection.init;
             LiquidityMining = await compile('liquidity-mining/LiquidityMining');
 
-            const size = Buffer.byteLength(LiquidityMining.bin, 'utf8') / 2;
-            console.log(`lm contract size is ${size}`);
             LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
             DFOBasedLiquidityMiningExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtensionFactory');
             DFOBasedLiquidityMiningExtension = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtension');
@@ -196,10 +194,8 @@ describe("LiquidityMining", () => {
 
         rewardDestination = dfo.mvdWalletAddress;
 
-        console.log('to mare roia 1');
         var liquidityMiningModel = await new web3.eth.Contract(LiquidityMining.abi).deploy({data : LiquidityMining.bin}).send(blockchainConnection.getSendingOptions());
 
-        console.log('to mare roia 2');
         var liquidityMiningDefaultExtensionModel = await new web3.eth.Contract(LiquidityMiningDefaultExtension.abi).deploy({data : LiquidityMiningDefaultExtension.bin}).send(blockchainConnection.getSendingOptions());
 
         liquidityMiningFactory = await new web3.eth.Contract(LiquidityMiningFactory.abi).deploy({data : LiquidityMiningFactory.bin, arguments : [dfo.doubleProxyAddress, liquidityMiningModel.options.address, liquidityMiningDefaultExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
@@ -305,7 +301,7 @@ describe("LiquidityMining", () => {
         var deployTransaction = await liquidityMiningFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
         
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-        console.log('to mare roia');
+
         var liquidityMiningContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("LiquidityMiningDeployed(address,address,bytes)"))[0].topics[1]);
         liquidityMiningContract = await new web3.eth.Contract(LiquidityMining.abi, liquidityMiningContractAddress);
         assert.notStrictEqual(liquidityMiningContract.options.address, utilities.voidEthereumAddress);

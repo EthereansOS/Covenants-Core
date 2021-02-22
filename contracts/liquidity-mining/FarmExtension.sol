@@ -7,7 +7,7 @@ import "./IFarmMain.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
 
-contract LiquidityMiningExtension is IFarmExtension {
+contract FarmExtension is IFarmExtension {
 
     // wallet who has control on the extension
     address internal _host;
