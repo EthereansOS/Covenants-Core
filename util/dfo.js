@@ -86,7 +86,10 @@ async function loadDFOByProxy(dfoProxyAddress) {
     }
     data.proxy = new web3.eth.Contract(context.dfoProxyABI, data.dfoProxyAddress);
 
-    data.doubleProxyAddress = await data.proxy.methods.getDoubleProxyAddress().call();
+    try {
+        data.doubleProxyAddress = await data.proxy.methods.getDoubleProxyAddress().call();
+    } catch(e) {
+    }
     data.mvdWalletAddress = await data.proxy.methods.getMVDWalletAddress().call();
 
     data.votingToken = new web3.eth.Contract(context.dfoVotingTokenABI, data.votingTokenAddress = await data.proxy.methods.getToken().call());

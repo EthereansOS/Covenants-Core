@@ -8,7 +8,7 @@ module.exports = {
                 gasLimit: 10000000,
                 db: memdown(),
                 total_accounts: 15,
-                default_balance_ether: 999999999999
+                default_balance_ether: 9999999999999999999
             };
             if (process.env.blockchain_connection_string) {
                 options.fork = process.env.blockchain_connection_string;
@@ -32,8 +32,12 @@ module.exports = {
         };
     },
     async fastForward(blocks) {
-        for (var i = 0; i < blocks; i++) {
-            await web3.eth.sendTransaction(this.getSendingOptions({ to: accounts[0], value: "1" }));
+        var blockNumber = parseInt(await web3.eth.getBlockNumber()) + (blocks = blocks && parseInt(blocks) || 1);
+        while (blocks-- > 0) {
+            web3.currentProvider.sendAsync({ "id": new Date().getTime(), "jsonrpc": "2.0", "method": "evm_mine", "params": [] }, () => {});
+        }
+        while (parseInt(await web3.eth.getBlockNumber()) < blockNumber) {
+            await new Promise(ok => setTimeout(ok, 1000));
         }
     },
     async jumpToBlock(block, notIncluded) {
@@ -52,5 +56,37 @@ module.exports = {
         } catch (error) {
             return '0';
         }
+    },
+    unlockAccounts(accountsInput) {
+        return Promise.all((accountsInput = accountsInput instanceof Array ? accountsInput : [accountsInput]).map(it => new Promise(function(ok, ko) {
+            try {
+                web3.currentProvider.sendAsync({
+                    "id": new Date().getTime(),
+                    "jsonrpc": "2.0",
+                    "method": "evm_unlockUnknownAccount",
+                    "params": [it = web3.utils.toChecksumAddress(it)]
+                }, async function(error, response) {
+                    if (error) {
+                        return ko(error);
+                    }
+                    if (!response || !response.result) {
+                        return ko((response && response.result) || response);
+                    }
+                    try {
+                        await web3.eth.sendTransaction({
+                            to: it,
+                            from: accounts[accounts.length - 1],
+                            gasLimit: global.gasLimit,
+                            value: web3.utils.toWei("99999", "ether")
+                        });
+                    } catch(e) {
+                        return ko(e);
+                    }
+                    return ok((response && response.result) || response);
+                });
+            } catch(e) {
+                return ko(e);
+            }
+        })));
     }
 }

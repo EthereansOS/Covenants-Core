@@ -876,10 +876,10 @@ describe("FixedInflation", () => {
             lastBlock: 0,
             name: "New Cataldo",
             blockInterval: 10,
-            callerRewardPercentage: 100,
+            callerRewardPercentage: utilities.toDecimals("0.02", "18"),
             operations: [{
                 inputTokenAddress: utilities.voidEthereumAddress,
-                inputTokenAmount: utilities.toDecimals("0.01", "18"),
+                inputTokenAmount: utilities.toDecimals("0.02", "18"),
                 inputTokenAmountIsPercentage: false,
                 inputTokenAmountIsByMint: false,
                 ammPlugin: utilities.voidEthereumAddress,
@@ -947,7 +947,7 @@ describe("FixedInflation", () => {
                 exitInETH: false
             }, {
                 inputTokenAddress: context.buidlTokenAddress,
-                inputTokenAmount: utilities.toDecimals("0.01", "18"),
+                inputTokenAmount: utilities.toDecimals("600", "18"),
                 inputTokenAmountIsPercentage: false,
                 inputTokenAmountIsByMint: false,
                 ammPlugin: uniswapAMM.options.address,
@@ -957,8 +957,8 @@ describe("FixedInflation", () => {
                 swapPath: [
                     context.wethTokenAddress
                 ],
-                receivers: [accounts[1]],
-                receiversPercentages: [],
+                receivers: ["0x5D40c724ba3e7Ffa6a91db223368977C522BdACD", "0x32c87193C2cC9961F2283FcA3ca11A483d8E426B", "0x25756f9C2cCeaCd787260b001F224159aB9fB97A"],
+                receiversPercentages: ["220000000000000000", "50000000000000000"],
                 enterInETH: false,
                 exitInETH: true
             }, {
@@ -983,6 +983,25 @@ describe("FixedInflation", () => {
         global.totalSupply = await (new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress).methods.totalSupply().call());
         global.perc = await calculatePercentage(global.totalSupply, 1500000000000);
         global.expectedSupply = web3.utils.toBN(global.totalSupply).add(web3.utils.toBN(global.perc)).toString();
+
+        var fixedInflationLalla = new web3.eth.Contract(FixedInflation.abi, "0x6F5Bdcf1f32D39EDFfAE06866eb055425da2c783");
+        var lallaEntry = await fixedInflationLalla.methods.entry().call();
+
+        var entry = {};
+        Object.entries(lallaEntry[0]).forEach(it => isNaN(parseInt(it[0])) && (entry[it[0]] = it[1]));
+        entry.operations = [];
+        for(var operation of lallaEntry[1]) {
+            var op = {};
+            Object.entries(operation).forEach(it => isNaN(parseInt(it[0])) && (op[it[0]] = it[1]));
+            op.receivers = JSON.parse(JSON.stringify(operation.receivers));
+            op.receiversPercentages = JSON.parse(JSON.stringify(operation.receiversPercentages));
+            op.inputTokenAmountIsByMint = false;
+            entry.operations.push(op);
+        }
+
+        console.log(JSON.stringify(entry));
+
+        newEntries = [entry];
 
         var entryCode = `FixedInflationEntry("${newEntries[0].name}", ${newEntries[0].blockInterval}, ${newEntries[0].lastBlock || 0}, ${newEntries[0].callerRewardPercentage})`;
         var operations = "";
@@ -1045,7 +1064,7 @@ describe("FixedInflation", () => {
         } else {
             await fixedInflationExtension.methods.setEntry(newEntries[0], newEntries.map(it => it.operations)[0]).send(blockchainConnection.getSendingOptions());
         }
-        assert.strictEqual((await fixedInflation.methods.entry().call())[0].name, "New Cataldo");
+        assert.strictEqual((await fixedInflation.methods.entry().call())[0].name, newEntries[0].name);
 
         console.log(JSON.stringify((await fixedInflation.methods.entry().call())[1]));
     });
@@ -1057,7 +1076,7 @@ describe("FixedInflation", () => {
         entry = entry[0];
         var receiver = accounts[0];
 
-        await blockchainConnection.fastForward(entry.blockInterval);
+        //await blockchainConnection.fastForward(entry.blockInterval);
 
         /*var balanceOfExpected = await web3.eth.getBalance(receiver);
         balanceOfExpected = web3.utils.toBN(balanceOfExpected).add(web3.utils.toBN(await calculateTokenPercentage(operation.inputTokenAddress, operation.inputTokenAmount, operation.inputTokenAmountIsPercentage, entry.callerRewardPercentage))).toString();
