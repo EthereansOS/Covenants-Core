@@ -114,7 +114,8 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
             if(data.liquidityPoolTokens[i] != _ethereumAddress) {
                 _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IERC20(data.liquidityPoolTokens[i]).balanceOf(address(this)));
             } else {
-                payable(data.receiver).transfer(tokensAmounts[i] = address(this).balance);
+                (bool result,) = data.receiver.call{value:tokensAmounts[i] = address(this).balance}("");
+                require(result, "ETH transfer failed");
             }
         }
     }
@@ -133,7 +134,8 @@ contract MooniswapAMMV1 is IMooniswapAMMV1, AMM {
             }
         }
         if(data.path[data.path.length - 1] == _ethereumAddress) {
-            payable(data.receiver).transfer(outputAmount);
+            (bool result,) = data.receiver.call{value:outputAmount}("");
+            require(result, "ETH transfer failed");
         } else {
             _safeTransfer(data.path[data.path.length - 1], data.receiver, outputAmount);
         }

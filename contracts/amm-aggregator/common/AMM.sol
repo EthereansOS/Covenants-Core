@@ -323,7 +323,8 @@ abstract contract AMM is IAMM {
         }
         if(tokenAddress == address(0)) {
             if(address(this).balance >= amount) {
-                payable(msg.sender).transfer(amount);
+                (bool result,) = msg.sender.call{value:amount}("");
+                require(result, "ETH transfer failed");
             }
             return;
         }

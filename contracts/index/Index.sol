@@ -146,7 +146,8 @@ contract Index is ERC1155Receiver {
             for(uint256 i = 0; i < tokens[objectId].length; i++) {
                 uint256 tokenValue = (amounts[objectId][i] * value) / 1e18;
                 if(tokens[objectId][i] == address(0)) {
-                    payable(receiver).transfer(tokenValue);
+                    (bool result,) = receiver.call{value:tokenValue}("");
+                    require(result, "ETH transfer failed");
                 } else {
                     _safeTransfer(tokens[objectId][i], receiver, tokenValue);
                 }

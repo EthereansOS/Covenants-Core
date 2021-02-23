@@ -242,7 +242,8 @@ contract FixedInflation is IFixedInflation {
             return;
         }
         if(erc20TokenAddress == address(0)) {
-            payable(to).transfer(value);
+            (bool result,) = to.call{value:value}("");
+            require(result, "ETH transfer failed");
             return;
         }
         _safeTransfer(erc20TokenAddress, to, value);

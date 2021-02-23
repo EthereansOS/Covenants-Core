@@ -84,7 +84,8 @@ contract LiquidityMiningExtension is ILiquidityMiningExtension {
         if(_rewardTokenAddress != address(0)) {
             return _byMint ? _mintAndTransfer(_rewardTokenAddress, _liquidityMiningContract, amount) : _safeTransfer(_rewardTokenAddress, _liquidityMiningContract, amount);
         }
-        payable(_liquidityMiningContract).transfer(amount);
+        (bool result,) = _liquidityMiningContract.call{value:amount}("");
+        require(result, "ETH transfer failed");
     }
 
     /** @dev transfers the input amount from the caller liquidity mining contract to the extension.

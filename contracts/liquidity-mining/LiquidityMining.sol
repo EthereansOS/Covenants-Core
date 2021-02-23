@@ -256,7 +256,12 @@ contract LiquidityMining is ILiquidityMining, ERC1155Receiver {
         }
         // transfer the reward
         if (reward > 0) {
-            _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward) : payable(liquidityMiningPosition.uniqueOwner).transfer(reward);
+            if(_rewardTokenAddress != address(0)) {
+                _safeTransfer(_rewardTokenAddress, liquidityMiningPosition.uniqueOwner, reward);
+            } else {
+                (bool result,) = liquidityMiningPosition.uniqueOwner.call{value:reward}("");
+                require(result, "ETH transfer failed");
+            }
             _rewardPaid += reward;
         }
         // update the creation block for the position

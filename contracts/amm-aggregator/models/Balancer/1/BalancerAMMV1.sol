@@ -100,7 +100,8 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
             } else {
                 if(!_multi) {
                     IWETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
-                    payable(data.receiver).transfer(tokensAmounts[i]);
+                    (bool result,) = data.receiver.call{value: tokensAmounts[i]}("");
+                    require(result, "ETH transfer failed");
                 }
             }
         }
@@ -119,7 +120,8 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         }
         if(data.exitInETH) {
             IWETH(_ethereumAddress).withdraw(outputAmount);
-            payable(data.receiver).transfer(outputAmount);
+            (bool result,) = data.receiver.call{value:outputAmount}("");
+            require(result, "ETH transfer failed");
         } else {
             _safeTransfer(data.path[data.path.length - 1], data.receiver, outputAmount);
         }
