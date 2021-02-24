@@ -2,21 +2,21 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./PrestoData.sol";
+import "./IPresto.sol";
 import "./util/IERC20.sol";
 import "./util/DFOHub.sol";
 import "../amm-aggregator/common/IAMM.sol";
 
-contract Presto {
+contract Presto is IPresto {
 
-    uint256 public constant ONE_HUNDRED = 1e18;
+    uint256 public override constant ONE_HUNDRED = 1e18;
 
     mapping(address => uint256) private _tokenIndex;
     address[] private _tokensToTransfer;
     uint256[] private _tokenAmounts;
 
-    address public doubleProxy;
-    uint256 public feePercentage;
+    address public override doubleProxy;
+    uint256 public override feePercentage;
 
     constructor(address _doubleProxy, uint256 _feePercentage) {
         doubleProxy = _doubleProxy;
@@ -28,25 +28,35 @@ contract Presto {
         _;
     }
 
-    function feePercentageInfo() public view returns (uint256, address) {
+    function feePercentageInfo() public override view returns (uint256, address) {
         return (feePercentage, IMVDProxy(IDoubleProxy(doubleProxy).proxy()).getMVDWalletAddress());
     }
 
-    function setDoubleProxy(address _doubleProxy) public onlyDFO {
+    function setDoubleProxy(address _doubleProxy) public override onlyDFO {
         doubleProxy = _doubleProxy;
     }
 
-    function setFeePercentage(uint256 _feePercentage) public onlyDFO {
+    function setFeePercentage(uint256 _feePercentage) public override onlyDFO {
         feePercentage = _feePercentage;
     }
 
-    function execute(PrestoOperation[] memory operations) public payable {
+    function execute(PrestoOperation[] memory operations) public override payable {
         _transferToMe(operations);
-        _execute(operations, msg.sender);
+        for(uint256 i = 0 ; i < operations.length; i++) {
+            PrestoOperation memory operation = operations[i];
+            if(operation.ammPlugin == address(0)) {
+                _transferTo(operation.inputTokenAddress, operation.inputTokenAmount, operation.receivers, operation.receiversPercentages);
+            } else if(operation.liquidityPoolAddresses.length == 0) {
+                _addLiquidity(operation);
+            } else {
+                _swap(operation);
+            }
+        }
+        _flushAndClear();
     }
 
     function _transferToMe(PrestoOperation[] memory operations) private {
-        _collectFixedInflationOperationsTokens(operations);
+        _collectTokens(operations);
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
             if(_tokensToTransfer[i] == address(0)) {
                 require(msg.value == _tokenAmounts[i], "Incorrect ETH value");
@@ -54,13 +64,26 @@ contract Presto {
                 _safeTransferFrom(_tokensToTransfer[i], msg.sender, address(this), _tokenAmounts[i]);
             }
         }
-        _clearVars();
     }
 
-    function _collectFixedInflationOperationsTokens(PrestoOperation[] memory _operations) private {
-        for(uint256 i = 0; i < _operations.length; i++) {
-            PrestoOperation memory operation = _operations[i];
-            _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount);
+    function _collectTokens(PrestoOperation[] memory operations) private {
+        for(uint256 i = 0; i < operations.length; i++) {
+            PrestoOperation memory operation = operations[i];
+            if(operation.ammPlugin != address(0) && operation.liquidityPoolAddresses.length == 0) {
+                IAMM amm = IAMM(operation.ammPlugin);
+                (address ethereumAddress,,) = (amm.data());
+                (uint256[] memory amounts, address[] memory tokensAddresses) = amm.byLiquidityPoolAmount(operation.inputTokenAddress, operation.inputTokenAmount);
+                bool hasEth = false;
+                for(uint256 z = 0; z < tokensAddresses.length; z++) {
+                    if(tokensAddresses[z] == ethereumAddress) {
+                        hasEth = true;
+                    }
+                    _collectTokenData(operation.enterInETH && tokensAddresses[z] == ethereumAddress ? address(0) : tokensAddresses[z], amounts[z]);
+                }
+                require(!operation.enterInETH || hasEth, "Wrong use of enterInETH in addLiquidity");
+            } else {
+                _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount);
+            }
         }
     }
 
@@ -79,36 +102,36 @@ contract Presto {
         _tokenAmounts[position] = _tokenAmounts[position] + inputTokenAmount;
     }
 
-    function _balanceOf(address tokenAddress) private view returns (uint256) {
-        if(tokenAddress == address(0)) {
-            return address(this).balance;
-        }
-        return IERC20(tokenAddress).balanceOf(address(this));
-    }
-
-    function _clearVars() private {
+    function _flushAndClear() private {
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
+            _safeTransfer(_tokensToTransfer[i], msg.sender, _balanceOf(_tokensToTransfer[i]));
             delete _tokenIndex[_tokensToTransfer[i]];
         }
         delete _tokensToTransfer;
         delete _tokenAmounts;
     }
 
-    function _execute(PrestoOperation[] memory _operations, address rewardReceiver) private {
-        for(uint256 i = 0 ; i < _operations.length; i++) {
-            PrestoOperation memory operation = _operations[i];
-            uint256 amountIn = operation.inputTokenAmount;
-            if(operation.ammPlugin == address(0)) {
-                _transferTo(operation.inputTokenAddress, amountIn, rewardReceiver, 0, operation.receivers, operation.receiversPercentages);
-            } else {
-                _swap(operation, amountIn, rewardReceiver, 0, false);
-            }
+    function _balanceOf(address tokenAddress) private view returns(uint256) {
+        if(tokenAddress == address(0)) {
+            return address(this).balance;
         }
+        return IERC20(tokenAddress).balanceOf(address(this));
     }
 
-    function _swap(PrestoOperation memory operation, uint256 amountIn, address rewardReceiver, uint256 callerRewardPercentage, bool earnByInput) private {
+    function _addLiquidity(PrestoOperation memory operation) private {
+        LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
+            operation.inputTokenAddress,
+            operation.inputTokenAmount,
+            address(0),
+            true,
+            operation.enterInETH,
+            address(this)
+        );
+        (uint256 amountOut,,) = IAMM(operation.ammPlugin).addLiquidity(liquidityPoolData);
+        _transferTo(operation.inputTokenAddress, amountOut, operation.receivers, operation.receiversPercentages);
+    }
 
-        uint256 inputReward = earnByInput ? _calculateRewardPercentage(amountIn, callerRewardPercentage) : 0;
+    function _swap(PrestoOperation memory operation) private {
 
         (address ethereumAddress,,) = IAMM(operation.ammPlugin).data();
 
@@ -124,7 +147,7 @@ contract Presto {
             operation.liquidityPoolAddresses,
             operation.swapPath,
             operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
-            amountIn - inputReward,
+            operation.inputTokenAmount,
             address(this)
         );
 
@@ -134,30 +157,22 @@ contract Presto {
 
         uint256 amountOut;
         if(swapData.enterInETH) {
-            amountOut = IAMM(operation.ammPlugin).swapLiquidity{value : amountIn}(swapData);
+            amountOut = IAMM(operation.ammPlugin).swapLiquidity{value : operation.inputTokenAmount}(swapData);
         } else {
             amountOut = IAMM(operation.ammPlugin).swapLiquidity(swapData);
         }
-
-        if(earnByInput) {
-            _safeTransfer(operation.enterInETH ? address(0) : operation.inputTokenAddress, rewardReceiver, inputReward);
-        }
-        _transferTo(operation.exitInETH ? address(0) : outputToken, amountOut, earnByInput ? address(0) : rewardReceiver, earnByInput ? 0 : callerRewardPercentage, operation.receivers, operation.receiversPercentages);
+        _transferTo(operation.exitInETH ? address(0) : outputToken, amountOut, operation.receivers, operation.receiversPercentages);
     }
 
     function _calculateRewardPercentage(uint256 totalAmount, uint256 rewardPercentage) private pure returns (uint256) {
         return (totalAmount * ((rewardPercentage * 1e18) / ONE_HUNDRED)) / 1e18;
     }
 
-    function _transferTo(address erc20TokenAddress, uint256 totalAmount, address rewardReceiver, uint256 callerRewardPercentage, address[] memory receivers, uint256[] memory receiversPercentages) private {
+    function _transferTo(address erc20TokenAddress, uint256 totalAmount, address[] memory receivers, uint256[] memory receiversPercentages) private {
         uint256 availableAmount = totalAmount;
 
-        uint256 currentPartialAmount = rewardReceiver == address(0) ? 0 : _calculateRewardPercentage(availableAmount, callerRewardPercentage);
-        _safeTransfer(erc20TokenAddress, rewardReceiver, currentPartialAmount);
-        availableAmount -= currentPartialAmount;
-
         (uint256 dfoFeePercentage, address dfoWallet) = feePercentageInfo();
-        currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(availableAmount, dfoFeePercentage);
+        uint256 currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(availableAmount, dfoFeePercentage);
         _safeTransfer(erc20TokenAddress, dfoWallet, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 

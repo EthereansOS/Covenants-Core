@@ -6,17 +6,17 @@ pragma abicoder v2;
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/ERC1155Receiver.sol";
-import "./util/DFOHub.sol";
+import "./IIndex.sol";
 
-contract Index is ERC1155Receiver {
+contract Index is IIndex, ERC1155Receiver {
 
-    address public _doubleProxy;
+    address public override _doubleProxy;
 
     mapping(address => bool) _temporaryIndex;
 
     event NewIndex(uint256 indexed id, address indexed interoperableInterfaceAddress, address indexed token, uint256 amount);
 
-    address public collection;
+    address public override collection;
 
     mapping(uint256 => address[]) public tokens;
     mapping(uint256 => uint256[]) public amounts;
@@ -31,15 +31,15 @@ contract Index is ERC1155Receiver {
         _;
     }
 
-    function setDoubleProxy(address newDoubleProxy) public onlyDFO {
+    function setDoubleProxy(address newDoubleProxy) public override onlyDFO {
         _doubleProxy = newDoubleProxy;
     }
 
-    function setCollectionUri(string memory uri) public onlyDFO {
+    function setCollectionUri(string memory uri) public override onlyDFO {
         INativeV1(collection).setUri(uri);
     }
 
-    function info(uint256 objectId, uint256 value) public view returns(address[] memory _tokens, uint256[] memory _amounts) {
+    function info(uint256 objectId, uint256 value) public override view returns(address[] memory _tokens, uint256[] memory _amounts) {
         uint256 amount = value == 0 ? 1e18 : value;
         _tokens = tokens[objectId];
         _amounts = new uint256[](_tokens.length);
@@ -48,7 +48,7 @@ contract Index is ERC1155Receiver {
         }
     }
 
-    function mint(string memory name, string memory symbol, string memory uri, address[] memory _tokens, uint256[] memory _amounts, uint256 value, address receiver) public payable returns(uint256 objectId, address interoperableInterfaceAddress) {
+    function mint(string memory name, string memory symbol, string memory uri, address[] memory _tokens, uint256[] memory _amounts, uint256 value, address receiver) public override payable returns(uint256 objectId, address interoperableInterfaceAddress) {
         require(_tokens.length > 0 && _tokens.length == _amounts.length, "invalid length");
         for(uint256 i = 0; i < _tokens.length; i++) {
             require(!_temporaryIndex[_tokens[i]], "already done");
@@ -80,7 +80,7 @@ contract Index is ERC1155Receiver {
         }
     }
 
-    function mint(uint256 objectId, uint256 value, address receiver) public payable {
+    function mint(uint256 objectId, uint256 value, address receiver) public override payable {
         require(value > 0, "value");
         bool ethInvolved = false;
         for(uint256 i = 0; i < tokens[objectId].length; i++) {
