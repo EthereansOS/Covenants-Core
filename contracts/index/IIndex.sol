@@ -1,12 +1,6 @@
 //SPDX-License-Identifier: MIT
 
 pragma solidity ^0.7.6;
-pragma abicoder v2;
-
-import "./util/IEthItemOrchestrator.sol";
-import "./util/INativeV1.sol";
-import "./util/ERC1155Receiver.sol";
-import "./util/DFOHub.sol";
 
 interface IIndex {
 

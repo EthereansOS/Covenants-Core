@@ -4,9 +4,11 @@ pragma abicoder v2;
 
 import "../IPresto.sol";
 import "../../amm-aggregator/common/IAMM.sol";
-import "../../index/Index.sol";
+import "../../index/IIndex.sol";
+import "../util/ERC1155Receiver.sol";
+import "../util/INativeV1.sol";
 
-contract IndexPresto {
+contract IndexPresto is ERC1155Receiver {
 
     mapping(address => uint256) private _tokenIndex;
     address[] private _tokensToTransfer;
@@ -22,7 +24,8 @@ contract IndexPresto {
         address indexAddress,
         bytes memory indexData
     ) public payable returns(uint256 objectId, address interoperableInterfaceAddress) {
-        IPresto(prestoAddress).execute{value : _transferToMeAndCheckAllowance(operations, prestoAddress)}(_operations);
+        uint256 eth = _transferToMeAndCheckAllowance(operations, prestoAddress);
+        IPresto(prestoAddress).execute{value : eth}(_operations);
         (objectId, interoperableInterfaceAddress) = _mint(indexAddress, indexData);
         _flushAndClear(interoperableInterfaceAddress, msg.sender);
     }
@@ -32,11 +35,58 @@ contract IndexPresto {
         PrestoOperation[] memory operations,
         address indexAddress,
         uint256 objectId, uint256 value, address receiver) public payable {
-        IPresto(prestoAddress).execute{value : _transferToMeAndCheckAllowance(operations, prestoAddress)}(_operations);
+        uint256 eth = _transferToMeAndCheckAllowance(operations, prestoAddress);
+        IPresto(prestoAddress).execute{value : eth}(_operations);
         (address[] memory tokenAddresses, uint256[] memory amounts) = IIndex(indexAddress).info(objectId, value);
         _approve(indexAddress, tokenAddresses, amounts);
         IIndex(indexAddress).mint{value : _balanceOf(address(0))}(objectId, value, receiver);
-        _flushAndClear(address(IEthItem(IIndex(indexAddress).collection()).asInteroperable(objectId)), msg.sender);
+        _flushAndClear(address(INativeV1(IIndex(indexAddress).collection()).asInteroperable(objectId)), msg.sender);
+    }
+
+    function onERC1155Received(
+        address,
+        address from,
+        uint256 id,
+        uint256 value,
+        bytes calldata data
+    )
+        public
+        override
+        returns(bytes4) {
+            (address prestoAddress, PrestoOperation[] memory operations, bytes memory payload) = abi.decode(data, (address, PrestoOperation[], bytes));
+            INativeV1(msg.sender).safeTransferFrom(address(this), INativeV1(msg.sender).extension(), id, value, payload);
+            uint256[] memory ids = new uint256[](1);
+            ids[0] = id;
+            _afterBurn(prestoAddress, operations, ids, from);
+            return this.onERC1155Received.selector;
+    }
+
+    function onERC1155BatchReceived(
+        address,
+        address from,
+        uint256[] memory ids,
+        uint256[] memory values,
+        bytes memory data
+    )
+        public
+        override
+        returns(bytes4) {
+            (address prestoAddress, PrestoOperation[] memory operations, bytes memory payload) = abi.decode(data, (address, PrestoOperation[], bytes));
+            INativeV1(msg.sender).safeBatchTransferFrom(address(this), INativeV1(msg.sender).extension(), ids, values, payload);
+            _afterBurn(prestoAddress, operations, ids, from);
+            return this.onERC1155BatchReceived.selector;
+    }
+
+    function _afterBurn(
+        address prestoAddress,
+        PrestoOperation[] memory operations,
+        uint256[] memory ids,
+        address from) private {
+            IPresto(prestoAddress).execute{value : _collectTokensAndCheckAllowance(operations, prestoAddress)}(operations);
+            for(uint256 i = 0; i < ids.length; i++) {
+                _collectTokenData(address(INativeV1(msg.sender).asInteroperable(ids[i])), 1);
+            }
+            _flushAndClear(address(0), from);
     }
 
     function _mint(address indexAddress, bytes memory indexData) private returns(uint256 objectId, address interoperableInterfaceAddress) {

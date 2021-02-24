@@ -75,8 +75,7 @@ contract WUSDPresto is ERC1155Receiver {
         PrestoOperation[] memory operations,
         IWUSDExtensionController wusdExtensionController,
         address from) private {
-            uint256 eth = _collectTokensAndCheckAllowance(operations, prestoAddress);
-            IPresto(prestoAddress).execute{value : eth}(_operations);
+            IPresto(prestoAddress).execute{value : _collectTokensAndCheckAllowance(operations, prestoAddress)}(operations);
             _flushAndClear(wusdExtensionController, new address[](0), from);
     }
 
