@@ -58,7 +58,6 @@ module.exports = async function compile(file, contractName) {
     if (!solidityManager.hasBinaryVersion(solidityVersion)) {
         await new Promise(ok => solidityDownloader.downloadBinary(solidityVersion, ok));
     }
-    console.log(`compiling ${contractName} on file ${file}`);
     var baseLocation = path.resolve(__dirname, "..", "contracts").split("\\").join("/");
     var fileLocation = (file + (file.indexOf(".sol") === -1 ? ".sol" : "")).split("\\").join("/");
     contractName = contractName || fileLocation.substring(fileLocation.lastIndexOf("/") + 1).split(".sol").join("");
