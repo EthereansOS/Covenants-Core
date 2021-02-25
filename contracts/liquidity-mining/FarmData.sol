@@ -28,17 +28,19 @@ struct FarmingSetupInfo {
     address ethereumAddress;
     bool involvingETH; // if the setup involves ETH or not.
     uint256 penaltyFee; // fee paid when the user exits a still active locked liquidity mining setup (used only if free is false).
+    uint256 setupsCount; // number of setups created by this info.
+    uint256 lastSetupIndex; // index of last setup;
 }
 
 struct FarmingSetup {
-    FarmingSetupInfo info; // setup info
+    uint256 infoIndex; // setup info
     bool active; // if the setup is active or not.
     uint256 startBlock; // liquidity mining setup start block.
     uint256 endBlock; // liquidity mining setup end block.
     uint256 lastUpdateBlock; // number of the block where an update was triggered.
     uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
     uint256 rewardPerBlock; // liquidity mining setup reward per single block.
-    uint256 totalSupply; // If free it's the LP amount, if locked is currentlyStaked
+    uint256 totalSupply; // If free it's the LP amount, if locked is currentlyStaked.
 }
 
 struct FarmingPosition {
