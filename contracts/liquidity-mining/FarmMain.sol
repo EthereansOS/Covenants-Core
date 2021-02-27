@@ -51,10 +51,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     mapping(uint256 => uint256) private _partiallyRedeemed;
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
-    // load balancer contract address
-    address private _loadBalancerAddress;
-    // if the load balancer is active or not
-    bool public override loadBalancerActive;
+    // mapping containing all the number of opened positions for each setups
+    mapping(uint256 => uint256) public _setupPositionsCount;
 
     /** Modifiers. */
 
@@ -115,11 +113,13 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
+    /*
     function toggleLoadBalancer(address loadBalancerAddress) public byExtension {
         _loadBalancerAddress = _loadBalancerAddress != address(0) ? _loadBalancerAddress : loadBalancerAddress;
         loadBalancerActive = !loadBalancerActive;
         // TODO add call to the load balancer
     }
+    */
 
     /** Public methods */
 
@@ -156,13 +156,14 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // calculate the reward
         uint256 reward;
         uint256 lockedRewardPerBlock;
-        uint256 lastBlockUpdate = chosenSetup.lastUpdateBlock == 0 ? chosenSetup.startBlock : chosenSetup.lastUpdateBlock;
+        uint256 lastBlockUpdate = chosenSetup.lastUpdateBlock < chosenSetup.startBlock ? chosenSetup.startBlock : chosenSetup.lastUpdateBlock;
         if (!_setupsInfo[chosenSetup.infoIndex].free) {
             (reward, lockedRewardPerBlock) = calculateLockedFarmingReward(request.setupIndex, mainTokenAmount, false, 0);
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
             uint256 rewardPerBlock = chosenSetup.rewardPerBlock - ((chosenSetup.rewardPerBlock * (chosenSetup.totalSupply * 1e18 / _setupsInfo[chosenSetup.infoIndex].maxStakeable)) / 1e18);
             _giveBack((block.number - lastBlockUpdate) * rewardPerBlock);
             chosenSetup.totalSupply += mainTokenAmount;
+            chosenSetup.lastUpdateBlock = block.number;
             _mintFarmTokenAmount(uniqueOwner, liquidityPoolData.amount, request.setupIndex);
         } else {
             if (chosenSetup.totalSupply == 0) {
@@ -170,7 +171,6 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             }
             _updateFreeSetup(request.setupIndex, liquidityPoolData.amount, positionId, false);
         }
-        chosenSetup.lastUpdateBlock = block.number;
         _positions[positionId] = FarmingPosition({
             uniqueOwner: uniqueOwner,
             setupIndex : request.setupIndex,
@@ -180,6 +180,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             lockedRewardPerBlock: lockedRewardPerBlock,
             creationBlock: block.number
         });
+        _setupPositionsCount[request.setupIndex] += _setupsInfo[chosenSetup.infoIndex].free ? 1 : 2;
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
@@ -193,7 +194,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(request.setupIndex, request);
         // rebalance the reward per token
         _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
-        farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
+        farmingPosition.reward = calculateFreeFarmingReward(positionId);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[request.setupIndex];
         // update the last block update variable
         chosenSetup.lastUpdateBlock = block.number;
@@ -208,6 +209,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
         uint256 reward = farmingPosition.reward;
+        uint256 currentBlock = block.number;
         if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
             // check if reward is available
             require(farmingPosition.reward > 0, "No reward");
@@ -221,21 +223,29 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             farmingPosition.reward = farmingPosition.reward - reward;
         } else {
             // rebalance setup
-            _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.number - _setups[farmingPosition.setupIndex].lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
-             // update the last block update variable
-            _setups[farmingPosition.setupIndex].lastUpdateBlock = block.number;
-            reward = calculateFreeFarmingReward(positionId, false);
+            currentBlock = currentBlock > _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : currentBlock;
+            _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentBlock - _setups[farmingPosition.setupIndex].lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
+            reward = calculateFreeFarmingReward(positionId);
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
             farmingPosition.reward = 0;
+            // update the last block update variable
+            _setups[farmingPosition.setupIndex].lastUpdateBlock = currentBlock;
+        }             
+        if (reward > 0) {
+            // transfer the reward
+            _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward) : payable(farmingPosition.uniqueOwner).transfer(reward);
         }
-        require(reward > 0, "No reward?");
-        // transfer the reward
-        _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward) : payable(farmingPosition.uniqueOwner).transfer(reward);
-        if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free && _setups[farmingPosition.setupIndex].endBlock <= block.number) {
-            // close the locked position after withdrawing all the reward
-            delete _positions[positionId];
+        if (_setups[farmingPosition.setupIndex].endBlock <= block.number) {
             if (_setups[farmingPosition.setupIndex].active) {
                 _toggleSetup(farmingPosition.setupIndex);
+            }
+            // close the locked position after withdrawing all the reward
+            if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
+                _setupPositionsCount[farmingPosition.setupIndex] -= 1;
+                if (_setupPositionsCount[farmingPosition.setupIndex] == 0 && !_setups[farmingPosition.setupIndex].active) {
+                    delete _setups[farmingPosition.setupIndex];
+                }
+                delete _positions[positionId];
             }
         } else if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
             // set the partially redeemed amount
@@ -264,10 +274,13 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // burn the liquidity in the locked setup
         if (positionId == 0) {
             _burnFarmTokenAmount(objectId, removedLiquidity);
+            _setupPositionsCount[setupIndex] -= 1;
+            if (_setupPositionsCount[setupIndex] == 0 && !_setups[setupIndex].active) {
+                delete _setups[setupIndex];
+            }
         } else {
             withdrawReward(positionId);
             _setups[farmingPosition.setupIndex].totalSupply -= removedLiquidity;
-            _setups[farmingPosition.setupIndex].lastUpdateBlock = block.number;
         }
         _removeLiquidity(positionId, setupIndex, unwrapPair, removedLiquidity, false);
     }
@@ -314,13 +327,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function calculateFreeFarmingReward(uint256 positionId, bool isExt) public view returns(uint256 reward) {
+    function calculateFreeFarmingReward(uint256 positionId) public view returns(uint256 reward) {
         FarmingPosition memory farmingPosition = _positions[positionId];
         reward = ((_rewardPerTokenPerSetup[farmingPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * farmingPosition.liquidityPoolTokenAmount) / 1e18;
-        if (isExt) {
-            uint256 rpt = (((block.number - _setups[farmingPosition.setupIndex].startBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
-            reward += ((rpt - _rewardPerTokenPaid[positionId]) * farmingPosition.liquidityPoolTokenAmount) / 1e18;
-        }
         reward += farmingPosition.reward;
     }
 
@@ -528,16 +537,20 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         if (!setupInfo.free && _setups[setupIndex].active && !isUnlock) {
             _toggleSetup(setupIndex);
         } else if (setupInfo.free && positionId != 0) {
+            // check if setup is marked as finished or not
+            if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endBlock <= block.number) {
+                _toggleSetup(farmingPosition.setupIndex);
+            }
             // delete the farming position after the withdraw
             if (remainingLiquidity == 0) {
+                _setupPositionsCount[farmingPosition.setupIndex] -= 1;
+                if (_setupPositionsCount[farmingPosition.setupIndex] == 0 && !_setups[farmingPosition.setupIndex].active) {
+                    delete _setups[farmingPosition.setupIndex];
+                }
                 delete _positions[positionId];
             } else {
                 // update the creation block and amount
                 farmingPosition.liquidityPoolTokenAmount = remainingLiquidity;
-            }
-            // check if setup is marked as finished or not
-            if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endBlock <= block.number) {
-                _toggleSetup(farmingPosition.setupIndex);
             }
         }
     }
@@ -569,6 +582,10 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         require(!setup.active || block.number >= setup.endBlock, "Not valid activation");
 
         if (setup.active && block.number >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
+            if (!_setupsInfo[setup.infoIndex].free) {
+                uint256 unissuedReward = (setup.endBlock - setup.lastUpdateBlock) * (setup.rewardPerBlock - ((setup.rewardPerBlock * (setup.totalSupply * 1e18 / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18));
+                _giveBack(unissuedReward);
+            }
             setup.active = false;
             return;
         } else if (block.number > setup.startBlock && block.number <= setup.endBlock && setup.active) {
@@ -604,13 +621,14 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             // set new setup
             _setups[_farmingSetupsCount] = abi.decode(abi.encode(setup), (FarmingSetup));
             // update old setup
-            setup.active = false;
+            _setups[setupIndex].active = false;
             // update new setup
             _setupsInfo[setup.infoIndex].renewTimes -= 1;
             _setupsInfo[setup.infoIndex].setupsCount += 1;
             _setupsInfo[setup.infoIndex].lastSetupIndex = _farmingSetupsCount;
             _setups[_farmingSetupsCount].startBlock = block.number;
-            _setups[_farmingSetupsCount].endBlock = _setups[_farmingSetupsCount].startBlock + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].blockDuration;
+            _setups[_farmingSetupsCount].endBlock = block.number + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].blockDuration;
+            _setups[_farmingSetupsCount].objectId = 0;
             _setups[_farmingSetupsCount].totalSupply = 0;
             _farmingSetupsCount += 1;
         } else if (setup.active && !wasActive) {

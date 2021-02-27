@@ -8,9 +8,10 @@ var ethers = require('ethers');
 var abi = new ethers.utils.AbiCoder();
 var path = require('path');
 var fs = require('fs');
+const { start } = require("repl");
 
 // Contracts
-var SimpleFarmMain;
+var FarmMain;
 // var PinnedFarmMain;
 var FarmFactory;
 var UniswapV2AMMV1;
@@ -27,12 +28,12 @@ var rewardToken;
 var mainToken;
 var secondaryToken;
 var farmFactory;
-var simpleFarmExtension;
+var farmMainExtension;
 // var pinnedFarmExtension;
 var clonedDefaultFarmExtension;
 var dfo;
 var pinnedDfo;
-var simpleFarmContract;
+var farmMainContract;
 // var pinnedFarmContract;
 var liquidityPool;
 var uniswapAMM;
@@ -73,8 +74,8 @@ describe("Farming", () => {
     };
 
     async function createStakingPosition(actor, setupIndex) {
-        (mainToken != utilities.voidEthereumAddress) && await mainToken.methods.approve(simpleFarmContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
-        (secondaryToken != utilities.voidEthereumAddress) && await secondaryToken.methods.approve(simpleFarmContract.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);
+        (mainToken != utilities.voidEthereumAddress) && await mainToken.methods.approve(farmMainContract.options.address, await mainToken.methods.totalSupply().call()).send(actor.from);
+        (secondaryToken != utilities.voidEthereumAddress) && await secondaryToken.methods.approve(farmMainContract.options.address, await secondaryToken.methods.totalSupply().call()).send(actor.from);
 
         var mainTokenAmount = utilities.toDecimals(actor.amount, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
         var stake = {
@@ -84,8 +85,8 @@ describe("Farming", () => {
             positionOwner: utilities.voidEthereumAddress,
         };
 
-        var setup = (await simpleFarmContract.methods.setups().call())[setupIndex];
-        var setupInfo = await simpleFarmContract.methods._setupsInfo(setup.infoIndex).call();
+        var setup = (await farmMainContract.methods.setups().call())[setupIndex];
+        var setupInfo = await farmMainContract.methods._setupsInfo(setup.infoIndex).call();
         var ammPlugin = new web3.eth.Contract(UniswapV2AMMV1.abi, setupInfo.ammPlugin);
         var liquidityPoolTokenAddress = setupInfo.liquidityPoolTokenAddress;
         var tokens = (await ammPlugin.methods.byLiquidityPool(liquidityPoolTokenAddress).call())[2];
@@ -93,42 +94,80 @@ describe("Farming", () => {
         var amounts = await ammPlugin.methods.byTokenAmount(liquidityPoolTokenAddress, mainToken != utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address, mainTokenAmount).call();
         var secondaryTokenAmount = amounts[1][secondaryTokenIndex];
 
-        var startingBalance = await rewardToken.methods.balanceOf(simpleFarmContract.options.address).call();
+        var startingBalance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
 
-        var result = await simpleFarmContract.methods.openPosition(stake).send({...actor.from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
+        var result = await farmMainContract.methods.openPosition(stake).send({...actor.from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         var { positionId } = result.events.Transfer.returnValues;
-        var position = await simpleFarmContract.methods.position(positionId).call();
+        var position = await farmMainContract.methods.position(positionId).call();
+
+        actor.free = setupInfo.free;
         actor.setupIndex = setupIndex;
         actor.position = position;
         actor.positionId = positionId;
-        console.log(actor.position.reward);
 
-        var diffBalance = parseInt(startingBalance) - parseInt(await rewardToken.methods.balanceOf(simpleFarmContract.options.address).call());
+        var diffBalance = parseInt(startingBalance) - parseInt(await rewardToken.methods.balanceOf(farmMainContract.options.address).call());
 
         if (!setupInfo.free) {
             assert.strictEqual(parseInt(position.reward), parseInt(position.lockedRewardPerBlock) * (parseInt(setup.endBlock) - parseInt(position.creationBlock)));
         }
-        var lastBlockUpdate = setup.lastUpdateBlock === 0 ? setup.lastUpdateBlock : setup.startBlock;
-        assert.strictEqual(utilities.formatMoney(utilities.fromDecimals(diffBalance, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4), utilities.formatMoney(utilities.fromDecimals(((parseInt(position.creationBlock) - parseInt(lastBlockUpdate)) * parseInt(setup.rewardPerBlock)).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4));
+        var lastBlockUpdate = parseInt(setup.lastUpdateBlock) < parseInt(setup.startBlock) ? setup.startBlock : setup.lastUpdateBlock;
+        var rewardPerBlock = actor.free ? parseInt(setup.totalSupply) === 0 ? setup.rewardPerBlock : 0 : parseInt(setup.rewardPerBlock) - (parseInt(setup.rewardPerBlock) * parseInt(setup.totalSupply) / parseInt(setupInfo.maxStakeable));
+  
+        assert.strictEqual(utilities.formatMoney(utilities.fromDecimals(diffBalance, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4), utilities.formatMoney(utilities.fromDecimals(((parseInt(position.creationBlock) - parseInt(lastBlockUpdate)) * parseInt(rewardPerBlock)).toString(), rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4));
+        
+        setup = (await farmMainContract.methods.setups().call())[setupIndex];
+        actor.objectId = setup.objectId;
+        assert.strictEqual(setup.lastUpdateBlock, position.creationBlock);  
     }
 
-    async function withdrawReward(actor) {
-        var setup = (await simpleFarmContract.methods.setups().call())[actor.setupIndex];
-        await blockchainConnection.jumpToBlock(parseInt(setup.endBlock));
+    async function withdrawReward(actor, blocks, isPartial) {
+        var setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+        var currentBlock = await web3.eth.getBlockNumber();
+        await blockchainConnection.jumpToBlock(parseInt(currentBlock) + blocks || parseInt(setup.endBlock));
         var startingBalance = await rewardToken.methods.balanceOf(actor.address).call();
-        await simpleFarmContract.methods.withdrawReward(actor.positionId).send(actor.from);
+        await farmMainContract.methods.withdrawReward(actor.positionId).send(actor.from);
+        setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
         var resultBalance = await rewardToken.methods.balanceOf(actor.address).call();
-        console.log(`started at ${startingBalance} and ended up at ${resultBalance}`);
-        var availableSetups = await simpleFarmContract.methods.setups().call();
-        await Promise.all(availableSetups.map(async (setup) => {
-            console.log(setup);
-        }))
+        console.log(`exit block is ${setup.lastUpdateBlock}`);
+        console.log(`result balance is ${resultBalance}`);
+        console.log(actor.position);
+        if (!actor.free) {
+            var diffBalance = parseInt(resultBalance) - parseInt(startingBalance);
+            var reward = actor.position.reward;
+            if (isPartial) {
+                reward = (parseInt(currentBlock) + blocks + 1 - parseInt(actor.position.creationBlock)) * parseInt(actor.position.lockedRewardPerBlock); 
+                var position = await farmMainContract.methods.position(actor.positionId).call();
+                actor.position = position;
+            }
+            assert.strictEqual(utilities.formatMoney(utilities.fromDecimals(diffBalance, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4), utilities.formatMoney(utilities.fromDecimals(reward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4))
+        }
+    }
+
+    async function withdrawLiquidity(actor, amount) {
+        var positionLiquidityPoolTokenAmount = actor.position.liquidityPoolTokenAmount;
+        if (!amount) amount = positionLiquidityPoolTokenAmount;
+        var farmTokenCollection = new web3.eth.Contract(context.INativeV1ABI, await farmMainContract.methods._farmTokenCollection().call());
+        var startingFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
+        await farmMainContract.methods.withdrawLiquidity(actor.free ? actor.positionId : 0, !actor.free ? actor.objectId : 0, actor.unwrap, amount).send(actor.from);
+        var endFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
+        if (amount === actor.position.liquidityPoolTokenAmount || actor.free) {
+            var position = await farmMainContract.methods.position(actor.positionId).call();
+            if (actor.free && amount === actor.position.liquidityPoolTokenAmount) {
+                assert.strictEqual(parseInt(position.creationBlock), 0);
+            } else if (actor.free) {
+                assert.strictEqual(parseInt(position.liquidityPoolTokenAmount), parseInt(positionLiquidityPoolTokenAmount) - parseInt(amount));
+                actor.position = position;
+            }
+            assert.strictEqual(parseInt(endFarmTokenBalance), 0);
+        } else {
+            assert.strictEqual(parseInt(endFarmTokenBalance), parseInt(startingFarmTokenBalance) - parseInt(amount));
+        }
     }
 
     before(async () => {
         try {
             await blockchainConnection.init;
-            SimpleFarmMain = await compile('liquidity-mining/SimpleFarmMain');
+            FarmMain = await compile('liquidity-mining/FarmMain');
             // PinnedFarmMain = await compile('liquidity-mining/PinnedFarmMain');
             FarmFactory = await compile('liquidity-mining/FarmFactory');
             
@@ -169,6 +208,9 @@ describe("Farming", () => {
 
             await initActor("Cavicchioli", accounts[1], true, 1250, false);
             await initActor("Cappello", accounts[2], true, 100, false);
+            await initActor("Bestiadidio", accounts[3], false, 625, false);
+            await initActor("Canedicristo", accounts[4], false, 50, false);
+            await initActor("Madonnacagna", accounts[5], false, 75, false);
         } catch (error) {
             console.error(error);
         }
@@ -176,13 +218,13 @@ describe("Farming", () => {
     it("should deploy farm factory, extensions and finalize proposals", async () => {
         try {
             rewardDestination = dfo.mvdWalletAddress;
-            var simpleFarmModel = await new web3.eth.Contract(SimpleFarmMain.abi).deploy({data : SimpleFarmMain.bin}).send(blockchainConnection.getSendingOptions());
-            console.log(`simple farm model deployed at ${simpleFarmModel.options.address}`);
+            var farmMainModel = await new web3.eth.Contract(FarmMain.abi).deploy({data : FarmMain.bin}).send(blockchainConnection.getSendingOptions());
+            console.log(`simple farm model deployed at ${farmMainModel.options.address}`);
             // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());  
             var farmExtensionModel = await new web3.eth.Contract(FarmExtension.abi).deploy({data : FarmExtension.bin}).send(blockchainConnection.getSendingOptions());
             console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
     
-            farmFactory = await new web3.eth.Contract(FarmFactory.abi).deploy({data : FarmFactory.bin, arguments : [dfo.doubleProxyAddress, simpleFarmModel.options.address, utilities.voidEthereumAddress, farmExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
+            farmFactory = await new web3.eth.Contract(FarmFactory.abi).deploy({data : FarmFactory.bin, arguments : [dfo.doubleProxyAddress, farmMainModel.options.address, utilities.voidEthereumAddress, farmExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
             console.log(`farm factory deployed at ${farmFactory.options.address}`);
 
             var dfoFarmExtensionModel = await new web3.eth.Contract(DFOBasedFarmExtension.abi).deploy({data : DFOBasedFarmExtension.bin}).send(blockchainConnection.getSendingOptions());
@@ -192,23 +234,14 @@ describe("Farming", () => {
 
             var transaction = await dFOBasedFarmExtensionFactory.methods.cloneModel().send(blockchainConnection.getSendingOptions());
             var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
-            var simpleFarmExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
-            simpleFarmExtension = new web3.eth.Contract(FarmExtension.abi, simpleFarmExtensionAddress);
-            console.log(`simple farm extension deployed at ${simpleFarmExtension.options.address}`);
-            /*
-            transaction = await dFOBasedFarmExtensionFactory.methods.cloneModel().send(blockchainConnection.getSendingOptions());
-            receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
-            var pinnedFarmExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
-            pinnedFarmExtension = new web3.eth.Contract(FarmExtension.abi, pinnedFarmExtensionAddress);
-    */
-            var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(simpleFarmExtension.options.address);
+            var farmMainExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
+            farmMainExtension = new web3.eth.Contract(FarmExtension.abi, farmMainExtensionAddress);
+            console.log(`simple farm extension deployed at ${farmMainExtension.options.address}`);
+
+            var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(farmMainExtension.options.address);
             var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
             await dfoManager.finalizeProposal(dfo, proposal);
-    /*
-            code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(pinnedFarmExtension.options.address);
-            proposal = await dfoManager.createProposal(pinnedDfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
-            await dfoManager.finalizeProposal(dfo, proposal);
-    */
+
             transaction = await farmFactory.methods.cloneFarmDefaultExtension().send(blockchainConnection.getSendingOptions());
             receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
             clonedDefaultFarmExtension = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
@@ -224,11 +257,11 @@ describe("Farming", () => {
             var setups = [
                 [
                     true,
-                    50,
+                    100,
                     "500000000000000000",
                     "1000000000000000000",
                     0,
-                    2,
+                    0,
                     uniswapAMM.options.address,
                     liquidityPool.options.address,
                     mainToken !== utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address,
@@ -244,7 +277,7 @@ describe("Farming", () => {
                     "500000000000000000",
                     "1000000000000000000",
                     "2500000000000000000000",
-                    2,
+                    0,
                     uniswapAMM.options.address,
                     liquidityPool.options.address,
                     mainToken !== utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address,
@@ -271,18 +304,18 @@ describe("Farming", () => {
             ];
 
             byMint = params[0] !== clonedDefaultFarmExtension;
-            params[1] = simpleFarmExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
+            params[1] = farmMainExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
 
             var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
             var deployTransaction = await farmFactory.methods.deploy(payload, true).send(blockchainConnection.getSendingOptions());
             deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-            var simpleFarmContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bool,bytes)"))[0].topics[1]);
+            var farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bool,bytes)"))[0].topics[1]);
 
-            simpleFarmContract = await new web3.eth.Contract(SimpleFarmMain.abi, simpleFarmContractAddress);
-            assert.notStrictEqual(simpleFarmContract.options.address, utilities.voidEthereumAddress);
-            oneHundred = await simpleFarmContract.methods.ONE_HUNDRED().call();
+            farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
+            assert.notStrictEqual(farmMainContract.options.address, utilities.voidEthereumAddress);
+            oneHundred = await farmMainContract.methods.ONE_HUNDRED().call();
 
-            var availableSetups = await simpleFarmContract.methods.setups().call()
+            var availableSetups = await farmMainContract.methods.setups().call()
             assert.strictEqual(availableSetups.length, setups.length);
 
             // put reward in the extension
@@ -295,9 +328,9 @@ describe("Farming", () => {
         }
     });
     it("should activate both the setups", async () => {
-        await simpleFarmContract.methods.activateSetup(0).send(blockchainConnection.getSendingOptions());
-        await simpleFarmContract.methods.activateSetup(1).send(blockchainConnection.getSendingOptions());
-        var availableSetups = await simpleFarmContract.methods.setups().call();
+        await farmMainContract.methods.activateSetup(0).send(blockchainConnection.getSendingOptions());
+        await farmMainContract.methods.activateSetup(1).send(blockchainConnection.getSendingOptions());
+        var availableSetups = await farmMainContract.methods.setups().call();
         await Promise.all(availableSetups.map(async (setup) => {
             console.log(setup);
             assert.strictEqual(setup.active, true);
@@ -305,7 +338,7 @@ describe("Farming", () => {
     });
     it("should not activate a non existing setup info", async () => {
         try {
-            await simpleFarmContract.methods.activateSetup(2).send(blockchainConnection.getSendingOptions());
+            await farmMainContract.methods.activateSetup(2).send(blockchainConnection.getSendingOptions());
             assert.strictEqual(true, false);
         } catch (error) {
             assert.strictEqual(true, true);
@@ -314,13 +347,60 @@ describe("Farming", () => {
     it("should allow cavicchioli to open a new staking position", async () => {
         await createStakingPosition(actors.Cavicchioli, 1);
     });
+    it("should allow bestiadidio to open a new staking position", async () => {
+        await createStakingPosition(actors.Bestiadidio, 1);
+    });
     it("should allow cappello to open a new staking position", async () => {
         await createStakingPosition(actors.Cappello, 0);
     });
-    it("should allow cavicchioli to partial withdraw", async () => {
+    it("should allow canedicristo to open a new staking position", async () => {
+        await createStakingPosition(actors.Canedicristo, 0);
+    });
+    it("should allow madonnacagna to open a new staking position", async () => {
+        await createStakingPosition(actors.Madonnacagna, 0);
+    });
+    it("should allow bestiadidio to partial withdraw", async () => {
+        await withdrawReward(actors.Bestiadidio, 5, true);
+    })
+    it("should allow cavicchioli to withdraw", async () => {
         await withdrawReward(actors.Cavicchioli);
     })
-    it("should allow cappello to partial withdraw", async () => {
+    it("should allow bestiadidio to withdraw", async () => {
+        await withdrawReward(actors.Bestiadidio);
+    })
+    it("should allow cappello to withdraw", async () => {
         await withdrawReward(actors.Cappello);
+    })
+    it("should allow madonnacagna to withdraw", async () => {
+        await withdrawReward(actors.Madonnacagna);
+    })
+    it("should allow canedicristo to withdraw", async () => {
+        await withdrawReward(actors.Canedicristo);
+    })
+    it("should allow cavicchioli to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Cavicchioli);
+    })
+    it("should allow bestiadidio to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Bestiadidio);
+    })
+    it("should allow madonnacagna to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Madonnacagna);
+    })
+    it("should allow canedicristo to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Canedicristo);
+    })
+    it("should allow cappello to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Cappello, utilities.numberToString(parseInt(parseInt(actors.Cappello.position.liquidityPoolTokenAmount) / 2)));
+    });
+    it("should allow cappello to withdraw liquidity again", async () => {
+        await withdrawLiquidity(actors.Cappello);
+    });
+    it("should have 0 reward tokens in the contract", async () => {
+        var balance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
+        console.log(balance);
+        var setups = await farmMainContract.methods.setups().call();
+        await Promise.all(setups.map(async (setup) => {
+            console.log(setup);
+        }))
     })
 })
