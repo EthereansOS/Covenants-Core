@@ -104,6 +104,7 @@ describe("Farming", () => {
         actor.setupIndex = setupIndex;
         actor.position = position;
         actor.positionId = positionId;
+        console.log(position);
 
         var diffBalance = parseInt(startingBalance) - parseInt(await rewardToken.methods.balanceOf(farmMainContract.options.address).call());
 
@@ -120,7 +121,30 @@ describe("Farming", () => {
         assert.strictEqual(setup.lastUpdateBlock, position.creationBlock);  
     }
 
+    async function addLiquidity(actor) {
+
+        var startingSetup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+        var startingPosition = await farmMainContract.methods.position(actor.positionId).call();
+
+        var mainTokenAmount = utilities.toDecimals(actor.amount, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
+        var stake = {
+            setupIndex: actor.setupIndex,
+            amount : mainTokenAmount,
+            amountIsLiquidityPool : actor.amountIsLiquidityPool || false,
+            positionOwner: utilities.voidEthereumAddress,
+        };
+        await farmMainContract.methods.addLiquidity(actor.positionId, stake).send(actor.from);
+        var endingSetup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+        var endingPosition = await farmMainContract.methods.position(actor.positionId).call();
+        assert.strictEqual(parseInt(startingPosition.liquidityPoolTokenAmount) * 2, parseInt(endingPosition.liquidityPoolTokenAmount));
+        assert.strictEqual(parseInt(endingSetup.totalSupply), parseInt(startingSetup.totalSupply) + (parseInt(endingPosition.liquidityPoolTokenAmount) - parseInt(startingPosition.liquidityPoolTokenAmount)));
+        actor.position = endingPosition;
+    }
+
     async function withdrawReward(actor, blocks, isPartial) {
+
+        var balance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
+        console.log(`farm main balance is ${balance}`);
         var setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
         var currentBlock = await web3.eth.getBlockNumber();
         await blockchainConnection.jumpToBlock(parseInt(currentBlock) + blocks || parseInt(setup.endBlock));
@@ -129,6 +153,7 @@ describe("Farming", () => {
         setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
         var resultBalance = await rewardToken.methods.balanceOf(actor.address).call();
         console.log(`exit block is ${setup.lastUpdateBlock}`);
+        console.log(`starting balance is ${startingBalance}`);
         console.log(`result balance is ${resultBalance}`);
         console.log(actor.position);
         if (!actor.free) {
@@ -146,7 +171,6 @@ describe("Farming", () => {
     async function withdrawLiquidity(actor, amount) {
         var positionLiquidityPoolTokenAmount = actor.position.liquidityPoolTokenAmount;
         if (!amount) amount = positionLiquidityPoolTokenAmount;
-        var farmTokenCollection = new web3.eth.Contract(context.INativeV1ABI, await farmMainContract.methods._farmTokenCollection().call());
         var startingFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
         await farmMainContract.methods.withdrawLiquidity(actor.free ? actor.positionId : 0, !actor.free ? actor.objectId : 0, actor.unwrap, amount).send(actor.from);
         var endFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
@@ -161,6 +185,29 @@ describe("Farming", () => {
             assert.strictEqual(parseInt(endFarmTokenBalance), 0);
         } else {
             assert.strictEqual(parseInt(endFarmTokenBalance), parseInt(startingFarmTokenBalance) - parseInt(amount));
+        }
+    }
+
+    async function unlockPosition(actor) {
+        try {
+            var setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+            console.log(setup);
+            var position = await farmMainContract.methods.position(actor.positionId).call();
+            console.log(position);
+            var balance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
+            console.log(`farm main balance is ${balance}`);
+            await rewardToken.methods.approve(farmMainContract.options.address, await rewardToken.methods.totalSupply().call()).send(actor.from);
+            await farmMainContract.methods.unlock(actor.positionId, actor.unwrap).send(actor.from);
+            var farmTokenBalance = await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
+            assert.strictEqual(parseInt(farmTokenBalance), 0);
+            position = await farmMainContract.methods.position(actor.positionId).call();
+            console.log(position);
+            setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+            console.log(setup);
+            balance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
+            console.log(`farm main balance is ${balance}`);
+        } catch (error) {
+            console.log(error);
         }
     }
 
@@ -323,6 +370,7 @@ describe("Farming", () => {
             await rewardToken.methods.transfer(clonedDefaultFarmExtension, utilities.toDecimals("6000", '18')).send(blockchainConnection.getSendingOptions());
             var extension = new web3.eth.Contract(FarmExtension.abi, clonedDefaultFarmExtension);
             await extension.methods.setActive(true).send(blockchainConnection.getSendingOptions());
+            farmTokenCollection = new web3.eth.Contract(context.INativeV1ABI, await farmMainContract.methods._farmTokenCollection().call());
         } catch (error) {
             console.error(error);
         }
@@ -361,6 +409,14 @@ describe("Farming", () => {
     });
     it("should allow bestiadidio to partial withdraw", async () => {
         await withdrawReward(actors.Bestiadidio, 5, true);
+    })
+    /*
+    it("should allow cavicchioli to unlock", async () => {
+        await unlockPosition(actors.Cavicchioli);
+    })
+    */
+    it("should allow madonnacagna to add liquidity", async () => {
+        await addLiquidity(actors.Madonnacagna);
     })
     it("should allow cavicchioli to withdraw", async () => {
         await withdrawReward(actors.Cavicchioli);
