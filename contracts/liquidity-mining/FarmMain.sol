@@ -162,7 +162,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             require(reward > 0 && lockedRewardPerBlock > 0, "Insufficient staked amount");
             uint256 rewardPerBlock = chosenSetup.rewardPerBlock - ((chosenSetup.rewardPerBlock * (chosenSetup.totalSupply * 1e18 / _setupsInfo[chosenSetup.infoIndex].maxStakeable)) / 1e18);
             _giveBack((block.number - lastBlockUpdate) * rewardPerBlock);
-            chosenSetup.totalSupply += mainTokenAmount;
+            chosenSetup.totalSupply = chosenSetup.totalSupply + mainTokenAmount;
             chosenSetup.lastUpdateBlock = block.number;
             _mintFarmTokenAmount(uniqueOwner, liquidityPoolData.amount, request.setupIndex);
         } else {
@@ -187,16 +187,17 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
-        FarmingSetup memory chosenSetup = _setups[farmingPosition.setupIndex];
+        FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
         // check if farmoing position is valid
         require(_setupsInfo[chosenSetup.infoIndex].free, "Invalid add liquidity");
         // create the lp data for the amm
-        (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(request.setupIndex, request);
+        (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
         // rebalance the reward per token
-        _rewardPerTokenPerSetup[request.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
         farmingPosition.reward = calculateFreeFarmingReward(positionId);
-        _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[request.setupIndex];
-        // update the last block update variable
+        _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
+        farmingPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
+        // update the last block update variablex
         chosenSetup.lastUpdateBlock = block.number;
         chosenSetup.totalSupply += liquidityPoolData.amount;
     }
@@ -229,8 +230,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
             farmingPosition.reward = 0;
             // update the last block update variable
-            _setups[farmingPosition.setupIndex].lastUpdateBlock = currentBlock;
-        }             
+            _setups[farmingPosition.setupIndex].lastUpdateBlock = currentBlock;   
+        }
         if (reward > 0) {
             // transfer the reward
             _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward) : payable(farmingPosition.uniqueOwner).transfer(reward);
@@ -293,11 +294,16 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // must pay a penalty fee
         rewardToGiveBack += _setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].penaltyFee == 0 ? 0 : (farmingPosition.reward * ((_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].penaltyFee * 1e18) / ONE_HUNDRED) / 1e18);
         // add all the unissued reward
-        uint256 positionRewardPerBlock = _setups[farmingPosition.setupIndex].rewardPerBlock * (((farmingPosition.mainTokenAmount * 1e18) / _setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].maxStakeable) / 1e18);
-        rewardToGiveBack += (block.number - farmingPosition.creationBlock) * positionRewardPerBlock;
+        // uint256 positionRewardPerBlock = _setups[farmingPosition.setupIndex].rewardPerBlock * ((farmingPosition.mainTokenAmount * 1e18 / _setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].maxStakeable) / 1e18);
         if (rewardToGiveBack > 0) {
-            _giveBack(rewardToGiveBack);
-        }
+            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), rewardToGiveBack);
+        } 
+        /*
+        rewardToGiveBack += (block.number - farmingPosition.creationBlock) * farmingPosition.lockedRewardPerBlock;
+        require(rewardToGiveBack > 0, "Invalid unlock.");
+        _giveBack(rewardToGiveBack);
+        _setups[farmingPosition.setupIndex].lastUpdateBlock = block.number;
+        */
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
         _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
@@ -520,15 +526,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         if (unwrapPair) {
             // remove liquidity using AMM
             _safeApprove(lpData.liquidityPoolAddress, setupInfo.ammPlugin, lpData.amount);
-            (, uint256[] memory amounts, address[] memory tokens) = IAMM(setupInfo.ammPlugin).removeLiquidity(lpData);
-            if (isUnlock) {
-                for (uint256 i = 0; i < tokens.length; i++) {
-                    if (tokens[i] == setupInfo.mainTokenAddress) {
-                        _setups[setupIndex].totalSupply -= amounts[0];
-                        break;
-                    }
-                }
-            }
+            IAMM(setupInfo.ammPlugin).removeLiquidity(lpData);
         } else {
             // send back the liquidity pool token amount without the fee
             _safeTransfer(lpData.liquidityPoolAddress, lpData.receiver, lpData.amount);
@@ -583,7 +581,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
 
         if (setup.active && block.number >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
             if (!_setupsInfo[setup.infoIndex].free) {
-                uint256 unissuedReward = (setup.endBlock - setup.lastUpdateBlock) * (setup.rewardPerBlock - ((setup.rewardPerBlock * (setup.totalSupply * 1e18 / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18));
+                uint256 unissuedReward = (setup.endBlock - setup.lastUpdateBlock) * (setup.rewardPerBlock - ((setup.rewardPerBlock * ((setup.totalSupply * 1e18) / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18));
                 _giveBack(unissuedReward);
             }
             setup.active = false;
