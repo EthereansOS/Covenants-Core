@@ -15,6 +15,8 @@ interface IWUSDExtensionController {
 
     function allowedAMMs() external view returns(AllowedAMM[] memory);
 
+    function extension() external view returns (address);
+
     function addLiquidity(
         uint256 ammPosition,
         uint256 liquidityPoolPosition,

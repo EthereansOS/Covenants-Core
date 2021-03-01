@@ -29,9 +29,8 @@ contract WUSDPresto is ERC1155Receiver {
     ) public payable returns(uint256 minted) {
         uint256 eth = _transferToMeAndCheckAllowance(operations, prestoAddress);
         IPresto(prestoAddress).execute{value : eth}(_operations);
-        address tokenAddress = operations[0].ammPlugin == address(0) ? operations[0].inputTokenAddress : operations[0].swapPath[operations[0].swapPath.length - 1];
         IWUSDExtensionController wusdExtensionController = IWUSDExtensionController(wusdExtensionControllerAddress);
-        (uint256 liquidityPoolAmount, address[] memory tokenAddresses) = _calculateAmountsAndApprove(wusdExtensionController, ammPosition, liquidityPoolPosition, tokenAddress);
+        (uint256 liquidityPoolAmount, address[] memory tokenAddresses) = _calculateAmountsAndApprove(wusdExtensionController, ammPosition, liquidityPoolPosition);
         minted = wusdExtensionController.addLiquidity(ammPosition, liquidityPoolPosition, liquidityPoolAmount, false);
         _flushAndClear(wusdExtensionController, tokenAddresses, msg.sender);
     }
@@ -46,8 +45,11 @@ contract WUSDPresto is ERC1155Receiver {
         public
         override
         returns(bytes4) {
-            (bytes memory transferData, address prestoAddress, PrestoOperation[] memory operations) = abi.decode(data, (bytes, address, PrestoOperation[]));
             IWUSDExtensionController wusdExtensionController = IWUSDExtensionController(IWUSDExtension(INativeV1(msg.sender).extension()).controller());
+            if(keccak256("") == keccak256(data) && wusdExtensionController.extension() == from) {
+                return this.onERC1155Received.selector;
+            }
+            (bytes memory transferData, address prestoAddress, PrestoOperation[] memory operations) = abi.decode(data, (bytes, address, PrestoOperation[]));
             INativeV1(msg.sender).safeTransferFrom(address(this), address(wusdExtensionController), id, value, transferData);
             _afterBurn(prestoAddress, operations, wusdExtensionController, from);
             return this.onERC1155Received.selector;
@@ -79,10 +81,16 @@ contract WUSDPresto is ERC1155Receiver {
             _flushAndClear(wusdExtensionController, new address[](0), from);
     }
 
-    function _calculateAmountsAndApprove(IWUSDExtensionController wusdExtensionController, uint256 ammPosition, uint256 liquidityPoolPosition, address tokenAddress) private returns(uint256 liquidityPoolAmount, address[] memory tokenAddresses) {
+    function _calculateAmountsAndApprove(IWUSDExtensionController wusdExtensionController, uint256 ammPosition, uint256 liquidityPoolPosition) private returns(uint256 liquidityPoolAmount, address[] memory tokenAddresses) {
         AllowedAMM memory allowedAMM = wusdExtensionController.allowedAMMs()[ammPosition];
+        address liquidityPoolAddress = allowedAMM.liquidityPools[liquidityPoolPosition];
+        (,,tokenAddresses) = IAMM(allowedAMM.ammAddress).byLiquidityPool(liquidityPoolAddress);
         uint256[] memory tokenAmounts;
-        (liquidityPoolAmount, tokenAmounts, tokenAddresses) = IAMM(allowedAMM.ammAddress).byTokenAmount(allowedAMM.liquidityPools[liquidityPoolPosition], tokenAddress, _balanceOf(tokenAddress));
+        (liquidityPoolAmount, tokenAmounts,) = IAMM(allowedAMM.ammAddress).byTokenAmount(liquidityPoolAddress, tokenAddresses[0], _balanceOf(tokenAddresses[0]));
+        uint256 balance = _balanceOf(tokenAddresses[1]);
+        if(tokenAmounts[1] > balance) {
+            (liquidityPoolAmount, tokenAmounts,) = IAMM(allowedAMM.ammAddress).byTokenAmount(liquidityPoolAddress, tokenAddresses[1], balance);
+        }
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
             _safeApprove(tokenAddresses[i], address(wusdExtensionController), tokenAmounts[i]);
         }
@@ -92,11 +100,11 @@ contract WUSDPresto is ERC1155Receiver {
         (,,address wusdInteroperableAddress) = wusdExtensionController.wusdInfo();
         _safeTransfer(wusdInteroperableAddress, receiver, _balanceOf(wusdInteroperableAddress));
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
-            if(_tokensToTransfer[_tokenIndex[tokenAddresses[i]]] != tokenAddresses[i]) {
+            if(_tokensToTransfer.length == 0 || _tokensToTransfer[_tokenIndex[tokenAddresses[i]]] != tokenAddresses[i]) {
                 _safeTransfer(tokenAddresses[i], receiver, _balanceOf(tokenAddresses[i]));
             }
         }
-        if(_tokensToTransfer[_tokenIndex[address(0)]] != address(0)) {
+        if(_tokensToTransfer.length == 0 || _tokensToTransfer[_tokenIndex[address(0)]] != address(0)) {
             _safeTransfer(address(0), receiver, address(this).balance);
         }
         _flushAndClear(receiver);
@@ -120,11 +128,14 @@ contract WUSDPresto is ERC1155Receiver {
             _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount);
             if(operation.ammPlugin != address(0)) {
                 _operations.push(operation);
-                if(operation.inputTokenAddress != address(0) && !operation.enterInETH) {
-                    _safeApprove(operation.inputTokenAddress, operator, operation.inputTokenAmount);
-                } else {
+                if(operation.inputTokenAddress == address(0) || operation.enterInETH) {
                     eth += operation.inputTokenAmount;
                 }
+            }
+        }
+        for(uint256 i = 0 ; i < _tokensToTransfer.length; i++) {
+            if(_tokensToTransfer[i] != address(0)) {
+                _safeApprove(_tokensToTransfer[i], operator, _tokenAmounts[i]);
             }
         }
     }

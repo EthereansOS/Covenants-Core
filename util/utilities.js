@@ -85,6 +85,10 @@ function numberToString(num, locale) {
     return numStr;
 }
 
+function normalizeValue(amount, decimals) {
+    return web3.utils.toBN(amount).mul(web3.utils.toBN(10 ** (18 - decimals))).toString();
+}
+
 function formatMoney(value, decPlaces, thouSeparator, decSeparator) {
     value = (typeof value).toLowerCase() !== 'number' ? parseFloat(value) : value;
     var n = value,
@@ -100,6 +104,14 @@ function formatMoney(value, decPlaces, thouSeparator, decSeparator) {
 
 function formatNumber(value) {
     return parseFloat(numberToString(value).split(',').join(''));
+}
+
+function getRandomArrayIndex(array) {
+    return Math.floor(Math.random() * array.length);
+}
+
+function getRandomArrayElement(array) {
+    return array[getRandomArrayIndex(array)];
 }
 
 function eliminateFloatingFinalZeroes(value, decSeparator) {
@@ -170,5 +182,8 @@ module.exports = {
     formatMoney,
     eliminateFloatingFinalZeroes,
     toEthereumSymbol,
-    sleep
+    sleep,
+    normalizeValue,
+    getRandomArrayIndex,
+    getRandomArrayElement
 }

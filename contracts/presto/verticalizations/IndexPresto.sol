@@ -103,7 +103,7 @@ contract IndexPresto is ERC1155Receiver {
 
     function _flushAndClear(address indexInteroperableInterfaceAddress, address receiver) private {
         _safeTransfer(indexInteroperableInterfaceAddress, receiver, _balanceOf(indexInteroperableInterfaceAddress));
-        if(_tokensToTransfer[_tokenIndex[address(0)]] != address(0)) {
+        if(_tokensToTransfer.length == 0 || _tokensToTransfer[_tokenIndex[address(0)]] != address(0)) {
             _safeTransfer(address(0), receiver, address(this).balance);
         }
         _flushAndClear();
@@ -127,11 +127,14 @@ contract IndexPresto is ERC1155Receiver {
             _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount);
             if(operation.ammPlugin != address(0)) {
                 _operations.push(operation);
-                if(operation.inputTokenAddress != address(0) && !operation.enterInETH) {
-                    _safeApprove(operation.inputTokenAddress, operator, operation.inputTokenAmount);
-                } else {
+                if(operation.inputTokenAddress == address(0) || operation.enterInETH) {
                     eth += operation.inputTokenAmount;
                 }
+            }
+        }
+        for(uint256 i = 0 ; i < _tokensToTransfer.length; i++) {
+            if(_tokensToTransfer[i] != address(0)) {
+                _safeApprove(_tokensToTransfer[i], operator, _tokenAmounts[i]);
             }
         }
     }

@@ -135,7 +135,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         return _doubleProxy;
     }
 
-    function extension() public view returns (address) {
+    function extension() public override view returns (address) {
         return _extension;
     }
 
