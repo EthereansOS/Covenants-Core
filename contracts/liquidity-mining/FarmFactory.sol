@@ -6,10 +6,8 @@ import "./IFarmFactory.sol";
 
 contract FarmFactory is IFarmFactory {
 
-    // simple farm contract implementation address
-    address public simpleFarmMainImplAddress;
-    // pinned farm contract implementation address
-    address public pinnedFarmMainImplAddress;
+    // farm contract implementation address
+    address public farmMainImplAddress;
     // farming default extension
     address public override farmDefaultExtension;
     // double proxy address of the linked DFO
@@ -23,21 +21,18 @@ contract FarmFactory is IFarmFactory {
 
     // event that tracks farm main contracts deployed
     event FarmMainDeployed(address indexed farmMainAddress, address indexed sender, bool simple, bytes initResultData);
-    // event that tracks simple logic contract address change
-    event SimpleFarmMainLogicSet(address indexed newAddress);
-    // event that tracks pinned logic contract address change
-    event PinnedFarmMainLogicSet(address indexed newAddress);
+    // event that tracks logic contract address change
+    event FarmMainLogicSet(address indexed newAddress);
     // event that tracks default extension contract address change
     event FarmDefaultExtensionSet(address indexed newAddress);
     // event that tracks wallet changes
     event FeePercentageSet(uint256 newFeePercentage);
 
-    constructor(address doubleProxy, address _simpleFarmMainImplAddress, address _pinnedFarmMainImplAddress, address _farmDefaultExtension, uint256 feePercentage, string memory farmTokenCollectionUri, string memory farmTokenUri) {
+    constructor(address doubleProxy, address _farmMainImplAddress, address _farmDefaultExtension, uint256 feePercentage, string memory farmTokenCollectionUri, string memory farmTokenUri) {
         _doubleProxy = doubleProxy;
         farmTokenCollectionURI = farmTokenCollectionUri;
         farmTokenURI = farmTokenUri;
-        emit SimpleFarmMainLogicSet(simpleFarmMainImplAddress = _simpleFarmMainImplAddress);
-        emit PinnedFarmMainLogicSet(pinnedFarmMainImplAddress = _pinnedFarmMainImplAddress);
+        emit FarmMainLogicSet(farmMainImplAddress = _farmMainImplAddress);
         emit FarmDefaultExtensionSet(farmDefaultExtension = _farmDefaultExtension);
         emit FeePercentageSet(_feePercentage = feePercentage);
     }
@@ -64,14 +59,9 @@ contract FarmFactory is IFarmFactory {
 
     /** @dev allows the factory owner to update the logic contract address.
      * @param _implAddress new farm logic implementation address.
-     * @param simple if we're updating the simple logic or the pinned one.
      */
-    function updateLogicAddress(address _implAddress, bool simple) public onlyDFO {
-        if (simple) {
-            emit SimpleFarmMainLogicSet(simpleFarmMainImplAddress = _implAddress);
-        } else {
-            emit PinnedFarmMainLogicSet(pinnedFarmMainImplAddress = _implAddress);
-        }
+    function updateLogicAddress(address _implAddress) public onlyDFO {
+        emit FarmMainLogicSet(farmMainImplAddress = _implAddress);
     }
 
     /** @dev allows the factory owner to update the default extension contract address.
@@ -123,7 +113,7 @@ contract FarmFactory is IFarmFactory {
      * @return initResultData new liquidity mining contract call result.
      */
     function deploy(bytes memory data, bool simple) public returns (address contractAddress, bytes memory initResultData) {
-        initResultData = _call(contractAddress = _clone(simple ? simpleFarmMainImplAddress : pinnedFarmMainImplAddress), data);
+        initResultData = _call(contractAddress = _clone(farmMainImplAddress), data);
         emit FarmMainDeployed(contractAddress, msg.sender, simple, initResultData);
     }
 

@@ -323,7 +323,7 @@ describe("Farming", () => {
             var farmExtensionModel = await new web3.eth.Contract(FarmExtension.abi).deploy({data : FarmExtension.bin}).send(blockchainConnection.getSendingOptions());
             console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
     
-            farmFactory = await new web3.eth.Contract(FarmFactory.abi).deploy({data : FarmFactory.bin, arguments : [dfo.doubleProxyAddress, farmMainModel.options.address, utilities.voidEthereumAddress, farmExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
+            farmFactory = await new web3.eth.Contract(FarmFactory.abi).deploy({data : FarmFactory.bin, arguments : [dfo.doubleProxyAddress, farmMainModel.options.address, farmExtensionModel.options.address, 0, "google.com", "google.com"]}).send(blockchainConnection.getSendingOptions());
             console.log(`farm factory deployed at ${farmFactory.options.address}`);
 
             var dfoFarmExtensionModel = await new web3.eth.Contract(DFOBasedFarmExtension.abi).deploy({data : DFOBasedFarmExtension.bin}).send(blockchainConnection.getSendingOptions());
