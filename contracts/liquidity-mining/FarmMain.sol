@@ -294,7 +294,6 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _giveBack(rewardToGiveBack);
         } 
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
-        _setups[farmingPosition.setupIndex].lastUpdateBlock = block.number;
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
         _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
         _setupPositionsCount[farmingPosition.setupIndex] -= 2;
@@ -408,7 +407,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             uint256 amount = difference * duration;
             if (amount > 0) {
                 if (info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock) {
-                    _rewardReceived[setupIndex] -= amount;
+                    _rewardReceived[setupIndex] = ((block.number - setup.startBlock) * farmingSetupInfo.originalRewardPerBlock) + amount;
                     _giveBack(amount);
                 } else {
                     require(_ensureTransfer(amount), "Insufficient reward in extension.");
@@ -530,11 +529,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             // send back the liquidity pool token amount without the fee
             _safeTransfer(lpData.liquidityPoolAddress, lpData.receiver, lpData.amount);
         }
-        // rebalance the setup if not free
         if (!setupInfo.free && _setups[setupIndex].active && !isUnlock) {
             _toggleSetup(setupIndex);
         } else if (setupInfo.free && positionId != 0) {
-            // check if setup is marked as finished or not
             if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endBlock <= block.number) {
                 _toggleSetup(farmingPosition.setupIndex);
             }
@@ -600,6 +597,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             return;
         }
 
+        // TODO: check if still needed
         if (!_setupsInfo[setup.infoIndex].free) {
             // count the number of currently active locked setups
             uint256 count = 0;
@@ -637,10 +635,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _farmingSetupsCount += 1;
         } else if (setup.active && !wasActive) {
             _rewardReceived[setupIndex] = setup.rewardPerBlock * _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
-            require(_rewardReceived[setupIndex] > 0, "invalid reward received.");
             // update new setup
             _setups[setupIndex].startBlock = block.number;
-            _setups[setupIndex].endBlock = _setups[setupIndex].startBlock + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
+            _setups[setupIndex].endBlock = block.number + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
             _setups[setupIndex].totalSupply = 0;
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes -= 1;
         } else if (!wasActive) {
