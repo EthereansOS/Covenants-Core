@@ -7,6 +7,7 @@ import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
 import "./util/ERC1155Receiver.sol";
 import "./IIndex.sol";
+import "./util/DFOHub.sol";
 
 contract Index is IIndex, ERC1155Receiver {
 

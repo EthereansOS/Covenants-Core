@@ -660,4 +660,147 @@ describe("Presto", () => {
 
         console.log(utilities.fromDecimals(await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call(), 18));
     });
+
+    it("Mint Existing Index", async () => {
+
+        var Index = await compile('index/Index');
+
+        var index = new web3.eth.Contract(Index.abi, context.indexAddress);
+
+        var value = 30;
+        value = utilities.toDecimals(value, 18);
+
+        var indexId = "1291701553039866105681170894910877665806993998069";
+
+        var indexInfo = await index.methods.info(indexId, value).call();
+
+        var operations = [];
+
+        var amm = amms["UniswapV2"];
+        var ethereumAddress = amm.data[0];
+        async function calculateEthereumPrices(tokenAddress, tokenValue) {
+            var liquidityPoolAddress = (await amm.contract.methods.byTokens([ethereumAddress, tokenAddress]).call())[2];
+            var data = await amm.contract.methods.getSwapOutput(tokenAddress, tokenValue, [liquidityPoolAddress], [ethereumAddress]).call();
+            data = await amm.contract.methods.getSwapOutput(ethereumAddress, data[1], [liquidityPoolAddress], [tokenAddress]).call();
+            var ethereumValue;
+            var multiplier = parseInt(tokenValue) / parseInt(data[1]);
+            while (web3.utils.toBN(tokenValue).gt(web3.utils.toBN(data[1]))) {
+                var oldEthereumValue = ethereumValue;
+                ethereumValue = utilities.numberToString(parseInt(ethereumValue || data[0]) * multiplier).split('.')[0].split(',').join('');
+                if (multiplier === 1 || (oldEthereumValue && web3.utils.toBN(oldEthereumValue).gte(web3.utils.toBN(ethereumValue)))) {
+                    ethereumValue = web3.utils.toBN(oldEthereumValue || ethereumValue).add(web3.utils.toBN(10000)).toString();
+                }
+                data = await amm.contract.methods.getSwapOutput(ethereumAddress, ethereumValue, [liquidityPoolAddress], [tokenAddress]).call();
+                multiplier = parseInt(tokenValue) / parseInt(data[1]);
+                console.log(ethereumValue, tokenValue, data[1]);
+            }
+            return {ethereumValue, liquidityPoolAddress};
+        }
+
+        var ethValue = "0";
+
+        for(var i in indexInfo[0]) {
+            var token = indexInfo[0][i];
+            var amount = indexInfo[1][i];
+            var data = await calculateEthereumPrices(token, amount);
+            operations.push({
+                inputTokenAddress : ethereumAddress,
+                inputTokenAmount : data.ethereumValue,
+                ammPlugin : amm.contract.options.address,
+                liquidityPoolAddresses : [data.liquidityPoolAddress],
+                swapPath : [token],
+                enterInETH : true,
+                exitInETH : false,
+                receivers : [indexPresto.options.address],
+                receiversPercentages : []
+            });
+            ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(data.ethereumValue)).toString();
+        }
+
+        await indexPresto.methods.mint(
+            presto.options.address,
+            operations,
+            index.options.address,
+            indexId,
+            value,
+            accounts[0]
+        ).send(blockchainConnection.getSendingOptions({value : ethValue}));
+
+        await nothingInContracts(presto.options.address);
+        await nothingInContracts(indexPresto.options.address);
+    });
+
+    it("Mint Nex Index", async () => {
+
+        var Index = await compile('index/Index');
+
+        var index = new web3.eth.Contract(Index.abi, context.indexAddress);
+
+        var value = 1;
+        value = utilities.toDecimals(value, 18);
+
+        var ibizaToken = [{
+            address : "0x7b123f53421b1bf8533339bfbdc7c98aa94163db",
+            amount : utilities.toDecimals(3, 18)
+        }, {
+            address : "0x34612903db071e888a4dadcaa416d3ee263a87b9",
+            amount : utilities.toDecimals(0.3, 18)
+        }, {
+            address : "0x9e78b8274e1d6a76a0dbbf90418894df27cbceb5",
+            amount : utilities.toDecimals(3, 18)
+        }, ];
+
+        var operations = [];
+
+        var amm = amms["UniswapV2"];
+        var ethereumAddress = amm.data[0];
+        async function calculateEthereumPrices(tokenAddress, tokenValue) {
+            var liquidityPoolAddress = (await amm.contract.methods.byTokens([ethereumAddress, tokenAddress]).call())[2];
+            var data = await amm.contract.methods.getSwapOutput(tokenAddress, tokenValue, [liquidityPoolAddress], [ethereumAddress]).call();
+            data = await amm.contract.methods.getSwapOutput(ethereumAddress, data[1], [liquidityPoolAddress], [tokenAddress]).call();
+            var ethereumValue;
+            var multiplier = parseInt(tokenValue) / parseInt(data[1]);
+            while (web3.utils.toBN(tokenValue).gt(web3.utils.toBN(data[1]))) {
+                var oldEthereumValue = ethereumValue;
+                ethereumValue = utilities.numberToString(parseInt(ethereumValue || data[0]) * multiplier).split('.')[0].split(',').join('');
+                if (multiplier === 1 || (oldEthereumValue && web3.utils.toBN(oldEthereumValue).gte(web3.utils.toBN(ethereumValue)))) {
+                    ethereumValue = web3.utils.toBN(oldEthereumValue || ethereumValue).add(web3.utils.toBN(10000)).toString();
+                }
+                data = await amm.contract.methods.getSwapOutput(ethereumAddress, ethereumValue, [liquidityPoolAddress], [tokenAddress]).call();
+                multiplier = parseInt(tokenValue) / parseInt(data[1]);
+                console.log(ethereumValue, tokenValue, data[1]);
+            }
+            return {ethereumValue, liquidityPoolAddress};
+        }
+
+        var ethValue = "0";
+
+        for(var item of ibizaToken) {
+            var token = item.address;
+            var amount = item.amount;
+            var data = await calculateEthereumPrices(token, amount);
+            operations.push({
+                inputTokenAddress : ethereumAddress,
+                inputTokenAmount : data.ethereumValue,
+                ammPlugin : amm.contract.options.address,
+                liquidityPoolAddresses : [data.liquidityPoolAddress],
+                swapPath : [token],
+                enterInETH : true,
+                exitInETH : false,
+                receivers : [indexPresto.options.address],
+                receiversPercentages : []
+            });
+            ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(data.ethereumValue)).toString();
+        }
+
+        await indexPresto.methods.mint(
+            presto.options.address,
+            operations,
+            index.options.address,
+            web3.eth.abi.encodeParameters(["string", "string", "string", "address[]", "uint256[]", "uint256", "address"], ["Ibiza", "Ibiza", "google.com", ibizaToken.map(it => it.address), ibizaToken.map(it => it.amount), value, accounts[0]])
+        ).send(blockchainConnection.getSendingOptions({value : ethValue}));
+
+        await nothingInContracts(presto.options.address);
+        await nothingInContracts(indexPresto.options.address);
+    });
 });
