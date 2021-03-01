@@ -79,7 +79,6 @@ contract SimpleFarmMain is IFarmMain, ERC1155Receiver {
         _;
     }
 
-
     /** Extension methods */
 
     /** @dev initializes the liquidity mining contract.
