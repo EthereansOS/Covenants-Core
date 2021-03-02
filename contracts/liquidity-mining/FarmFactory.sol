@@ -20,7 +20,7 @@ contract FarmFactory is IFarmFactory {
     string public farmTokenURI;
 
     // event that tracks farm main contracts deployed
-    event FarmMainDeployed(address indexed farmMainAddress, address indexed sender, bool simple, bytes initResultData);
+    event FarmMainDeployed(address indexed farmMainAddress, address indexed sender, bytes initResultData);
     // event that tracks logic contract address change
     event FarmMainLogicSet(address indexed newAddress);
     // event that tracks default extension contract address change
@@ -108,13 +108,12 @@ contract FarmFactory is IFarmFactory {
 
     /** @dev this function deploys a new LiquidityMining contract and calls the encoded function passed as data.
      * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
-     * @param simple if we're deploying a simple farm main contract or one with the load balancer.
      * @return contractAddress new liquidity mining contract address.
      * @return initResultData new liquidity mining contract call result.
      */
-    function deploy(bytes memory data, bool simple) public returns (address contractAddress, bytes memory initResultData) {
+    function deploy(bytes memory data) public returns (address contractAddress, bytes memory initResultData) {
         initResultData = _call(contractAddress = _clone(farmMainImplAddress), data);
-        emit FarmMainDeployed(contractAddress, msg.sender, simple, initResultData);
+        emit FarmMainDeployed(contractAddress, msg.sender, initResultData);
     }
 
     /** PRIVATE METHODS */
