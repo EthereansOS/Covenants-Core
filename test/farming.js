@@ -216,7 +216,7 @@ describe("Farming", () => {
         var startingFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
         if (jump) {
             var setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
-            await blockchainConnection.jumpToBlock(parseInt(setup.endBlock));
+            await blockchainConnection.jumpToBlock(parseInt(setup.endBlock) + 1);
         }
         await farmMainContract.methods.withdrawLiquidity(actor.free ? actor.positionId : 0, !actor.free ? actor.objectId : 0, actor.unwrap, amount).send(actor.from);
         var endFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
@@ -225,7 +225,7 @@ describe("Farming", () => {
             if (actor.free && amount === actor.position.liquidityPoolTokenAmount) {
                 assert.strictEqual(parseInt(position.creationBlock), 0);
             } else if (actor.free) {
-                assert.strictEqual(utilities.fromDecimals(parseInt(position.liquidityPoolTokenAmount), 4).slice(0, -1), utilities.fromDecimals(parseInt(positionLiquidityPoolTokenAmount) - parseInt(amount), 4).slice(0, -1));
+                assert.strictEqual(utilities.fromDecimals(parseInt(position.liquidityPoolTokenAmount), 18), utilities.fromDecimals(parseInt(positionLiquidityPoolTokenAmount) - parseInt(amount), 18));
                 actor.position = position;
             }
             assert.strictEqual(parseInt(endFarmTokenBalance), 0);
@@ -283,7 +283,7 @@ describe("Farming", () => {
 
             var rewardTokenAddress = context.daiTokenAddress;//dfo.votingTokenAddress;
             rewardToken = new web3.eth.Contract(context.IERC20ABI, rewardTokenAddress);
-            rewardToken = utilities.voidEthereumAddress;
+            // rewardToken = utilities.voidEthereumAddress;
             mainToken = new web3.eth.Contract(context.IERC20ABI, context.buidlTokenAddress);
             // mainToken = utilities.voidEthereumAddress;
             secondaryToken = new web3.eth.Contract(context.IERC20ABI, context.usdcTokenAddress);
@@ -555,7 +555,7 @@ describe("Farming", () => {
                     liquidityPoolTokenAddress: liquidityPool.options.address,
                     mainTokenAddress: mainToken !== utilities.voidEthereumAddress ? mainToken.options.address : wethToken.options.address,
                     ethereumAddress: wethToken.options.address,
-                    involvingETH: mainToken === utilities.voidEthereumAddress,
+                    involvingETH: mainToken === utilities.voidEthereumAddress || secondaryToken === utilities.voidEthereumAddress,
                     penaltyFee: 0,
                     setupsCount: 0,
                     lastSetupIndex: 0,
@@ -694,7 +694,10 @@ describe("Farming", () => {
         var balance = rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.balanceOf(farmMainContract.options.address).call() : await web3.eth.getBalance(farmMainContract.options.address);
         assert.strictEqual(parseInt(balance), 0);
         var setups = await farmMainContract.methods.setups().call();
-        await Promise.all(setups.map(async (setup) => {
+        await Promise.all(setups.map(async (setup, i) => {
+            var rewardReceived = await farmMainContract.methods._rewardReceived(i).call();
+            var rewardPaid = await farmMainContract.methods._rewardPaid(i).call();
+            console.log(`setup ${i} - received: ${rewardReceived} - paid: ${rewardPaid}`);
             assert.strictEqual(setup.active, false);
         }))
     })

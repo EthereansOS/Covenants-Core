@@ -399,6 +399,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _toggleSetup(setupIndex);
             return;
         }
+        
+        info.renewTimes -= 1;
 
         if (setup.active && _setupsInfo[_setups[setupIndex].infoIndex].free) {
             setup = _setups[setupIndex];
@@ -407,7 +409,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             uint256 amount = difference * duration;
             if (amount > 0) {
                 if (info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock) {
-                    _rewardReceived[setupIndex] = ((block.number - setup.startBlock) * farmingSetupInfo.originalRewardPerBlock) + amount;
+                    //_rewardReceived[setupIndex] = (((block.number - setup.startBlock) * farmingSetupInfo.originalRewardPerBlock) + amount) + info.originalRewardPerBlock;
+                    _rewardReceived[setupIndex] -= amount;
                     _giveBack(amount);
                 } else {
                     require(_ensureTransfer(amount), "Insufficient reward in extension.");
@@ -418,7 +421,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             }
             _setupsInfo[_setups[setupIndex].infoIndex].originalRewardPerBlock = info.originalRewardPerBlock;
         }
-        _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = farmingSetupInfo.renewTimes;
+        _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = info.renewTimes;
     }
 
 
