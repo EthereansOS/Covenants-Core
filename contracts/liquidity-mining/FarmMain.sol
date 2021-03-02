@@ -224,7 +224,12 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
         if (reward > 0) {
             // transfer the reward
-            _rewardTokenAddress != address(0) ? _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward) : payable(farmingPosition.uniqueOwner).transfer(reward);
+            if (_rewardTokenAddress != address(0)) {
+                _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward);
+            } else {
+                (bool result,) = farmingPosition.uniqueOwner.call{value:reward}("");
+                require(result, "Invalid ETH transfer.");
+            }
             _rewardPaid[farmingPosition.setupIndex] += reward;
         }
         if (_setups[farmingPosition.setupIndex].endBlock <= block.number) {
