@@ -284,8 +284,6 @@ describe("Presto", () => {
         var expectedETHBalance = await web3.eth.getBalance(accounts[0]);
         expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(value)).toString();
 
-        console.log('Adding liquidity');
-
         var transaction = await wusdPresto.methods.addLiquidity(
             presto.options.address,
             operations,
@@ -403,8 +401,6 @@ describe("Presto", () => {
 
         var expectedETHBalance = await web3.eth.getBalance(accounts[0]);
         //expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(value)).toString();
-
-        console.log('Adding liquidity');
 
         await token0.methods.approve(wusdPresto.options.address, value).send(blockchainConnection.getSendingOptions());
 
@@ -556,8 +552,8 @@ describe("Presto", () => {
         var tokens = await ammContract.methods.byLiquidityPool(liquidityPool).call();
         var token0 = new web3.eth.Contract(context.IERC20ABI, tokens[2][0]);
         var token1 = new web3.eth.Contract(context.IERC20ABI, tokens[2][1]);
-        await buyForETH(token0, 10, ammContract);
-        await buyForETH(token1, 10, ammContract);
+        //await buyForETH(token0, 10, ammContract);
+        //await buyForETH(token1, 10, ammContract);
         var token0decimals = await token0.methods.decimals().call();
         var token1decimals = await token1.methods.decimals().call();
 
@@ -628,6 +624,28 @@ describe("Presto", () => {
             receiversPercentages : []
         }*/];
 
+        operations = [{
+            inputTokenAddress : token0.options.address,
+            inputTokenAmount : utilities.toDecimals(40, token0decimals),
+            ammPlugin : ammContract.options.address,
+            liquidityPoolAddresses : [token0ETHLP],
+            swapPath : [ethereumAddress],
+            enterInETH : false,
+            exitInETH : true,
+            receivers : [accounts[0]],
+            receiversPercentages : []
+        }, {
+            inputTokenAddress : token1.options.address,
+            inputTokenAmount : utilities.toDecimals(40, token1decimals),
+            ammPlugin : ammContract.options.address,
+            liquidityPoolAddresses : [token1ETHLP],
+            swapPath : [ethereumAddress],
+            enterInETH : false,
+            exitInETH : true,
+            receivers : [accounts[0]],
+            receiversPercentages : []
+        }];
+
         //operations = [];
 
         console.log(utilities.fromDecimals(await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call(), 18));
@@ -643,16 +661,16 @@ describe("Presto", () => {
         }
 
         var payloads = [];
-        for(i = 0; i < 2; i++) {
-            var burnData = web3.eth.abi.encodeParameters(["uint256", "uint256", "uint256", "bool"], [ammPosition, liquidityPoolPosition, 40815887222522, false]);
+        for(i = 0; i < 1; i++) {
+            var burnData = web3.eth.abi.encodeParameters(["uint256", "uint256", "uint256", "bool"], [ammPosition, liquidityPoolPosition, 40888759635159, false]);
             payloads.push(web3.eth.abi.encodeParameters(["uint256", "bytes"], [0, burnData]));
         }
         payloads = web3.eth.abi.encodeParameter("bytes[]", payloads);
         var payload = abi.encode(["bytes", "address", "tuple(address,uint256,address,address[],address[],bool,bool,address[],uint256[])[]"],[payloads, presto.options.address, operations.map(it => Object.values(it))]);
 
-        var wusdValue = utilities.toDecimals(900, 18);
+        var wusdValue = utilities.toDecimals(90, 18);
 
-        var transaction = await wusdCollection.methods.safeBatchTransferFrom(accounts[0], wusdPresto.options.address, [wusdObjectId, wusdObjectId], [wusdValue, wusdValue], payload).send(blockchainConnection.getSendingOptions());
+        var transaction = await wusdCollection.methods.safeBatchTransferFrom(accounts[0], wusdPresto.options.address, [wusdObjectId,], [wusdValue], payload).send(blockchainConnection.getSendingOptions());
         var transactionFee = await blockchainConnection.calculateTransactionFee(transaction);
 
         await nothingInContracts(wusdPresto.options.address);
@@ -692,7 +710,7 @@ describe("Presto", () => {
                 }
                 data = await amm.contract.methods.getSwapOutput(ethereumAddress, ethereumValue, [liquidityPoolAddress], [tokenAddress]).call();
                 multiplier = parseInt(tokenValue) / parseInt(data[1]);
-                console.log(ethereumValue, tokenValue, data[1]);
+                //console.log(ethereumValue, tokenValue, data[1]);
             }
             return {ethereumValue, liquidityPoolAddress};
         }
@@ -730,7 +748,7 @@ describe("Presto", () => {
         await nothingInContracts(indexPresto.options.address);
     });
 
-    it("Mint Nex Index", async () => {
+    it("Mint New Index", async () => {
 
         var Index = await compile('index/Index');
 
@@ -768,7 +786,7 @@ describe("Presto", () => {
                 }
                 data = await amm.contract.methods.getSwapOutput(ethereumAddress, ethereumValue, [liquidityPoolAddress], [tokenAddress]).call();
                 multiplier = parseInt(tokenValue) / parseInt(data[1]);
-                console.log(ethereumValue, tokenValue, data[1]);
+                //console.log(ethereumValue, tokenValue, data[1]);
             }
             return {ethereumValue, liquidityPoolAddress};
         }

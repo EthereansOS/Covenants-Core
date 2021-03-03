@@ -23,6 +23,9 @@ contract Presto is IPresto {
         feePercentage = _feePercentage;
     }
 
+    receive() external payable {
+    }
+
     modifier onlyDFO() {
         require(IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(doubleProxy).proxy()).getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(msg.sender), "Unauthorized.");
         _;
