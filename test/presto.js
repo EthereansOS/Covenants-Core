@@ -685,10 +685,10 @@ describe("Presto", () => {
 
         var index = new web3.eth.Contract(Index.abi, context.indexAddress);
 
-        var value = 30;
+        var value = 2;
         value = utilities.toDecimals(value, 18);
 
-        var indexId = "1291701553039866105681170894910877665806993998069";
+        var indexId = "903718979238392026542673315938967756144559516106";//"1291701553039866105681170894910877665806993998069";
 
         var indexInfo = await index.methods.info(indexId, value).call();
 

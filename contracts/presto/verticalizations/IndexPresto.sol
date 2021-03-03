@@ -26,8 +26,9 @@ contract IndexPresto is ERC1155Receiver {
     ) public payable returns(uint256 objectId, address interoperableInterfaceAddress) {
         uint256 eth = _transferToMeAndCheckAllowance(operations, prestoAddress);
         IPresto(prestoAddress).execute{value : eth}(_operations);
-        (objectId, interoperableInterfaceAddress) = _mint(indexAddress, indexData);
-        _flushAndClear(interoperableInterfaceAddress, msg.sender);
+        address[] memory tokenAddresses;
+        (objectId, interoperableInterfaceAddress, tokenAddresses) = _mint(indexAddress, indexData);
+        _flushAndClear(interoperableInterfaceAddress, tokenAddresses, msg.sender);
     }
 
     function mint(
@@ -40,7 +41,7 @@ contract IndexPresto is ERC1155Receiver {
         (address[] memory tokenAddresses, uint256[] memory amounts) = IIndex(indexAddress).info(objectId, value);
         _approve(indexAddress, tokenAddresses, amounts);
         IIndex(indexAddress).mint{value : _balanceOf(address(0))}(objectId, value, receiver);
-        _flushAndClear(address(INativeV1(IIndex(indexAddress).collection()).asInteroperable(objectId)), msg.sender);
+        _flushAndClear(address(INativeV1(IIndex(indexAddress).collection()).asInteroperable(objectId)), tokenAddresses, msg.sender);
     }
 
     function onERC1155Received(
@@ -86,12 +87,12 @@ contract IndexPresto is ERC1155Receiver {
             for(uint256 i = 0; i < ids.length; i++) {
                 _collectTokenData(address(INativeV1(msg.sender).asInteroperable(ids[i])), 1);
             }
-            _flushAndClear(address(0), from);
+            _flushAndClear(address(0), new address[](0), from);
     }
 
-    function _mint(address indexAddress, bytes memory indexData) private returns(uint256 objectId, address interoperableInterfaceAddress) {
+    function _mint(address indexAddress, bytes memory indexData) private returns(uint256 objectId, address interoperableInterfaceAddress, address[] memory tokenAddresses) {
         (string memory name, string memory symbol, string memory uri, address[] memory _tokens, uint256[] memory _amounts, uint256 value, address receiver) = abi.decode(indexData, (string, string, string, address[], uint256[], uint256, address));
-        _approve(indexAddress, _tokens, new uint256[](0));
+        _approve(indexAddress, tokenAddresses = _tokens, new uint256[](0));
         (objectId, interoperableInterfaceAddress) = IIndex(indexAddress).mint{value : _balanceOf(address(0))}(name, symbol, uri, _tokens, _amounts, value, receiver);
     }
 
@@ -101,8 +102,13 @@ contract IndexPresto is ERC1155Receiver {
         }
     }
 
-    function _flushAndClear(address indexInteroperableInterfaceAddress, address receiver) private {
+    function _flushAndClear(address indexInteroperableInterfaceAddress, address[] memory tokenAddresses, address receiver) private {
         _safeTransfer(indexInteroperableInterfaceAddress, receiver, _balanceOf(indexInteroperableInterfaceAddress));
+        for(uint256 i = 0; i < tokenAddresses.length; i++) {
+            if(_tokensToTransfer.length == 0 || _tokensToTransfer[_tokenIndex[tokenAddresses[i]]] != tokenAddresses[i]) {
+                _safeTransfer(tokenAddresses[i], receiver, _balanceOf(tokenAddresses[i]));
+            }
+        }
         if(_tokensToTransfer.length == 0 || _tokensToTransfer[_tokenIndex[address(0)]] != address(0)) {
             _safeTransfer(address(0), receiver, address(this).balance);
         }
