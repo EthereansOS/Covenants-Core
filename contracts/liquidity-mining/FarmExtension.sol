@@ -47,7 +47,7 @@ contract FarmExtension is IFarmExtension {
         _byMint = byMint;
     }
 
-    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
+    function data() view public virtual override returns(address farmMainContract, bool byMint, address host, address rewardTokenAddress) {
         return (_farmMainContract, _byMint, _host, _rewardTokenAddress);
     }
 
