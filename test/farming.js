@@ -406,9 +406,10 @@ describe("Farming", () => {
             params[1] = farmMainExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
 
             var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
-            var deployTransaction = await farmFactory.methods.deploy(payload, true).send(blockchainConnection.getSendingOptions());
+            console.log(`gas used ${await farmFactory.methods.deploy(payload).estimateGas(blockchainConnection.getSendingOptions())}`)
+            var deployTransaction = await farmFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
             deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-            var farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bool,bytes)"))[0].topics[1]);
+            var farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
 
             farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
             assert.notStrictEqual(farmMainContract.options.address, utilities.voidEthereumAddress);
