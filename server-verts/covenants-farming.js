@@ -109,7 +109,7 @@ async function main() {
     console.log(res);
 
     var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
-    console.log(`gas used ${await farmFactory.methods.deploy(payload).estimateGas(sendingOptions)}`)
+    //console.log(`gas used ${await farmFactory.methods.deploy(payload).estimateGas(sendingOptions)}`)
     var deployTransaction = await farmFactory.methods.deploy(payload).send(sendingOptions);
     console.log('deployed')
     deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
