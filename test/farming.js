@@ -263,7 +263,6 @@ describe("Farming", () => {
             FarmMain = await compile('liquidity-mining/FarmMain');
             // PinnedFarmMain = await compile('liquidity-mining/PinnedFarmMain');
             FarmFactory = await compile('liquidity-mining/FarmFactory');
-            
             DFOBasedFarmExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedFarmExtensionFactory');
             DFOBasedFarmExtension = await compile('liquidity-mining/dfo/DFOBasedFarmExtension');
             FarmExtension = await compile('liquidity-mining/FarmExtension');

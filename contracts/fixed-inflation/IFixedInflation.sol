@@ -6,5 +6,7 @@ import "./FixedInflationData.sol";
 
 interface IFixedInflation {
 
-    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) external;
+    function setEntry(FixedInflationEntry memory entryData, FixedInflationOperation[] memory operations) external;
+
+    function flushBack(address[] memory tokenAddresses) external;
 }

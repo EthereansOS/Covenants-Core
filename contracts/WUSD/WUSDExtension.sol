@@ -8,8 +8,9 @@ import "./util/INativeV1.sol";
 import "./util/IERC20.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "./AllowedAMM.sol";
+import "./IWUSDExtension.sol";
 
-contract WUSDExtension {
+contract WUSDExtension is IWUSDExtension {
 
     uint256 private constant DECIMALS = 18;
 
@@ -34,7 +35,7 @@ contract WUSDExtension {
         return (_collection, _mainItemObjectId, _mainItemInteroperableAddress);
     }
 
-    function controller() public view returns (address) {
+    function controller() public override view returns (address) {
         return _controller;
     }
 

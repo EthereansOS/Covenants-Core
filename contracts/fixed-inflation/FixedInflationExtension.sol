@@ -51,7 +51,8 @@ contract FixedInflationExtension is IFixedInflationExtension {
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
             if(transferAmounts[i] > 0) {
                 if(tokenAddresses[i] == address(0)) {
-                    payable(msg.sender).transfer(transferAmounts[i]);
+                    (bool result,) = msg.sender.call{value:transferAmounts[i]}("");
+                    require(result, "ETH transfer failed");
                     continue;
                 }
                 _safeTransfer(tokenAddresses[i], msg.sender, transferAmounts[i]);
@@ -62,8 +63,16 @@ contract FixedInflationExtension is IFixedInflationExtension {
         }
     }
 
-    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) public override hostOnly {
-        IFixedInflation(_fixedInflationContract).setEntries(newEntries, operationSets);
+    function setEntry(FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) public override hostOnly {
+        IFixedInflation(_fixedInflationContract).setEntry(newEntry, newOperations);
+    }
+
+    function flushBack(address[] memory tokenAddresses) public override hostOnly {
+        IFixedInflation(_fixedInflationContract).flushBack(tokenAddresses);
+    }
+
+    function deactivationByFailure() public override fixedInflationOnly {
+        active = false;
     }
 
     /** INTERNAL METHODS */

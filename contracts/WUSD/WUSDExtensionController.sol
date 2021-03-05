@@ -135,7 +135,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         return _doubleProxy;
     }
 
-    function extension() public view returns (address) {
+    function extension() public override view returns (address) {
         return _extension;
     }
 
@@ -200,7 +200,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         maximumPairRatioForBurn = newMaximumPairRatioForBurn;
     }
 
-    function allowedAMMs() public view returns(AllowedAMM[] memory) {
+    function allowedAMMs() public override view returns(AllowedAMM[] memory) {
         return _allowedAMMs;
     }
 
@@ -373,7 +373,7 @@ contract WUSDExtensionController is IWUSDExtensionController, ERC1155Receiver {
         uint256 liquidityPoolAmount,
         bool byLiquidityPool
     )
-        public
+        public override
         _forAllowedAMMAndLiquidityPool(ammPosition, liquidityPoolPosition)
         returns(uint256 toMint)
     {

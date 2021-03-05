@@ -25,13 +25,13 @@ function cleanOutput(text) {
     return output;
 }
 
-var solidityVersion = process.env.npm_package_config_solidityVersion;
-if(!solidityVersion) {
+global.solidityVersion = global.solidityVersion || process.env.npm_package_config_solidityVersion;
+if(!global.solidityVersion) {
     var location = path.resolve(__dirname, "package.json");
     while(!fs.existsSync(location)) {
         location = path.resolve(path.dirname(location), "..", "package.json");
     }
-    solidityVersion = process.env.npm_package_config_solidityVersion = JSON.parse(fs.readFileSync(location, "UTF-8")).config.solidityVersion;
+    global.solidityVersion = process.env.npm_package_config_solidityVersion = JSON.parse(fs.readFileSync(location, "UTF-8")).config.solidityVersion;
 }
 
 var nodeModulesLocation = path.resolve(__dirname, "node_modules");

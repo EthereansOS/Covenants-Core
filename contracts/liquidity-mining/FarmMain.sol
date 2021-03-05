@@ -147,6 +147,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
         // create the position id
         positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
+        require(_positions[positionId].creationBlock == 0, "Invalid open");
         // create the lp data for the amm
         (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
         // calculate the reward
@@ -212,6 +213,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             require(reward <= farmingPosition.reward, "Reward is bigger than expected");
             // remove the partial reward from the liquidity mining position total reward
             farmingPosition.reward = farmingPosition.reward - reward;
+            farmingPosition.creationBlock = block.number;
         } else {
             // rebalance setup
             currentBlock = currentBlock > _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : currentBlock;
@@ -302,6 +304,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
         _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
         _setupPositionsCount[farmingPosition.setupIndex] -= 2;
+        delete _positions[positionId];
     }
 
     function calculateLockedFarmingReward(uint256 setupIndex, uint256 mainTokenAmount, bool isPartial, uint256 positionId) public view returns(uint256 reward, uint256 relativeRewardPerBlock) {
@@ -587,7 +590,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         if (setup.active && block.number >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
             setup.active = false;
             return;
-        } else if (block.number > setup.startBlock && block.number <= setup.endBlock && setup.active) {
+        } else if (block.number >= setup.startBlock && block.number < setup.endBlock && setup.active) {
             setup.active = false;
             _setupsInfo[setup.infoIndex].renewTimes = 0;
             uint256 amount;

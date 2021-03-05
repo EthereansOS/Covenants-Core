@@ -21,31 +21,22 @@ contract ProposalCode {
     }
 
     function callOneTime(address) public {
-        FixedInflationEntryConfiguration[] memory newEntries = new FixedInflationEntryConfiguration[]({1});
-        {2}
-        FixedInflationOperation[][] memory operationSets = new FixedInflationOperation[][]({1});
+        FixedInflationOperation[] memory operationSets = new FixedInflationOperation[]({2});
         {3}
-        IFixedInflationExtension({0}).setEntries(newEntries, operationSets);
+        IFixedInflationExtension({0}).setEntry({1}, operationSets);
     }
 
     {4}
 }
 
 interface IFixedInflationExtension {
-    function setEntries(FixedInflationEntryConfiguration[] memory newEntries, FixedInflationOperation[][] memory operationSets) external;
-}
-
-struct FixedInflationEntryConfiguration {
-    bool add;
-    bool remove;
-    FixedInflationEntry data;
+    function setEntry(FixedInflationEntry memory entryData, FixedInflationOperation[] memory operations) external;
 }
 
 struct FixedInflationEntry {
-    uint256 lastBlock;
-    bytes32 id;
     string name;
     uint256 blockInterval;
+    uint256 lastBlock;
     uint256 callerRewardPercentage;
 }
 

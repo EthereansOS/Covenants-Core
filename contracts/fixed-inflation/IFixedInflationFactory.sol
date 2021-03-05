@@ -9,5 +9,5 @@ interface IFixedInflationFactory {
 
     function feePercentageInfo() external view returns (uint256, address);
 
-    function cloneLiquidityMiningDefaultExtension() external returns(address clonedExtension);
+    function cloneFixedInflationDefaultExtension() external returns(address clonedExtension);
 }
