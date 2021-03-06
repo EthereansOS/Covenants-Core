@@ -1,12 +1,11 @@
 var Web3 = require('web3');
-const memdown = require('memdown');
 module.exports = {
     init: global.blockchainConnection = global.blockchainConnection || new Promise(async function(ok, ko) {
         try {
             (require('dotenv')).config();
             var options = {
                 gasLimit: 10000000,
-                db: memdown(),
+                db: require('memdown'),
                 total_accounts: 15,
                 default_balance_ether: 9999999999999999999
             };
