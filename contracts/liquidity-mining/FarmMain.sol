@@ -185,7 +185,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
         // rebalance the reward per token
         _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
-        farmingPosition.reward = calculateFreeFarmingReward(positionId);
+        farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
         farmingPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
         // update the last block update variablex
@@ -206,19 +206,19 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             // check if reward is available
             require(farmingPosition.reward > 0, "No reward");
             // check if it's a partial reward or not
-            if (_setups[farmingPosition.setupIndex].endBlock > block.number) {
-                // calculate the reward from the farming position creation block to the current block multiplied by the reward per block
-                (reward,) = calculateLockedFarmingReward(0, 0, true, positionId);
-            }
+            // if (_setups[farmingPosition.setupIndex].endBlock > block.number) {
+            // calculate the reward from the farming position creation block to the current block multiplied by the reward per block
+            (reward,) = calculateLockedFarmingReward(0, 0, true, positionId);
+            //}
             require(reward <= farmingPosition.reward, "Reward is bigger than expected");
             // remove the partial reward from the liquidity mining position total reward
-            farmingPosition.reward = farmingPosition.reward - reward;
+            farmingPosition.reward = currentBlock >= _setups[farmingPosition.setupIndex].endBlock ? 0 : farmingPosition.reward - reward;
             farmingPosition.creationBlock = block.number;
         } else {
             // rebalance setup
             currentBlock = currentBlock > _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : currentBlock;
             _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentBlock - _setups[farmingPosition.setupIndex].lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
-            reward = calculateFreeFarmingReward(positionId);
+            reward = calculateFreeFarmingReward(positionId, false);
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
             farmingPosition.reward = 0;
             // update the last block update variable
@@ -312,7 +312,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             // retrieve the position
             FarmingPosition memory farmingPosition = _positions[positionId];
             // calculate the reward
-            reward = (block.number >= _setups[farmingPosition.setupIndex].endBlock) ? farmingPosition.reward : ((block.number - farmingPosition.creationBlock) * farmingPosition.lockedRewardPerBlock);
+            uint256 currentBlock = block.number >= _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : block.number;
+            reward = ((currentBlock - farmingPosition.creationBlock) * farmingPosition.lockedRewardPerBlock);
         } else {
             FarmingSetup memory setup = _setups[setupIndex];
             // check if main token amount is less than the stakeable liquidity
@@ -331,9 +332,15 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function calculateFreeFarmingReward(uint256 positionId) public view returns(uint256 reward) {
+    function calculateFreeFarmingReward(uint256 positionId, bool isExt) public view returns(uint256 reward) {
         FarmingPosition memory farmingPosition = _positions[positionId];
         reward = ((_rewardPerTokenPerSetup[farmingPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * farmingPosition.liquidityPoolTokenAmount) / 1e18;
+        if (isExt) {
+            uint256 currentBlock = block.number < _setups[farmingPosition.setupIndex].endBlock ? block.number : _setups[farmingPosition.setupIndex].endBlock;
+            uint256 lastUpdateBlock = _setups[farmingPosition.setupIndex].lastUpdateBlock < _setups[farmingPosition.setupIndex].startBlock ? _setups[farmingPosition.setupIndex].startBlock : _setups[farmingPosition.setupIndex].lastUpdateBlock;
+            uint256 rpt = (((currentBlock - lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
+            reward += (rpt * farmingPosition.liquidityPoolTokenAmount) / 1e18;
+        }
         reward += farmingPosition.reward;
     }
 
@@ -416,11 +423,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             uint256 duration = setup.endBlock - block.number;
             uint256 amount = difference * duration;
             if (amount > 0) {
-                if (info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock) {
-                    //_rewardReceived[setupIndex] = (((block.number - setup.startBlock) * farmingSetupInfo.originalRewardPerBlock) + amount) + info.originalRewardPerBlock;
-                    _rewardReceived[setupIndex] -= amount;
-                    _giveBack(amount);
-                } else {
+                if (info.originalRewardPerBlock > farmingSetupInfo.originalRewardPerBlock) {
                     require(_ensureTransfer(amount), "Insufficient reward in extension.");
                     _rewardReceived[setupIndex] += amount;
                 }
@@ -599,8 +602,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
                 setup.endBlock = block.number;
                 _updateFreeSetup(setupIndex, 0, 0, false);
             } else {
-                uint256 unissuedRpb = setup.rewardPerBlock - ((setup.rewardPerBlock * (setup.totalSupply * 1e18 / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18);
-                amount = ((setup.endBlock - block.number) * unissuedRpb);
+                // uint256 unissuedRpb = setup.rewardPerBlock - ((setup.rewardPerBlock * (setup.totalSupply * 1e18 / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18);
+                amount = ((setup.endBlock - block.number) * setup.rewardPerBlock);
                 setup.endBlock = block.number;
             }
             _rewardReceived[setupIndex] -= amount;
