@@ -14,6 +14,7 @@ contract DFOBasedFarmExtension is IFarmExtension {
 
     // wallet who has control on the extension
     address internal _doubleProxy;
+    address internal _treasury;
 
     // mapping that contains all the liquidity mining contract linked to this extension
     address internal _liquidityMiningContract;
@@ -23,8 +24,6 @@ contract DFOBasedFarmExtension is IFarmExtension {
 
     // whether the token is by mint or by reserve
     bool internal _byMint;
-
-    bool public override active;
 
     /** MODIFIERS */
 
@@ -42,15 +41,12 @@ contract DFOBasedFarmExtension is IFarmExtension {
 
     /** PUBLIC METHODS */
 
-    function init(bool byMint, address host) public virtual override {
+    function init(bool byMint, address host, address treasury) public virtual override {
         require(_liquidityMiningContract == address(0), "Already init");
         require((_doubleProxy = host) != address(0), "blank host");
         _rewardTokenAddress = IFarmMain(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
-    }
-
-    function setActive(bool _active) public virtual hostOnly {
-        active = _active;
+        _treasury = treasury != address(0) ? treasury : IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress();
     }
 
     /** @dev allows the DFO to update the double proxy address.
@@ -60,8 +56,8 @@ contract DFOBasedFarmExtension is IFarmExtension {
         _doubleProxy = newDoubleProxy;
     }
 
-    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address rewardTokenAddress) {
-        return (_liquidityMiningContract, _byMint, _doubleProxy, _rewardTokenAddress);
+    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address treasury, address rewardTokenAddress) {
+        return (_liquidityMiningContract, _byMint, _doubleProxy, _treasury, _rewardTokenAddress);
     }
 
     /** @dev transfers the input amount to the caller liquidity mining contract.

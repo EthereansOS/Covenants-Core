@@ -402,7 +402,7 @@ describe("Farming", () => {
             ];
 
             byMint = params[0] !== clonedDefaultFarmExtension;
-            params[1] = farmMainExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : dfo.doubleProxyAddress).encodeABI()
+            params[1] = farmMainExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : dfo.doubleProxyAddress, params[0] === clonedDefaultFarmExtension ? utilities.voidEthereumAddress : dfo.doubleProxyAddress).encodeABI()
 
             var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
             console.log(`gas used ${await farmFactory.methods.deploy(payload).estimateGas(blockchainConnection.getSendingOptions())}`)
@@ -427,8 +427,6 @@ describe("Farming", () => {
                     value : utilities.toDecimals(20000, 18)
                 }));
             }
-            var extension = new web3.eth.Contract(FarmExtension.abi, clonedDefaultFarmExtension);
-            await extension.methods.setActive(true).send(blockchainConnection.getSendingOptions());
             farmTokenCollection = new web3.eth.Contract(context.INativeV1ABI, await farmMainContract.methods._farmTokenCollection().call());
         } catch (error) {
             console.error(error);

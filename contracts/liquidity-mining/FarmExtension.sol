@@ -9,16 +9,15 @@ import "./util/IERC20Mintable.sol";
 
 contract FarmExtension is IFarmExtension {
 
-    // wallet who has control on the extension
+    // wallet who has control on the extension and treasury
     address internal _host;
+    address internal _treasury;
     // address of the farm main contract linked to this extension
     address internal _farmMainContract;
     // the reward token address linked to this extension
     address internal _rewardTokenAddress;
     // whether the token is by mint or by reserve
     bool internal _byMint;
-    // whether the extension is active or not
-    bool public override active;
 
     /** MODIFIERS */
 
@@ -40,15 +39,16 @@ contract FarmExtension is IFarmExtension {
         require(_farmMainContract != address(0) && _rewardTokenAddress == address(0), "ETH not allowed");
     }
 
-    function init(bool byMint, address host) public virtual override {
+    function init(bool byMint, address host, address treasury) public virtual override {
         require(_farmMainContract == address(0), "Already init");
         require((_host = host) != address(0), "blank host");
         _rewardTokenAddress = IFarmMain(_farmMainContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
+        _treasury = treasury != address(0) ? treasury : host;
     }
 
-    function data() view public virtual override returns(address farmMainContract, bool byMint, address host, address rewardTokenAddress) {
-        return (_farmMainContract, _byMint, _host, _rewardTokenAddress);
+    function data() view public virtual override returns(address farmMainContract, bool byMint, address host, address treasury, address rewardTokenAddress) {
+        return (_farmMainContract, _byMint, _host, _treasury, _rewardTokenAddress);
     }
 
     /** @dev method used to update the extension host.
@@ -58,12 +58,13 @@ contract FarmExtension is IFarmExtension {
         _host = host;
     }
 
-    /** @dev method used to activate or deactivate the extension, called only by the host.
-      * @param _active true if we're activating the extension, false otherwise.
+    /** @dev method used to update the extension treasury.
+      * @param treasury new treasury address.
      */
-    function setActive(bool _active) public virtual hostOnly {
-        active = _active;
+    function setTreasury(address treasury) public virtual override hostOnly {
+        _treasury = treasury;
     }
+
 
     /** @dev this function calls the farm main contract with the given address and sets the given farming setups.
       * @param farmingSetups array containing all the farming setups.
@@ -89,9 +90,7 @@ contract FarmExtension is IFarmExtension {
     function backToYou(uint256 amount) payable public virtual override farmMainOnly {
         if(_rewardTokenAddress != address(0)) {
             _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
-            if(_byMint) {
-                _burn(_rewardTokenAddress, amount);
-            }
+            _byMint ? _burn(_rewardTokenAddress, amount) : _safeTransfer(_rewardTokenAddress, _treasury, amount);
         } else {
             require(msg.value == amount, "invalid sent amount");
         }

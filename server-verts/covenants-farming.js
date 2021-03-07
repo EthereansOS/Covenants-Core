@@ -104,7 +104,7 @@ async function main() {
     ];
 
     console.log(setups);
-    params[1] = clonedFarmExtension.methods.init(false, accounts[0]).encodeABI()
+    params[1] = clonedFarmExtension.methods.init(false, accounts[0], accounts[0]).encodeABI()
     var res = await uniswapAMM.methods.byLiquidityPool(liquidityPool.options.address).call();
     console.log(res);
 

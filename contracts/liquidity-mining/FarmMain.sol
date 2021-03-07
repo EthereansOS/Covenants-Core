@@ -13,8 +13,6 @@ import "./util/INativeV1.sol";
 
 contract FarmMain is IFarmMain, ERC1155Receiver {
 
-    // max number of contemporary locked
-    uint256 public override constant MAX_CONTEMPORARY_LOCKED = 4;
     // percentage
     uint256 public override constant ONE_HUNDRED = 1e18;
     // event that tracks contracts deployed for the given reward token
@@ -68,12 +66,6 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     /** @dev byPositionOwner modifier used to check for unauthorized accesses. */
     modifier byPositionOwner(uint256 positionId) {
         require(_positions[positionId].uniqueOwner == msg.sender && _positions[positionId].creationBlock != 0, "Not owned");
-        _;
-    }
-
-    /** @dev activeExtensionOnly modifier used to check for function calls only if the extension is active. */
-    modifier activeExtensionOnly() {
-        require(IFarmExtension(_extension).active(), "not active extension");
         _;
     }
 
@@ -140,7 +132,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
-    function openPosition(FarmingPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
+    function openPosition(FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _setups[request.setupIndex];
         // retrieve the unique owner
@@ -175,7 +167,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
-    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public payable activeExtensionOnly activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
         FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
@@ -609,24 +601,6 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _rewardReceived[setupIndex] -= amount;
             _giveBack(amount);
             return;
-        }
-
-        // TODO: check if still needed
-        if (!_setupsInfo[setup.infoIndex].free) {
-            // count the number of currently active locked setups
-            uint256 count = 0;
-            for(uint256 i = 0; i < _farmingSetupsCount; i++) {
-                if(_setupsInfo[_setups[i].infoIndex].free || i == setupIndex) continue;
-                if(_setups[i].active) {
-                    // increase the counter
-                    count++;
-                }
-            }
-            // set the setup as not renewable
-            if(count > MAX_CONTEMPORARY_LOCKED) {
-                _setupsInfo[setup.infoIndex].renewTimes = 0;
-                return;
-            }
         }
 
         bool wasActive = setup.active;

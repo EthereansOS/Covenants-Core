@@ -6,10 +6,7 @@ import "./FarmData.sol";
 
 interface IFarmMain {
 
-    function MAX_CONTEMPORARY_LOCKED() external view returns(uint256);
-    function ONE_HUNDRED() external view returns(uint256);
-    // function loadBalancerActive() external view returns(bool);
-    
+    function ONE_HUNDRED() external view returns(uint256);    
     function _rewardTokenAddress() external view returns(address);
     function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external;
 }
