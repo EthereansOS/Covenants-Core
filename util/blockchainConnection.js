@@ -1,12 +1,11 @@
 var Web3 = require('web3');
-const memdown = require('memdown');
 module.exports = {
     init: global.blockchainConnection = global.blockchainConnection || new Promise(async function(ok, ko) {
         try {
             (require('dotenv')).config();
             var options = {
                 gasLimit: 10000000,
-                db: memdown(),
+                db: require('memdown'),
                 total_accounts: 15,
                 default_balance_ether: 9999999999999999999
             };
@@ -16,14 +15,6 @@ module.exports = {
             }
             global.gasLimit = options.gasLimit;
             global.accounts = await (global.web3 = new Web3(global.blockchainProvider = require("ganache-cli").provider(options), null, { transactionConfirmationBlocks: 1 })).eth.getAccounts();
-            global.startBlock = await web3.eth.getBlockNumber()
-            /*
-            global.web3 = new Web3("http://localhost:7545")
-            global.accounts = await global.web3.eth.getAccounts();
-            console.log(accounts);
-            global.startBlock = await global.web3.eth.getBlockNumber();
-            global.gasLimit = parseInt((await global.web3.eth.getBlock("latest")).gasLimit * 1);
-            */
             return ok(global.web3);
         } catch (e) {
             return ko(e);
