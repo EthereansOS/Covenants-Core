@@ -12,11 +12,12 @@ async function main() {
         db: memdown(),
         total_accounts: process.env.accounts || 15,
         default_balance_ether: 999999999999,
+        asyncRequestProcessing : true,
     };
 
     if (process.env.blockchain_connection_string) {
         options.fork = process.env.blockchain_connection_string;
-        options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit * 1);
+        options.gasLimit = parseInt((await new Web3(process.env.blockchain_connection_string).eth.getBlock("latest")).gasLimit);
     }
 
     global.gasLimit = options.gasLimit;
@@ -29,7 +30,7 @@ async function main() {
         }
     }
 
-    require("ganache-cli").server(options).listen(process.env.port || 8545, async function(error, blockchain) {
+    require("ganache-core").server(options).listen(process.env.port || 8545, async function(error, blockchain) {
         if(error) {
             return console.error(e);
         }
