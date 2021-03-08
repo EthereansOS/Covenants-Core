@@ -2,10 +2,10 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "../liquidity-mining/ILiquidityMiningExtension.sol";
-import "../liquidity-mining/ILiquidityMining.sol";
-import "../liquidity-mining/LiquidityMiningData.sol";
-import "../liquidity-mining/util/DFOHub.sol";
+import "../farming/ILiquidityMiningExtension.sol";
+import "../farming/ILiquidityMining.sol";
+import "../farming/LiquidityMiningData.sol";
+import "../farming/util/DFOHub.sol";
 import "./IWUSDExtensionController.sol";
 import "./util/IERC20.sol";
 import "./util/INativeV1.sol";

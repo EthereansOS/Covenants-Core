@@ -23,9 +23,9 @@ async function main() {
         gasLimit : global.gasLimit
     }
 
-    var FarmMain = await compile('liquidity-mining/FarmMain');
-    var FarmExtension = await compile('liquidity-mining/FarmExtension');
-    var FarmFactory = await compile('liquidity-mining/FarmFactory');
+    var FarmMain = await compile('farming/FarmMain');
+    var FarmExtension = await compile('farming/FarmExtension');
+    var FarmFactory = await compile('farming/FarmFactory');
     var UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
     var uniswapV2Router = new web3.eth.Contract(context.uniswapV2RouterABI, context.uniswapV2RouterAddress);
     var uniswapV2Factory = new web3.eth.Contract(context.uniswapV2FactoryABI, context.uniswapV2FactoryAddress);

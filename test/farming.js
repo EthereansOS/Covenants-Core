@@ -260,12 +260,12 @@ describe("Farming", () => {
     before(async () => {
         try {
             await blockchainConnection.init;
-            FarmMain = await compile('liquidity-mining/FarmMain');
-            // PinnedFarmMain = await compile('liquidity-mining/PinnedFarmMain');
-            FarmFactory = await compile('liquidity-mining/FarmFactory');
-            DFOBasedFarmExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedFarmExtensionFactory');
-            DFOBasedFarmExtension = await compile('liquidity-mining/dfo/DFOBasedFarmExtension');
-            FarmExtension = await compile('liquidity-mining/FarmExtension');
+            FarmMain = await compile('farming/FarmMain');
+            // PinnedFarmMain = await compile('farming/PinnedFarmMain');
+            FarmFactory = await compile('farming/FarmFactory');
+            DFOBasedFarmExtensionFactory = await compile('farming/dfo/DFOBasedFarmExtensionFactory');
+            DFOBasedFarmExtension = await compile('farming/dfo/DFOBasedFarmExtension');
+            FarmExtension = await compile('farming/FarmExtension');
 
             UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
 
@@ -336,7 +336,7 @@ describe("Farming", () => {
             farmMainExtension = new web3.eth.Contract(FarmExtension.abi, farmMainExtensionAddress);
             console.log(`simple farm extension deployed at ${farmMainExtension.options.address}`);
 
-            var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(farmMainExtension.options.address);
+            var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/farming/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(farmMainExtension.options.address);
             var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
             await dfoManager.finalizeProposal(dfo, proposal);
 

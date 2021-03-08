@@ -47,12 +47,12 @@ describe("LiquidityMining", () => {
     before(async () => {
         try {
             await blockchainConnection.init;
-            LiquidityMining = await compile('liquidity-mining/LiquidityMining');
+            LiquidityMining = await compile('farming/LiquidityMining');
 
-            LiquidityMiningFactory = await compile('liquidity-mining/LiquidityMiningFactory');
-            DFOBasedLiquidityMiningExtensionFactory = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtensionFactory');
-            DFOBasedLiquidityMiningExtension = await compile('liquidity-mining/dfo/DFOBasedLiquidityMiningExtension');
-            LiquidityMiningDefaultExtension = await compile('liquidity-mining/LiquidityMiningExtension');
+            LiquidityMiningFactory = await compile('farming/LiquidityMiningFactory');
+            DFOBasedLiquidityMiningExtensionFactory = await compile('farming/dfo/DFOBasedLiquidityMiningExtensionFactory');
+            DFOBasedLiquidityMiningExtension = await compile('farming/dfo/DFOBasedLiquidityMiningExtension');
+            LiquidityMiningDefaultExtension = await compile('farming/LiquidityMiningExtension');
             UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
 
             ethItemOrchestrator = new web3.eth.Contract(context.ethItemOrchestratorABI, context.ethItemOrchestratorAddress);
@@ -213,7 +213,7 @@ describe("LiquidityMining", () => {
 
         liquidityMiningExtension = new web3.eth.Contract(DFOBasedLiquidityMiningExtension.abi, liquidityMiningAddress);
 
-        var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/liquidity-mining/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/farming/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
         var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
         await dfoManager.finalizeProposal(dfo, proposal);
 

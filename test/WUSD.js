@@ -350,7 +350,7 @@ describe("WUSD", () => {
 
         var indexContract = new web3.eth.Contract((await compile("index/Index")).abi, context.indexAddress);
         var indexCollection = new web3.eth.Contract(context.ethItemNativeABI, await indexContract.methods.collection().call());
-        var liquidityMiningFactory = new web3.eth.Contract((await compile("liquidity-mining/LiquidityMiningFactory")).abi, context.liquidityMiningFactoryAddress);
+        var liquidityMiningFactory = new web3.eth.Contract((await compile("farming/LiquidityMiningFactory")).abi, context.liquidityMiningFactoryAddress);
 
         console.log("Index", await indexCollection.methods.uri().call());
         console.log("LiquidityMiningFactory", await liquidityMiningFactory.methods.liquidityFarmTokenCollectionURI().call());
