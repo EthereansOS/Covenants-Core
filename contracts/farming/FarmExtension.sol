@@ -89,10 +89,16 @@ contract FarmExtension is IFarmExtension {
      */
     function backToYou(uint256 amount) payable public virtual override farmMainOnly {
         if(_rewardTokenAddress != address(0)) {
-            _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
-            _byMint ? _burn(_rewardTokenAddress, amount) : _safeTransfer(_rewardTokenAddress, _treasury, amount);
+            _safeTransferFrom(_rewardTokenAddress, msg.sender, _byMint ? address(this) : _treasury, amount);
+            if(_byMint) {
+                _burn(_rewardTokenAddress, amount);
+            } 
         } else {
             require(msg.value == amount, "invalid sent amount");
+            if(_treasury != address(this)) {
+                (bool result, ) = _treasury.call{value:amount}("");
+                require(result, "ETH transfer failed.");
+            }
         }
     }
 

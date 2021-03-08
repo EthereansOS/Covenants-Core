@@ -120,6 +120,12 @@ async function main() {
     await rewardToken.methods.transfer(clonedDefaultFarmExtension, await rewardToken.methods.balanceOf(accounts[0]).call()).send(sendingOptions);
     await buyForETH(context.buidlTokenAddress, 10);
 
+    var WUSDController = await compile('WUSD/WUSDExtensionController');
+
+    var wusdController = new web3.eth.Contract(WUSDController.abi, "0xc6749132243dA6B174BF502E7a85f5cEdD74A753");
+
+    await wusdController.methods.allowedAMMs().call();
+
     console.log("\nFarm Factory:", farmFactory.options.address);
 }
 

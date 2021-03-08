@@ -163,7 +163,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             lockedRewardPerBlock: lockedRewardPerBlock,
             creationBlock: block.number
         });
-        _setupPositionsCount[request.setupIndex] += _setupsInfo[chosenSetup.infoIndex].free ? 1 : 2;
+        _setupPositionsCount[request.setupIndex] += (1 + (_setupsInfo[chosenSetup.infoIndex].free ? 0 : liquidityPoolData.amount));
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
@@ -214,7 +214,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
             farmingPosition.reward = 0;
             // update the last block update variable
-            _setups[farmingPosition.setupIndex].lastUpdateBlock = currentBlock;   
+            _setups[farmingPosition.setupIndex].lastUpdateBlock = currentBlock;
         }
         if (reward > 0) {
             // transfer the reward
@@ -260,9 +260,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
                 farmingPosition.creationBlock != 0 &&
                 removedLiquidity <= farmingPosition.liquidityPoolTokenAmount &&
                 farmingPosition.uniqueOwner == msg.sender
-            ) || INativeV1(_farmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity, "Invalid withdraw");
-        // check if liquidity mining position is valid
-        require(_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free || (_setups[setupIndex].endBlock <= block.number), "Invalid withdraw");
+            ) || (INativeV1(_farmTokenCollection).balanceOf(msg.sender, objectId) >= removedLiquidity && (_setups[setupIndex].endBlock <= block.number)), "Invalid withdraw");
         // burn the liquidity in the locked setup
         if (positionId == 0) {
             _burnFarmTokenAmount(objectId, removedLiquidity);
@@ -272,7 +270,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
         _removeLiquidity(positionId, setupIndex, unwrapPair, removedLiquidity, false);
         if (positionId == 0) {
-            _setupPositionsCount[setupIndex] -= 1;
+            _setupPositionsCount[setupIndex] -= removedLiquidity;
             if (_setupPositionsCount[setupIndex] == 0 && !_setups[setupIndex].active) {
                 _giveBack(_rewardReceived[setupIndex] - _rewardPaid[setupIndex]);
                 delete _setups[setupIndex];
@@ -295,7 +293,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
         _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
-        _setupPositionsCount[farmingPosition.setupIndex] -= 2;
+        _setupPositionsCount[farmingPosition.setupIndex] -= 1 + farmingPosition.liquidityPoolTokenAmount;
         delete _positions[positionId];
     }
 
@@ -406,27 +404,30 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _toggleSetup(setupIndex);
             return;
         }
-        
+
         info.renewTimes -= 1;
 
         if (setup.active && _setupsInfo[_setups[setupIndex].infoIndex].free) {
             setup = _setups[setupIndex];
-            uint256 difference = info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock ? farmingSetupInfo.originalRewardPerBlock - info.originalRewardPerBlock : info.originalRewardPerBlock - farmingSetupInfo.originalRewardPerBlock;
-            uint256 duration = setup.endBlock - block.number;
-            uint256 amount = difference * duration;
-            if (amount > 0) {
-                if (info.originalRewardPerBlock > farmingSetupInfo.originalRewardPerBlock) {
-                    require(_ensureTransfer(amount), "Insufficient reward in extension.");
-                    _rewardReceived[setupIndex] += amount;
+            if(block.number < setup.endBlock) {
+                uint256 difference = info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock ? farmingSetupInfo.originalRewardPerBlock - info.originalRewardPerBlock : info.originalRewardPerBlock - farmingSetupInfo.originalRewardPerBlock;
+                uint256 duration = setup.endBlock - block.number;
+                uint256 amount = difference * duration;
+                if (amount > 0) {
+                    if (info.originalRewardPerBlock > farmingSetupInfo.originalRewardPerBlock) {
+                        require(_ensureTransfer(amount), "Insufficient reward in extension.");
+                        _rewardReceived[setupIndex] += amount;
+                    }
+                    _updateFreeSetup(setupIndex, 0, 0, false);
+                    setup.rewardPerBlock = info.originalRewardPerBlock;
                 }
-                _updateFreeSetup(setupIndex, 0, 0, false);
-                setup.rewardPerBlock = info.originalRewardPerBlock;
             }
             _setupsInfo[_setups[setupIndex].infoIndex].originalRewardPerBlock = info.originalRewardPerBlock;
         }
-        _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = info.renewTimes;
+        if(_setupsInfo[_setups[setupIndex].infoIndex].renewTimes > 0) {
+            _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = info.renewTimes;
+        }
     }
-
 
     function _transferToMeAndCheckAllowance(FarmingSetup memory setup, FarmingPositionRequest memory request) private returns(IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount) {
         require(request.amount > 0, "No amount");
@@ -479,16 +480,15 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         );
         tokenAmount = mainTokenAmount;
         // amount is lp check
-        if (!liquidityPoolData.amountIsLiquidityPool) {
+        if (liquidityPoolData.amountIsLiquidityPool || !_setupsInfo[_setups[setupIndex].infoIndex].involvingETH) {
+            require(msg.value == 0, "ETH not involved");
+        } else {
             // retrieve the poolTokenAmount from the amm
             if(liquidityPoolData.involvingETH) {
                 (liquidityPoolData.amount,,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
             } else {
                 (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
             }
-            liquidityPoolData.amountIsLiquidityPool = true;
-        } else {
-            require(msg.value == 0, "ETH not involved");
         }
     }
 
@@ -588,15 +588,10 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         } else if (block.number >= setup.startBlock && block.number < setup.endBlock && setup.active) {
             setup.active = false;
             _setupsInfo[setup.infoIndex].renewTimes = 0;
-            uint256 amount;
+            uint256 amount = (setup.endBlock - block.number) * setup.rewardPerBlock;
+            setup.endBlock = block.number;
             if (_setupsInfo[setup.infoIndex].free) {
-                amount = (setup.endBlock - block.number) * setup.rewardPerBlock;
-                setup.endBlock = block.number;
                 _updateFreeSetup(setupIndex, 0, 0, false);
-            } else {
-                // uint256 unissuedRpb = setup.rewardPerBlock - ((setup.rewardPerBlock * (setup.totalSupply * 1e18 / _setupsInfo[setup.infoIndex].maxStakeable)) / 1e18);
-                amount = ((setup.endBlock - block.number) * setup.rewardPerBlock);
-                setup.endBlock = block.number;
             }
             _rewardReceived[setupIndex] -= amount;
             _giveBack(amount);
@@ -628,7 +623,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             _setups[setupIndex].endBlock = block.number + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
             _setups[setupIndex].totalSupply = 0;
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes -= 1;
-        } else if (!wasActive) {
+        } else {
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = 0;
         }
     }
@@ -740,7 +735,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         if (_rewardTokenAddress == address(0)) {
             IFarmExtension(_extension).backToYou{value : amount}(amount);
         } else {
-            IERC20(_rewardTokenAddress).approve(_extension, amount);
+            _safeApprove(_rewardTokenAddress, _extension, amount);
             IFarmExtension(_extension).backToYou(amount);
         }
     }

@@ -13,6 +13,8 @@ async function main() {
         total_accounts: process.env.accounts || 15,
         default_balance_ether: 999999999999,
         asyncRequestProcessing : true,
+        logger : console,
+        verbose : true
     };
 
     if (process.env.blockchain_connection_string) {
