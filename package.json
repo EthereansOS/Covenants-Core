@@ -5,8 +5,9 @@
   "main": "util/build-contracts.js",
   "scripts": {
     "postinstall": "cross-var solc-vm install $npm_package_config_solidityVersion",
-    "build": "node util/build-contracts.js",
+    "flat": "node util/flat-contracts.js",
     "abi": "node util/abi-extractor.js",
+    "compile" : "npm run flat && npm run abi",
     "test": "mocha",
     "server": "node util/server.js"
   },

@@ -85,31 +85,31 @@ contract FarmFactory is IFarmFactory {
         farmTokenURI = farmTokenUri;
     }
 
-    /** @dev returns the liquidity farm token collection uri.
-      * @return liquidity farm token collection uri.
+    /** @dev returns the farm token collection uri.
+      * @return farm token collection uri.
      */
     function getFarmTokenCollectionURI() public override view returns (string memory) {
         return farmTokenCollectionURI;
     }
 
-    /** @dev returns the liquidity farm token uri.
-      * @return liquidity farm token uri.
+    /** @dev returns the farm token uri.
+      * @return farm token uri.
      */
     function getFarmTokenURI() public override view returns (string memory) {
         return farmTokenURI;
     }
 
     /** @dev utlity method to clone default extension
-     * @return clonedExtension the address of the actually-cloned liquidity mining extension
+     * @return clonedExtension the address of the actually-cloned farming extension
      */
     function cloneFarmDefaultExtension() public override returns(address clonedExtension) {
         emit ExtensionCloned(clonedExtension = _clone(farmDefaultExtension));
     }
 
-    /** @dev this function deploys a new LiquidityMining contract and calls the encoded function passed as data.
-     * @param data encoded initialize function for the liquidity mining contract (check LiquidityMining contract code).
-     * @return contractAddress new liquidity mining contract address.
-     * @return initResultData new liquidity mining contract call result.
+    /** @dev this function deploys a new Farming contract and calls the encoded function passed as data.
+     * @param data encoded initialize function for the farming contract (check Farming contract code).
+     * @return contractAddress new farming contract address.
+     * @return initResultData new farming contract call result.
      */
     function deploy(bytes memory data) public returns (address contractAddress, bytes memory initResultData) {
         initResultData = _call(contractAddress = _clone(farmMainImplAddress), data);

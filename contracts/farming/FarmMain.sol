@@ -45,7 +45,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     mapping(uint256 => uint256) private _rewardPerTokenPerSetup;
     // mapping containing the reward per token paid per position
     mapping(uint256 => uint256) private _rewardPerTokenPaid;
-    // mapping containing whether a liquidity mining position has been partially reedemed or not
+    // mapping containing whether a farming position has been partially reedemed or not
     mapping(uint256 => uint256) private _partiallyRedeemed;
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
@@ -80,7 +80,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
 
     /** Extension methods */
 
-    /** @dev initializes the liquidity mining contract.
+    /** @dev initializes the farming contract.
       * @param extension extension address.
       * @param extensionInitData lm extension init payload.
       * @param orchestrator address of the eth item orchestrator.
@@ -652,9 +652,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
       */
     function _burnFarmTokenAmount(uint256 objectId, uint256 amount) private {
         INativeV1 tokenCollection = INativeV1(_farmTokenCollection);
-        // transfer the liquidity mining farm token to this contract
+        // transfer the farm token to this contract
         tokenCollection.safeTransferFrom(msg.sender, address(this), objectId, amount, "");
-        // burn the liquidity mining farm token
+        // burn the farm token
         tokenCollection.burn(objectId, amount);
     }
 

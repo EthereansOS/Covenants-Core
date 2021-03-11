@@ -12,7 +12,7 @@ import "./util/INativeV1.sol";
 
 contract WUSDLiquidityMiningExtension is ILiquidityMiningExtension {
 
-    string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
+    string private constant FUNCTIONALITY_NAME = "manageFarming";
 
     uint256 public constant ONE_HUNDRED = 10000;
 

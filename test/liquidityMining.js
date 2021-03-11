@@ -213,8 +213,8 @@ describe("LiquidityMining", () => {
 
         liquidityMiningExtension = new web3.eth.Contract(DFOBasedLiquidityMiningExtension.abi, liquidityMiningAddress);
 
-        var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/farming/dfo/ManageLiquidityMiningFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
-        var proposal = await dfoManager.createProposal(dfo, "manageLiquidityMining", true, code, "manageLiquidityMining(address,uint256,bool,address,address,uint256,bool)", false, true);
+        var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/farming/dfo/ManageFarmingFunctionality.sol'), 'UTF-8').format(liquidityMiningExtension.options.address);
+        var proposal = await dfoManager.createProposal(dfo, "manageFarming", true, code, "manageFarming(address,uint256,bool,address,address,uint256,bool)", false, true);
         await dfoManager.finalizeProposal(dfo, proposal);
 
         transaction = await liquidityMiningFactory.methods.cloneLiquidityMiningDefaultExtension().send(blockchainConnection.getSendingOptions());

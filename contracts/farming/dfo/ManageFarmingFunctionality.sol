@@ -17,16 +17,16 @@ contract ProposalCode {
     function onStart(address, address) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        stateHolder.setBool(_toStateHolderKey("liquiditymining.authorized", _toString({0})), true);
+        stateHolder.setBool(_toStateHolderKey("farming.authorized", _toString({0})), true);
     }
 
     function onStop(address) public {
     }
 
-    function manageLiquidityMining(address sender, uint256, bool transfer, address erc20TokenAddress, address to, uint256 value, bool byMint) public {
+    function manageFarming(address sender, uint256, bool transfer, address erc20TokenAddress, address to, uint256 value, bool byMint) public {
         IMVDProxy proxy = IMVDProxy(msg.sender);
         IStateHolder stateHolder = IStateHolder(proxy.getStateHolderAddress());
-        require(stateHolder.getBool(_toStateHolderKey("liquiditymining.authorized", _toString(sender))), "Unauthorized action");
+        require(stateHolder.getBool(_toStateHolderKey("farming.authorized", _toString(sender))), "Unauthorized action");
         IERC20 token = IERC20(erc20TokenAddress);
         if(transfer) {
             if(byMint) {

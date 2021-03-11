@@ -10,16 +10,15 @@ import "../util/DFOHub.sol";
 
 contract DFOBasedFarmExtension is IFarmExtension {
 
-    string private constant FUNCTIONALITY_NAME = "manageLiquidityMining";
+    string private constant FUNCTIONALITY_NAME = "manageFarming";
 
     // wallet who has control on the extension
     address internal _doubleProxy;
-    address internal _treasury;
 
-    // mapping that contains all the liquidity mining contract linked to this extension
-    address internal _liquidityMiningContract;
+    // mapping that contains all the farming contract linked to this extension
+    address internal _farmingContract;
 
-    // the reward token address linked to this liquidity mining contract
+    // the reward token address linked to this farming contract
     address internal _rewardTokenAddress;
 
     // whether the token is by mint or by reserve
@@ -27,9 +26,9 @@ contract DFOBasedFarmExtension is IFarmExtension {
 
     /** MODIFIERS */
 
-    /** @dev liquidityMiningOnly modifier used to check for unauthorized transfers. */
-    modifier liquidityMiningOnly() {
-        require(msg.sender == _liquidityMiningContract, "Unauthorized");
+    /** @dev farmingOnly modifier used to check for unauthorized transfers. */
+    modifier farmingOnly() {
+        require(msg.sender == _farmingContract, "Unauthorized");
         _;
     }
 
@@ -41,12 +40,11 @@ contract DFOBasedFarmExtension is IFarmExtension {
 
     /** PUBLIC METHODS */
 
-    function init(bool byMint, address host, address treasury) public virtual override {
-        require(_liquidityMiningContract == address(0), "Already init");
+    function init(bool byMint, address host, address) public virtual override {
+        require(_farmingContract == address(0), "Already init");
         require((_doubleProxy = host) != address(0), "blank host");
-        _rewardTokenAddress = IFarmMain(_liquidityMiningContract = msg.sender)._rewardTokenAddress();
+        _rewardTokenAddress = IFarmMain(_farmingContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
-        _treasury = treasury != address(0) ? treasury : IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress();
     }
 
     /** @dev allows the DFO to update the double proxy address.
@@ -56,21 +54,27 @@ contract DFOBasedFarmExtension is IFarmExtension {
         _doubleProxy = newDoubleProxy;
     }
 
-    function data() view public virtual override returns(address liquidityMiningContract, bool byMint, address host, address treasury, address rewardTokenAddress) {
-        return (_liquidityMiningContract, _byMint, _doubleProxy, _treasury, _rewardTokenAddress);
+    /** @dev method used to update the extension treasury.
+     */
+    function setTreasury(address) public virtual override hostOnly {
+        revert("Impossibru!");
     }
 
-    /** @dev transfers the input amount to the caller liquidity mining contract.
+    function data() view public virtual override returns(address farmingContract, bool byMint, address host, address treasury, address rewardTokenAddress) {
+        return (_farmingContract, _byMint, _doubleProxy, IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).getMVDWalletAddress(), _rewardTokenAddress);
+    }
+
+    /** @dev transfers the input amount to the caller farming contract.
       * @param amount amount of erc20 to transfer or mint.
      */
-    function transferTo(uint256 amount) override public liquidityMiningOnly {
-        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, _liquidityMiningContract, amount, _byMint));
+    function transferTo(uint256 amount) override public farmingOnly {
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, _farmingContract, amount, _byMint));
     }
 
-    /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
+    /** @dev transfers the input amount from the caller farming contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
      */
-    function backToYou(uint256 amount) override payable public liquidityMiningOnly {
+    function backToYou(uint256 amount) override payable public farmingOnly {
         if(_rewardTokenAddress != address(0)) {
             _safeTransferFrom(_rewardTokenAddress, msg.sender, address(this), amount);
             _safeApprove(_rewardTokenAddress, _getFunctionalityAddress(), amount);
@@ -80,11 +84,11 @@ contract DFOBasedFarmExtension is IFarmExtension {
         }
     }
 
-    /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.
-      * @param liquidityMiningSetups array containing all the liquidity mining setups.
+    /** @dev this function calls the farming contract with the given address and sets the given farming setups.
+      * @param farmingSetups array containing all the farming setups.
      */
-    function setFarmingSetups(FarmingSetupConfiguration[] memory liquidityMiningSetups) public override hostOnly {
-        IFarmMain(_liquidityMiningContract).setFarmingSetups(liquidityMiningSetups);
+    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public override hostOnly {
+        IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
     }
 
     /** PRIVATE METHODS */

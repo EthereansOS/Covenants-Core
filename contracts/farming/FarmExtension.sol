@@ -65,7 +65,6 @@ contract FarmExtension is IFarmExtension {
         _treasury = treasury;
     }
 
-
     /** @dev this function calls the farm main contract with the given address and sets the given farming setups.
       * @param farmingSetups array containing all the farming setups.
      */
@@ -73,7 +72,7 @@ contract FarmExtension is IFarmExtension {
         IFarmMain(_farmMainContract).setFarmingSetups(farmingSetups);
     }
 
-    /** @dev transfers the input amount to the caller liquidity mining contract.
+    /** @dev transfers the input amount to the caller farming contract.
       * @param amount amount of erc20 to transfer or mint.
      */
     function transferTo(uint256 amount) public virtual override farmMainOnly {
@@ -84,7 +83,7 @@ contract FarmExtension is IFarmExtension {
         require(result, "ETH transfer failed.");
     }
 
-    /** @dev transfers the input amount from the caller liquidity mining contract to the extension.
+    /** @dev transfers the input amount from the caller farming contract to the extension.
       * @param amount amount of erc20 to transfer back or burn.
      */
     function backToYou(uint256 amount) payable public virtual override farmMainOnly {
