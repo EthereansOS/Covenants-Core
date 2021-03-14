@@ -31,6 +31,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     address public override _rewardTokenAddress;
      // farm token collection
     address public _farmTokenCollection;
+    // orchestrator address
+    address private _orchestrator;
     // mapping containing all the currently available farming setups info
     mapping(uint256 => FarmingSetupInfo) public _setupsInfo;
     // counter for the farming setup info
@@ -95,7 +97,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         if (keccak256(extensionInitData) != keccak256("")) {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
-        (_farmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, IFarmFactory(_factory).getFarmTokenCollectionURI(), address(this), ""), "");
+        _orchestrator = orchestrator;
         FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
         require(farmingSetupInfos.length > 0, "Invalid length");
         for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
@@ -651,6 +653,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
       * @return objectId new farm token object id.
      */
     function _mintFarmTokenAmount(address uniqueOwner, uint256 amount, uint256 setupIndex) private returns(uint256 objectId) {
+        if (_farmTokenCollection == address(0)) {
+            (_farmTokenCollection,) = IEthItemOrchestrator(_orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, IFarmFactory(_factory).getFarmTokenCollectionURI(), address(this), ""), "");
+        }
         if (_setups[setupIndex].objectId == 0) {
             (objectId,) = INativeV1(_farmTokenCollection).mint(amount, string(abi.encodePacked("Farming LP ", _toString(_setupsInfo[_setups[setupIndex].infoIndex].liquidityPoolTokenAddress))), "fLP", IFarmFactory(_factory).getFarmTokenURI(), true);
             emit FarmToken(objectId, _setupsInfo[_setups[setupIndex].infoIndex].liquidityPoolTokenAddress, setupIndex, _setups[setupIndex].endBlock);
