@@ -46,7 +46,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     // mapping containing the reward per token paid per position
     mapping(uint256 => uint256) private _rewardPerTokenPaid;
     // mapping containing whether a liquidity mining position has been partially reedemed or not
-    mapping(uint256 => uint256) private _partiallyRedeemed;
+    mapping(uint256 => uint256) public _partiallyRedeemed;
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
     // mapping containing all the number of opened positions for each setups
@@ -261,7 +261,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function withdrawLiquidity(uint256 positionId, uint256 objectId, bool unwrapPair, uint256 removedLiquidity) public {
+    function withdrawLiquidity(uint256 positionId, uint256 objectId, bool withdrawPair, uint256 removedLiquidity) public {
         // retrieve farming position
         FarmingPosition memory farmingPosition = _positions[positionId];
         uint256 setupIndex = farmingPosition.setupIndex;
@@ -284,7 +284,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             withdrawReward(positionId);
             _setups[farmingPosition.setupIndex].totalSupply -= removedLiquidity;
         }
-        _removeLiquidity(positionId, setupIndex, unwrapPair, removedLiquidity, false);
+        _removeLiquidity(positionId, setupIndex, withdrawPair, removedLiquidity, false);
         if (positionId == 0) {
             _setupPositionsCount[setupIndex] -= removedLiquidity;
             if (_setupPositionsCount[setupIndex] == 0 && !_setups[setupIndex].active) {
@@ -294,7 +294,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
+    function unlock(uint256 positionId, bool withdrawPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         FarmingPosition storage farmingPosition = _positions[positionId];
         require(!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free && _setups[farmingPosition.setupIndex].endBlock > block.number, "Invalid unlock");
@@ -308,7 +308,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         } 
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
-        _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
+        _removeLiquidity(positionId, farmingPosition.setupIndex, withdrawPair, farmingPosition.liquidityPoolTokenAmount, true);
         _setupPositionsCount[farmingPosition.setupIndex] -= 1 + farmingPosition.liquidityPoolTokenAmount;
         delete _positions[positionId];
     }
@@ -511,10 +511,10 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     /** @dev helper function used to remove liquidity from a free position or to burn item farm tokens and retrieve their content.
       * @param positionId id of the position.
       * @param setupIndex index of the setup related to the item farm tokens.
-      * @param unwrapPair whether to unwrap the liquidity pool tokens or not.
+      * @param withdrawPair whether to unwrap the liquidity pool tokens or not.
       * @param isUnlock if we're removing liquidity from an unlock method or not.
      */
-    function _removeLiquidity(uint256 positionId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
+    function _removeLiquidity(uint256 positionId, uint256 setupIndex, bool withdrawPair, uint256 removedLiquidity, bool isUnlock) private {
         FarmingSetupInfo memory setupInfo = _setupsInfo[_setups[setupIndex].infoIndex];
         // create liquidity pool data struct for the AMM
         LiquidityPoolData memory lpData = LiquidityPoolData(
@@ -543,7 +543,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             lpData.amount = lpData.amount - fee;
         }
         // check if the user wants to unwrap its pair or not
-        if (unwrapPair) {
+        if (withdrawPair) {
             // remove liquidity using AMM
             _safeApprove(lpData.liquidityPoolAddress, setupInfo.ammPlugin, lpData.amount);
             IAMM(setupInfo.ammPlugin).removeLiquidity(lpData);
