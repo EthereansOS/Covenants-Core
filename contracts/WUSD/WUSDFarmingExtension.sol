@@ -2,15 +2,14 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "../farming/ILiquidityMiningExtension.sol";
-import "../farming/ILiquidityMining.sol";
-import "../farming/LiquidityMiningData.sol";
+import "../farming/IFarmExtension.sol";
+import "../farming/IFarmMain.sol";
 import "../farming/util/DFOHub.sol";
 import "./IWUSDExtensionController.sol";
 import "./util/IERC20.sol";
 import "./util/INativeV1.sol";
 
-contract WUSDLiquidityMiningExtension is ILiquidityMiningExtension {
+contract WUSDFarmingExtension is IFarmExtension {
 
     string private constant FUNCTIONALITY_NAME = "manageFarming";
 
