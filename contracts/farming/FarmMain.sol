@@ -96,10 +96,11 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
         (_farmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, IFarmFactory(_factory).getFarmTokenCollectionURI(), address(this), ""), "");
-        FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
-        require(farmingSetupInfos.length > 0, "Invalid length");
-        for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
-            _setOrAddFarmingSetupInfo(farmingSetupInfos[i], true, false, 0);
+        if(farmingSetupInfosBytes.length > 0) {
+            FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
+            for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
+                _setOrAddFarmingSetupInfo(farmingSetupInfos[i], true, false, 0);
+            }
         }
     }
 
@@ -115,11 +116,15 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
       * @param positionId id of the position.
       * @return farming position with the given id.
      */
-    function position(uint256 positionId) public view returns (FarmingPosition memory) {
+    function position(uint256 positionId) public override view returns (FarmingPosition memory) {
         return _positions[positionId];
     }
 
-    function setups() public view returns (FarmingSetup[] memory) {
+    function setup(uint256 setupIndex) public override view returns (FarmingSetup memory, FarmingSetupInfo memory) {
+        return (_setups[setupIndex], _setupsInfo[_setups[setupIndex].infoIndex]);
+    }
+
+    function setups() public override view returns (FarmingSetup[] memory) {
         FarmingSetup[] memory farmingSetups = new FarmingSetup[](_farmingSetupsCount);
         for (uint256 i = 0; i < _farmingSetupsCount; i++) {
             farmingSetups[i] = _setups[i];
@@ -132,7 +137,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
-    function openPosition(FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
+    function openPosition(FarmingPositionRequest memory request) public override payable activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _setups[request.setupIndex];
         // retrieve the unique owner
@@ -167,7 +172,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
-    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public override payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
         FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
