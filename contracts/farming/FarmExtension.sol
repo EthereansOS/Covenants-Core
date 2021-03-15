@@ -91,7 +91,7 @@ contract FarmExtension is IFarmExtension {
             _safeTransferFrom(_rewardTokenAddress, msg.sender, _byMint ? address(this) : _treasury, amount);
             if(_byMint) {
                 _burn(_rewardTokenAddress, amount);
-            } 
+            }
         } else {
             require(msg.value == amount, "invalid sent amount");
             if(_treasury != address(this)) {
