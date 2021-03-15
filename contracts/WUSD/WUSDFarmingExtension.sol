@@ -156,21 +156,23 @@ contract WUSDFarmingExtension is IFarmExtension {
         FarmingSetupConfiguration[] memory farmingSetups = new FarmingSetupConfiguration[](infoModels.length);
         uint256 i;
         for(i = 0; i < rebalancePercentages.length; i++) {
+            infoModels[i].renewTimes = 1;
             infoModels[i].originalRewardPerBlock = (currentReward = _calculatePercentage(balance, rebalancePercentages[i])) / infoModels[i].blockDuration;
             remainingBalance -= currentReward;
             farmingSetups[i] = FarmingSetupConfiguration(
                 true,
                 false,
-                i,
+                0,
                 infoModels[i]
             );
         }
         i = rebalancePercentages.length;
+        infoModels[i].renewTimes = 1;
         infoModels[i].originalRewardPerBlock = remainingBalance / infoModels[i].blockDuration;
         farmingSetups[i] = FarmingSetupConfiguration(
             true,
             false,
-            i,
+            0,
             infoModels[i]
         );
         IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
