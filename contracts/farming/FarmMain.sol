@@ -45,7 +45,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     mapping(uint256 => uint256) private _rewardPerTokenPerSetup;
     // mapping containing the reward per token paid per position
     mapping(uint256 => uint256) private _rewardPerTokenPaid;
-    // mapping containing whether a liquidity mining position has been partially reedemed or not
+    // mapping containing whether a farming position has been partially reedemed or not
     mapping(uint256 => uint256) public _partiallyRedeemed;
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
@@ -80,7 +80,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
 
     /** Extension methods */
 
-    /** @dev initializes the liquidity mining contract.
+    /** @dev initializes the farming contract.
       * @param extension extension address.
       * @param extensionInitData lm extension init payload.
       * @param orchestrator address of the eth item orchestrator.
@@ -96,10 +96,11 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             extensionReturnCall = _call(_extension, extensionInitData);
         }
         (_farmTokenCollection,) = IEthItemOrchestrator(orchestrator).createNative(abi.encodeWithSignature("init(string,string,bool,string,address,bytes)", "Covenants Farming", "cFARM", true, IFarmFactory(_factory).getFarmTokenCollectionURI(), address(this), ""), "");
-        FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
-        require(farmingSetupInfos.length > 0, "Invalid length");
-        for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
-            _setOrAddFarmingSetupInfo(farmingSetupInfos[i], true, false, 0);
+        if(farmingSetupInfosBytes.length > 0) {
+            FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
+            for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
+                _setOrAddFarmingSetupInfo(farmingSetupInfos[i], true, false, 0);
+            }
         }
     }
 
@@ -115,11 +116,15 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
       * @param positionId id of the position.
       * @return farming position with the given id.
      */
-    function position(uint256 positionId) public view returns (FarmingPosition memory) {
+    function position(uint256 positionId) public override view returns (FarmingPosition memory) {
         return _positions[positionId];
     }
 
-    function setups() public view returns (FarmingSetup[] memory) {
+    function setup(uint256 setupIndex) public override view returns (FarmingSetup memory, FarmingSetupInfo memory) {
+        return (_setups[setupIndex], _setupsInfo[_setups[setupIndex].infoIndex]);
+    }
+
+    function setups() public override view returns (FarmingSetup[] memory) {
         FarmingSetup[] memory farmingSetups = new FarmingSetup[](_farmingSetupsCount);
         for (uint256 i = 0; i < _farmingSetupsCount; i++) {
             farmingSetups[i] = _setups[i];
@@ -148,13 +153,13 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         emit Transfer(newPositionId, msg.sender, to);
     }
 
-    function openPosition(FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
+    function openPosition(FarmingPositionRequest memory request) public override payable activeSetupOnly(request.setupIndex) returns(uint256 positionId) {
         // retrieve the setup
         FarmingSetup storage chosenSetup = _setups[request.setupIndex];
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
         // create the position id
-        positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : block.number, request.setupIndex)));
+        positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
         require(_positions[positionId].creationBlock == 0, "Invalid open");
         // create the lp data for the amm
         (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
@@ -183,7 +188,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
-    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
+    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public override payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
         FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
@@ -261,7 +266,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function withdrawLiquidity(uint256 positionId, uint256 objectId, bool withdrawPair, uint256 removedLiquidity) public {
+    function withdrawLiquidity(uint256 positionId, uint256 objectId, bool unwrapPair, uint256 removedLiquidity) public {
         // retrieve farming position
         FarmingPosition memory farmingPosition = _positions[positionId];
         uint256 setupIndex = farmingPosition.setupIndex;
@@ -284,7 +289,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             withdrawReward(positionId);
             _setups[farmingPosition.setupIndex].totalSupply -= removedLiquidity;
         }
-        _removeLiquidity(positionId, setupIndex, withdrawPair, removedLiquidity, false);
+        _removeLiquidity(positionId, setupIndex, unwrapPair, removedLiquidity, false);
         if (positionId == 0) {
             _setupPositionsCount[setupIndex] -= removedLiquidity;
             if (_setupPositionsCount[setupIndex] == 0 && !_setups[setupIndex].active) {
@@ -294,7 +299,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         }
     }
 
-    function unlock(uint256 positionId, bool withdrawPair) public payable byPositionOwner(positionId) {
+    function unlock(uint256 positionId, bool unwrapPair) public payable byPositionOwner(positionId) {
         // retrieve liquidity mining position
         FarmingPosition storage farmingPosition = _positions[positionId];
         require(!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free && _setups[farmingPosition.setupIndex].endBlock > block.number, "Invalid unlock");
@@ -308,7 +313,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         } 
         _setups[farmingPosition.setupIndex].totalSupply -= farmingPosition.mainTokenAmount;
         _burnFarmTokenAmount(_setups[farmingPosition.setupIndex].objectId, farmingPosition.liquidityPoolTokenAmount);
-        _removeLiquidity(positionId, farmingPosition.setupIndex, withdrawPair, farmingPosition.liquidityPoolTokenAmount, true);
+        _removeLiquidity(positionId, farmingPosition.setupIndex, unwrapPair, farmingPosition.liquidityPoolTokenAmount, true);
         _setupPositionsCount[farmingPosition.setupIndex] -= 1 + farmingPosition.liquidityPoolTokenAmount;
         delete _positions[positionId];
     }
@@ -511,10 +516,10 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     /** @dev helper function used to remove liquidity from a free position or to burn item farm tokens and retrieve their content.
       * @param positionId id of the position.
       * @param setupIndex index of the setup related to the item farm tokens.
-      * @param withdrawPair whether to unwrap the liquidity pool tokens or not.
+      * @param unwrapPair whether to unwrap the liquidity pool tokens or not.
       * @param isUnlock if we're removing liquidity from an unlock method or not.
      */
-    function _removeLiquidity(uint256 positionId, uint256 setupIndex, bool withdrawPair, uint256 removedLiquidity, bool isUnlock) private {
+    function _removeLiquidity(uint256 positionId, uint256 setupIndex, bool unwrapPair, uint256 removedLiquidity, bool isUnlock) private {
         FarmingSetupInfo memory setupInfo = _setupsInfo[_setups[setupIndex].infoIndex];
         // create liquidity pool data struct for the AMM
         LiquidityPoolData memory lpData = LiquidityPoolData(
@@ -543,7 +548,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
             lpData.amount = lpData.amount - fee;
         }
         // check if the user wants to unwrap its pair or not
-        if (withdrawPair) {
+        if (unwrapPair) {
             // remove liquidity using AMM
             _safeApprove(lpData.liquidityPoolAddress, setupInfo.ammPlugin, lpData.amount);
             IAMM(setupInfo.ammPlugin).removeLiquidity(lpData);
@@ -668,9 +673,9 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
       */
     function _burnFarmTokenAmount(uint256 objectId, uint256 amount) private {
         INativeV1 tokenCollection = INativeV1(_farmTokenCollection);
-        // transfer the liquidity mining farm token to this contract
+        // transfer the farm token to this contract
         tokenCollection.safeTransferFrom(msg.sender, address(this), objectId, amount, "");
-        // burn the liquidity mining farm token
+        // burn the farm token
         tokenCollection.burn(objectId, amount);
     }
 
