@@ -32,7 +32,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
      // farm token collection
     address public _farmTokenCollection;
     // mapping containing all the currently available farming setups info
-    mapping(uint256 => FarmingSetupInfo) public _setupsInfo;
+    mapping(uint256 => FarmingSetupInfo) private _setupsInfo;
     // counter for the farming setup info
     uint256 public _farmingSetupsInfoCount;
     // mapping containing all the currently available farming setups
@@ -50,7 +50,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
     // mapping containing object id to setup index
     mapping(uint256 => uint256) private _objectIdSetup;
     // mapping containing all the number of opened positions for each setups
-    mapping(uint256 => uint256) public _setupPositionsCount;
+    mapping(uint256 => uint256) private _setupPositionsCount;
     // mapping containing all the reward received/paid per setup
     mapping(uint256 => uint256) public _rewardReceived;
     mapping(uint256 => uint256) public _rewardPaid;
