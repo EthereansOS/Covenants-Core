@@ -504,13 +504,15 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // amount is lp check
         if (liquidityPoolData.amountIsLiquidityPool || !_setupsInfo[_setups[setupIndex].infoIndex].involvingETH) {
             require(msg.value == 0, "ETH not involved");
+        }
+        if (liquidityPoolData.amountIsLiquidityPool) {
+            return(liquidityPoolData, tokenAmount);
+        }
+        // retrieve the poolTokenAmount from the amm
+        if(liquidityPoolData.involvingETH) {
+            (liquidityPoolData.amount,,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
         } else {
-            // retrieve the poolTokenAmount from the amm
-            if(liquidityPoolData.involvingETH) {
-                (liquidityPoolData.amount,,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
-            } else {
-                (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
-            }
+            (liquidityPoolData.amount,,) = amm.addLiquidity(liquidityPoolData);
         }
     }
 
