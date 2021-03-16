@@ -160,7 +160,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
         // create the position id
-        positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
+        positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : block.number, request.setupIndex)));
         require(_positions[positionId].creationBlock == 0, "Invalid open");
         // create the lp data for the amm
         (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
