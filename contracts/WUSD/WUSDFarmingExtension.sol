@@ -67,10 +67,12 @@ contract WUSDFarmingExtension is IFarmExtension {
         delete infoModels;
         uint256 percentage = 0;
         for(uint256 i = 0; i < _rebalancePercentages.length; i++) {
+            farmingSetups[i].renewTimes = 0;
             infoModels.push(farmingSetups[i]);
-            rebalancePercentages.push(_rebalancePercentages[i]);
             percentage += _rebalancePercentages[i];
+            rebalancePercentages.push(_rebalancePercentages[i]);
         }
+        farmingSetups[farmingSetups.length - 1].renewTimes = 0;
         infoModels.push(farmingSetups[farmingSetups.length - 1]);
         require(percentage < ONE_HUNDRED, "More than one hundred");
     }
@@ -150,13 +152,12 @@ contract WUSDFarmingExtension is IFarmExtension {
         (address collection, uint256 objectId,) = IWUSDExtensionController(wusdExtensionControllerAddress).wusdInfo();
         uint256 totalBalance = INativeV1(collection).balanceOf(address(this), objectId);
         uint256 balance = totalBalance - lastBalance;
+        lastBalance = totalBalance;
         uint256 remainingBalance = balance;
         uint256 currentReward = 0;
-        lastBalance = totalBalance;
         FarmingSetupConfiguration[] memory farmingSetups = new FarmingSetupConfiguration[](infoModels.length);
         uint256 i;
         for(i = 0; i < rebalancePercentages.length; i++) {
-            infoModels[i].renewTimes = 1;
             infoModels[i].originalRewardPerBlock = (currentReward = _calculatePercentage(balance, rebalancePercentages[i])) / infoModels[i].blockDuration;
             remainingBalance -= currentReward;
             farmingSetups[i] = FarmingSetupConfiguration(
@@ -167,7 +168,6 @@ contract WUSDFarmingExtension is IFarmExtension {
             );
         }
         i = rebalancePercentages.length;
-        infoModels[i].renewTimes = 1;
         infoModels[i].originalRewardPerBlock = remainingBalance / infoModels[i].blockDuration;
         farmingSetups[i] = FarmingSetupConfiguration(
             true,
