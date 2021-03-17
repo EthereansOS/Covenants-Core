@@ -259,6 +259,31 @@ describe("Farming", () => {
         }
     }
 
+    async function transferPosition(from, to) {
+        try {
+            const result = await farmMainContract.methods.transferPosition(to.address, from.positionId).send(from.from);
+            var { positionId } = result.events.Transfer.returnValues;
+            assert.notStrictEqual(from.positionId, positionId);
+            const oldPosition = await farmMainContract.methods.position(from.positionId).call();
+            const transferedPosition = await farmMainContract.methods.position(positionId).call();
+            assert.strictEqual(oldPosition.creationBlock, "0");
+            assert.strictEqual(transferedPosition.creationBlock, from.position.creationBlock);
+            assert.strictEqual(transferedPosition.reward, from.position.reward);
+            assert.notStrictEqual(transferedPosition.uniqueOwner, from.position.uniqueOwner);
+            actors[to.name] = {
+                ...actors[to.name],
+                free: from.free,
+                setupIndex: from.setupIndex,
+                position: transferedPosition,
+                positionId,
+                objectId: from.objectId,
+            }
+            console.log(actors);
+        } catch (error) {
+            console.error(error);
+        }
+    }
+
     before(async () => {
         try {
             await blockchainConnection.init;
@@ -311,6 +336,8 @@ describe("Farming", () => {
             await initActor("Porco", accounts[6], false, 50, false);
             await initActor("Ladro", accounts[7], false, 50, false);
             await initActor("Cane", accounts[8], false, 50, false);
+            await initActor("Sporco", accounts[9], false, 50, false);
+            await initActor("Verme", accounts[10], false, 50, false);
         } catch (error) {
             console.error(error);
         }
@@ -457,6 +484,12 @@ describe("Farming", () => {
     it("should allow bestiadidio to open a new staking position", async () => {
         await createStakingPosition(actors.Bestiadidio, 1);
     });
+    it("should allow sporco to open a new staking position", async () => {
+        await createStakingPosition(actors.Sporco, 1);
+    });
+    it("should allow sporco to transfer its position to verme", async () => {
+        await transferPosition(actors.Sporco, actors.Verme);
+    });
     it("should allow cappello to open a new staking position", async () => {
         await createStakingPosition(actors.Cappello, 0);
     });
@@ -594,6 +627,30 @@ describe("Farming", () => {
         await withdrawLiquidity(actors.Cavicchioli);
     })
     */
+    it("should not allow sporco withdraw its reward", async () => {
+        try {
+            await withdrawReward(actors.Sporco);
+            assert.notStrictEqual(false, true);
+        } catch (error) {
+            console.error(error);
+            assert.strictEqual(true, true);
+        }
+    });
+    it("should allow verme to withdraw reward", async () => {
+        await withdrawReward(actors.Verme);
+    })
+    it("should allow sporco to withdraw liquidity", async () => {
+        await withdrawLiquidity(actors.Sporco); 
+    })
+    it("should not allow verme to withdraw liquidity", async () => {
+        try {
+            await withdrawLiquidity(actors.Verme);
+            assert.notStrictEqual(false, true);
+        } catch (error) {
+            console.error(error);
+            assert.strictEqual(true, true);
+        }
+    })
     it("should allow bestiadidio to withdraw liquidity", async () => {
         await withdrawLiquidity(actors.Bestiadidio);
     })
