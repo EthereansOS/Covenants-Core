@@ -26,6 +26,8 @@ contract WUSDFarmingExtension is IFarmExtension {
 
     address public wusdExtensionControllerAddress;
 
+    uint256 public rewardCreditPercentage;
+
     FarmingSetupInfo[] public infoModels;
     uint256[] public rebalancePercentages;
 
@@ -52,13 +54,14 @@ contract WUSDFarmingExtension is IFarmExtension {
         revert("Method not allowed, use specific one instead");
     }
 
-    function init(address host, address _wusdExtensionControllerAddress, FarmingSetupInfo[] memory farmingSetups, uint256[] memory _rebalancePercentages) public virtual {
+    function init(address host, address _wusdExtensionControllerAddress, FarmingSetupInfo[] memory farmingSetups, uint256[] memory _rebalancePercentages, uint256 _rewardCreditPercentage) public virtual {
         require(_farmingContract == address(0), "Already init");
         require(host != address(0), "blank host");
         _rewardTokenAddress = IFarmMain(_farmingContract = msg.sender)._rewardTokenAddress();
         _doubleProxy = host;
         wusdExtensionControllerAddress = _wusdExtensionControllerAddress;
         _setModels(farmingSetups, _rebalancePercentages);
+        rewardCreditPercentage = _rewardCreditPercentage;
     }
 
     function _setModels(FarmingSetupInfo[] memory farmingSetups, uint256[] memory _rebalancePercentages) private {
@@ -88,6 +91,10 @@ contract WUSDFarmingExtension is IFarmExtension {
      */
     function setTreasury(address) public virtual override hostOnly {
         revert("Impossibru!");
+    }
+
+    function setRewardCreditPercentage(uint256 _rewardCreditPercentage) public hostOnly {
+        rewardCreditPercentage = _rewardCreditPercentage;
     }
 
     function data() view public virtual override returns(address farmingContract, bool byMint, address host, address treasury, address rewardTokenAddress) {
@@ -149,8 +156,9 @@ contract WUSDFarmingExtension is IFarmExtension {
         uint256 lastRebalanceByCreditBlock = IWUSDExtensionController(wusdExtensionControllerAddress).lastRebalanceByCreditBlock();
         require(lastRebalanceByCreditBlock > 0 && lastRebalanceByCreditBlock != lastCheck, "Invalid block");
         lastCheck = lastRebalanceByCreditBlock;
-        (address collection, uint256 objectId,) = IWUSDExtensionController(wusdExtensionControllerAddress).wusdInfo();
-        uint256 totalBalance = INativeV1(collection).balanceOf(address(this), objectId);
+        uint256 amount = _calculatePercentage(IERC20(_rewardTokenAddress).balanceOf(_getDFOWallet()), rewardCreditPercentage);
+        IMVDProxy(IDoubleProxy(_doubleProxy).proxy()).submit(FUNCTIONALITY_NAME, abi.encode(address(0), 0, true, _rewardTokenAddress, address(this), amount, false));
+        uint256 totalBalance = IERC20(_rewardTokenAddress).balanceOf(address(this));
         uint256 balance = totalBalance - lastBalance;
         lastBalance = totalBalance;
         uint256 remainingBalance = balance;
