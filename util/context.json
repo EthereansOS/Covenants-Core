@@ -7,6 +7,7 @@
     "wethTokenAddress" : "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     "buidlTokenAddress" : "0x7b123f53421b1bF8533339BFBdc7C98aA94163db",
     "usdcTokenAddress" : "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "wusdInteroperableAddress" : "0x7C974104DF9dd7fb91205ab3D66d15AFf1049DE8",
     "usdtTokenAddress" : "0xdAC17F958D2ee523a2206206994597C13D831ec7",
     "daiTokenAddress" : "0x6b175474e89094c44da98b954eedeac495271d0f",
     "dfoHubProxyAddress" : "0xbD8115939fbFB0FD4104B86aFAa594BC92916952",
