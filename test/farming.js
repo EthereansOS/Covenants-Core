@@ -156,7 +156,7 @@ describe("Farming", () => {
         var startingPosition = await farmMainContract.methods.position(actor.positionId).call();
 
         var mainTokenAmount = utilities.toDecimals(actor.amount, mainToken != utilities.voidEthereumAddress ? await mainToken.methods.decimals().call() : 18);
-        var setupInfo = await farmMainContract.methods._setupsInfo(startingSetup.infoIndex).call();
+        var {'0': _, '1': setupInfo} = await farmMainContract.methods.setup(actor.setupIndex).call();
         var ammPlugin = new web3.eth.Contract(UniswapV2AMMV1.abi, setupInfo.ammPlugin);
         var liquidityPoolTokenAddress = setupInfo.liquidityPoolTokenAddress;
         var tokens = (await ammPlugin.methods.byLiquidityPool(liquidityPoolTokenAddress).call())[2];
@@ -170,7 +170,7 @@ describe("Farming", () => {
             amountIsLiquidityPool : actor.amountIsLiquidityPool || false,
             positionOwner: utilities.voidEthereumAddress,
         };
-        await farmMainContract.methods.addLiquidity(actor.positionId, stake).send({...actor.from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
+        await farmMainContract.methods.addLiquidity(actor.positionId, stake).send({...actor.from, value: (!stake.amountIsLiquidityPool && setupInfo.involvingETH) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         var endingSetup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
         var endingPosition = await farmMainContract.methods.position(actor.positionId).call();
         assert.strictEqual(utilities.fromDecimals(parseInt(startingPosition.liquidityPoolTokenAmount) * 2, 4).slice(0, -1), utilities.fromDecimals(parseInt(endingPosition.liquidityPoolTokenAmount), 4).slice(0, -1));
@@ -205,6 +205,8 @@ describe("Farming", () => {
                 } 
                 var position = await farmMainContract.methods.position(actor.positionId).call();
                 actor.position = position;
+            } else {
+                reward = (parseInt(setup.endBlock) - parseInt(actor.position.creationBlock))  * parseInt(actor.position.lockedRewardPerBlock);
             }
             assert.strictEqual(utilities.formatMoney(utilities.fromDecimals(diffBalance, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4), utilities.formatMoney(utilities.fromDecimals(reward, rewardToken !== utilities.voidEthereumAddress ? await rewardToken.methods.decimals().call() : 18), 4))
         }
@@ -642,8 +644,7 @@ describe("Farming", () => {
         ];
         await clonedFarmExtension.methods.setFarmingSetups(updatedSetups).send(blockchainConnection.getSendingOptions());
         var setups = await farmMainContract.methods.setups().call();
-        var setup = setups[3];
-        var setupInfo = await farmMainContract.methods._setupsInfo(setup.infoIndex).call();
+        var {'0': setup, '1': setupInfo} = await farmMainContract.methods.setup(3).call();
         assert.strictEqual(setupInfo.originalRewardPerBlock, "550000000000000000");
         assert.strictEqual(setup.rewardPerBlock, "550000000000000000");
     });
@@ -680,8 +681,7 @@ describe("Farming", () => {
         ];
         await clonedFarmExtension.methods.setFarmingSetups(updatedSetups).send(blockchainConnection.getSendingOptions());
         var setups = await farmMainContract.methods.setups().call();
-        var setup = setups[4];
-        var setupInfo = await farmMainContract.methods._setupsInfo(setup.infoIndex).call();
+        var {'0': setup, '1': setupInfo} = await farmMainContract.methods.setup(4).call();
         assert.strictEqual(setupInfo.originalRewardPerBlock, "450000000000000000");
         assert.strictEqual(setup.rewardPerBlock, "450000000000000000");
     });
