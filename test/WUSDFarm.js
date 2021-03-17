@@ -395,11 +395,20 @@ describe("WUSDFarm", () => {
         ];
         var percentages = [utilities.toDecimals("0.8", 18)];
         var extensionPayload = wUSDFarmingExtension.methods.init(
-            "0xF869538e3904778A0cb1FF620C8E83c7df36B946", //Covenants doubleproxy
+            context.covenantsDoubleProxyAddress,
             context.wusdExtensionControllerAddress,
             infos,
             percentages
         ).encodeABI();
+
+        var types = [
+            "address",
+            "bytes",
+            "address",
+            "address",
+            "bytes",
+        ];
+
         var params = [
             wUSDFarmingExtension.options.address,
             extensionPayload,

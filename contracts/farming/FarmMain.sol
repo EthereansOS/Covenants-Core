@@ -137,7 +137,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
-    function transfer(address to, uint256 positionId) public byPositionOwner(positionId) {
+    function transferPosition(address to, uint256 positionId) public byPositionOwner(positionId) {
         // retrieve liquidity mining position
         FarmingPosition memory pos = _positions[positionId];
         require(
