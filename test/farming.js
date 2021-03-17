@@ -88,7 +88,7 @@ describe("Farming", () => {
         var setups = await farmMainContract.methods.setups().call();
         console.log(setups);
         var setup = setups[setupIndex];
-        var setupInfo = await farmMainContract.methods._setupsInfo(setup.infoIndex).call();
+        var setupInfo = (await farmMainContract.methods.setup(setup.infoIndex).call())[1];
         console.log(setupInfo);
         var ammPlugin = new web3.eth.Contract(UniswapV2AMMV1.abi, setupInfo.ammPlugin);
         var liquidityPoolTokenAddress = setupInfo.liquidityPoolTokenAddress;
@@ -131,7 +131,7 @@ describe("Farming", () => {
             stake.amount = await liquidityPoolTokenContract.methods.balanceOf(actor.address).call();
         }
 
-        var result = await farmMainContract.methods.openPosition(stake).send({...actor.from, value: (!stake.amountIsLiquidityPool) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
+        var result = await farmMainContract.methods.openPosition(stake).send({...actor.from, value: (!stake.amountIsLiquidityPool && setupInfo.involvingETH) ? mainToken === setupInfo.ethereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         var { positionId } = result.events.Transfer.returnValues;
         var position = await farmMainContract.methods.position(positionId).call();
 
