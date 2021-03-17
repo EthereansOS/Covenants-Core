@@ -32,9 +32,15 @@ module.exports = {
     },
     async fastForward(blocks) {
         var blockNumber = parseInt(await web3.eth.getBlockNumber()) + (blocks = blocks && parseInt(blocks) || 1);
-        while (blocks-- > 0) {
-            web3.currentProvider.sendAsync({ "id": new Date().getTime(), "jsonrpc": "2.0", "method": "evm_mine", "params": [] }, () => {});
-        }
+        await new Promise(async function (ok) {
+            async function consume() {
+                if(--blocks < 0) {
+                    return ok();
+                }
+                await web3.currentProvider.sendAsync({ "id": new Date().getTime() + blocks, "jsonrpc": "2.0", "method": "evm_mine", "params": [] }, consume);
+            }
+            consume();
+        });
         while (parseInt(await web3.eth.getBlockNumber()) < blockNumber) {
             await new Promise(ok => setTimeout(ok, 1000));
         }
