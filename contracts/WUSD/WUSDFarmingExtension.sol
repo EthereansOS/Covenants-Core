@@ -140,8 +140,8 @@ contract WUSDFarmingExtension is IFarmExtension {
     }
 
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.*/
-    function setFarmingSetups(FarmingSetupConfiguration[] memory) public override hostOnly {
-        revert("Method not allowed");
+    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public override hostOnly {
+        IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
     }
 
     function setWusdExtensionControllerAddress(address _wusdExtensionControllerAddress) public hostOnly {

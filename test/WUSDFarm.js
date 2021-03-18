@@ -558,7 +558,9 @@ describe("WUSDFarm", () => {
             console.error(`error is`, error);
         }
     });
-    it("should deploy simple farm main contract", async() => {
+
+    async function getInfos() {
+
         var wusdETH = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.wethTokenAddress]).call())[2];
         var wusdUSDC = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.usdcTokenAddress]).call())[2];
 
@@ -595,7 +597,16 @@ describe("WUSDFarm", () => {
                 lastSetupIndex: 0
             }
         ];
+
         var percentages = [utilities.toDecimals("0.8", 18)];
+
+        return {infos, percentages};
+    }
+
+    it("should deploy simple farm main contract", async() => {
+
+        var {infos, percentages} = await getInfos();
+
         var extensionPayload = wUSDFarmingExtension.methods.init(
             dfoHubManager.dfos.covenants.doubleProxyAddress,
             context.wusdExtensionControllerAddress,
@@ -751,47 +762,31 @@ describe("WUSDFarm", () => {
         await farmMainContract.methods.activateSetup(0).send(blockchainConnection.getSendingOptions());
     });
 
-    it("Change Models", async() => {
+    it("Change Models", async () => {
 
         console.log(await wUSDFarmingExtension.methods.models().call());
 
-        var wusdETH = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.wethTokenAddress]).call())[2];
-        var wusdUSDC = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.usdcTokenAddress]).call())[2];
+        var {infos, percentages} = await getInfos();
 
-        var infos = [
-            {
-                free: true,
-                blockDuration: 384000,
-                originalRewardPerBlock: 0,
-                minStakeable: 0,
-                maxStakeable: 0,
-                renewTimes: 0,
-                ammPlugin: uniswapAMM.options.address,
-                liquidityPoolTokenAddress: wusdETH,
-                mainTokenAddress: context.wusdInteroperableAddress,
-                ethereumAddress: utilities.voidEthereumAddress,
-                involvingETH: true,
-                penaltyFee: 0,
-                setupsCount: 0,
-                lastSetupIndex: 0
-            }, {
-                free: true,
-                blockDuration: 384000,
-                originalRewardPerBlock: 0,
-                minStakeable: 0,
-                maxStakeable: 0,
-                renewTimes: 0,
-                ammPlugin: uniswapAMM.options.address,
-                liquidityPoolTokenAddress: wusdUSDC,
-                mainTokenAddress: context.wusdInteroperableAddress,
-                ethereumAddress: utilities.voidEthereumAddress,
-                involvingETH: false,
-                penaltyFee: 0,
-                setupsCount: 0,
-                lastSetupIndex: 0
-            }
-        ];
-        var percentages = [utilities.toDecimals("0.8", 18)];
+        infos.splice(0, 1);
+        percentages = [];
+
+        var infosCode = infos.map((it, i) => `        farmingSetups[${i}] = FarmingSetupInfo(${it.free}, ${it.blockDuration}, ${it.originalRewardPerBlock}, ${it.minStakeable}, ${it.maxStakeable}, ${it.renewTimes}, ${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.mainTokenAddress}, ${it.ethereumAddress}, ${it.involvingETH}, ${it.penaltyFee}, ${it.setupsCount}, ${it.lastSetupIndex});`).join('\n').trim('');
+        var percentagesCode = percentages.map((it, i) => `rebalancePercentages[${i}] = ${utilities.numberToString(it)};`).join('\n').trim();
+
+        var code = fs.readFileSync(path.resolve(__dirname, '..', `resources/WUSDSetModelsAndPercentages.sol`), 'UTF-8').format(infos.length, infosCode, percentages.length, percentagesCode, wUSDFarmingExtension.options.address);
+        console.log(code);
+        var proposal = await dfoHubManager.createProposal("covenants", "", true, code, "callOneTime(address)");
+        await dfoHubManager.finalizeProposal(proposal);
+
+        console.log(await wUSDFarmingExtension.methods.models().call());
+    });
+
+    it("Change Models 2", async() => {
+
+        console.log(await wUSDFarmingExtension.methods.models().call());
+
+        var {infos, percentages} = await getInfos();
 
         var infosCode = infos.map((it, i) => `        farmingSetups[${i}] = FarmingSetupInfo(${it.free}, ${it.blockDuration}, ${it.originalRewardPerBlock}, ${it.minStakeable}, ${it.maxStakeable}, ${it.renewTimes}, ${it.ammPlugin}, ${it.liquidityPoolTokenAddress}, ${it.mainTokenAddress}, ${it.ethereumAddress}, ${it.involvingETH}, ${it.penaltyFee}, ${it.setupsCount}, ${it.lastSetupIndex});`).join('\n').trim('');
         var percentagesCode = percentages.map((it, i) => `rebalancePercentages[${i}] = ${utilities.numberToString(it)};`).join('\n').trim();
@@ -904,8 +899,9 @@ describe("WUSDFarm", () => {
     it("should activate both the setups 4", async () => {
         await farmMainContract.methods.activateSetup(5).send(blockchainConnection.getSendingOptions());
         await farmMainContract.methods.activateSetup(6).send(blockchainConnection.getSendingOptions());
+        await farmMainContract.methods.activateSetup(7).send(blockchainConnection.getSendingOptions());
         try {
-            await farmMainContract.methods.activateSetup(7).send(blockchainConnection.getSendingOptions());
+            await farmMainContract.methods.activateSetup(8).send(blockchainConnection.getSendingOptions());
             assert(false);
         } catch(e) {
             assert.notStrictEqual((e.message || e).indexOf("Invalid toggle"), -1);
