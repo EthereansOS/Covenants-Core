@@ -578,9 +578,24 @@ describe("WUSDFarm", () => {
                 penaltyFee: 0,
                 setupsCount: 0,
                 lastSetupIndex: 0
+            }, {
+                free: true,
+                blockDuration: 384000,
+                originalRewardPerBlock: 0,
+                minStakeable: 0,
+                maxStakeable: 0,
+                renewTimes: 0,
+                ammPlugin: uniswapAMM.options.address,
+                liquidityPoolTokenAddress: wusdUSDC,
+                mainTokenAddress: context.wusdInteroperableAddress,
+                ethereumAddress: utilities.voidEthereumAddress,
+                involvingETH: false,
+                penaltyFee: 0,
+                setupsCount: 0,
+                lastSetupIndex: 0
             }
         ];
-        var percentages = [];
+        var percentages = [utilities.toDecimals("0.8", 18)];
         var extensionPayload = wUSDFarmingExtension.methods.init(
             dfoHubManager.dfos.covenants.doubleProxyAddress,
             context.wusdExtensionControllerAddress,
@@ -737,6 +752,9 @@ describe("WUSDFarm", () => {
     });
 
     it("Change Models", async() => {
+
+        console.log(await wUSDFarmingExtension.methods.models().call());
+
         var wusdETH = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.wethTokenAddress]).call())[2];
         var wusdUSDC = (await uniswapAMM.methods.byTokens([context.wusdInteroperableAddress, context.usdcTokenAddress]).call())[2];
 
@@ -782,6 +800,8 @@ describe("WUSDFarm", () => {
         console.log(code);
         var proposal = await dfoHubManager.createProposal("covenants", "", true, code, "callOneTime(address)");
         await dfoHubManager.finalizeProposal(proposal);
+
+        console.log(await wUSDFarmingExtension.methods.models().call());
     });
 
     it("Rebalance By Credit by Burn 2", async () => {

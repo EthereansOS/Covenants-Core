@@ -28,8 +28,8 @@ contract WUSDFarmingExtension is IFarmExtension {
 
     uint256 public rewardCreditPercentage;
 
-    FarmingSetupInfo[] public infoModels;
-    uint256[] public rebalancePercentages;
+    FarmingSetupInfo[] private infoModels;
+    uint256[] private rebalancePercentages;
 
     uint256 public lastCheck;
     uint256 public lastBalance;
