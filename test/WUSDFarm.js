@@ -511,19 +511,11 @@ describe("WUSDFarm", () => {
 
     it("should deploy farm factory, extensions and finalize proposals", async() => {
         try {
-            rewardDestination = dfo.mvdWalletAddress;
-            var farmMainModel = await new web3.eth.Contract(FarmMain.abi).deploy({ data: FarmMain.bin }).send(blockchainConnection.getSendingOptions());
-            console.log(`simple farm model deployed at ${farmMainModel.options.address}`);
-            // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());  
-            var farmExtensionModel = await new web3.eth.Contract(FarmExtension.abi).deploy({ data: FarmExtension.bin }).send(blockchainConnection.getSendingOptions());
-            console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
 
-            farmFactory = await new web3.eth.Contract(FarmFactory.abi).deploy({ data: FarmFactory.bin, arguments: [dfo.doubleProxyAddress, farmMainModel.options.address, farmExtensionModel.options.address, 0, "google.com", "google.com"] }).send(blockchainConnection.getSendingOptions());
+            farmFactory = new web3.eth.Contract(FarmFactory.abi, "0x6BC8530fecc0001b9FC0bf5DAA17873e847616ed");
             console.log(`farm factory deployed at ${farmFactory.options.address}`);
 
-            var dfoFarmExtensionModel = await new web3.eth.Contract(DFOBasedFarmExtension.abi).deploy({ data: DFOBasedFarmExtension.bin }).send(blockchainConnection.getSendingOptions());
-            console.log(`dfo farm extension model deployed at ${dfoFarmExtensionModel.options.address}`);
-            dFOBasedFarmExtensionFactory = await new web3.eth.Contract(DFOBasedFarmExtensionFactory.abi).deploy({ data: DFOBasedFarmExtensionFactory.bin, arguments: [mainDFO.doubleProxyAddress, dfoFarmExtensionModel.options.address] }).send(blockchainConnection.getSendingOptions());
+            dFOBasedFarmExtensionFactory = new web3.eth.Contract(DFOBasedFarmExtensionFactory.abi, "0x7ee9297dabB036cAa6F526dD0459315c7237e017");
             console.log(`dfo based farm extension factory deployed at ${dFOBasedFarmExtensionFactory.options.address}`);
 
             var transaction = await dFOBasedFarmExtensionFactory.methods.cloneModel().send(blockchainConnection.getSendingOptions());
@@ -531,16 +523,6 @@ describe("WUSDFarm", () => {
             var farmMainExtensionAddress = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address,address)'))[0].topics[1])
             farmMainExtension = new web3.eth.Contract(FarmExtension.abi, farmMainExtensionAddress);
             console.log(`simple farm extension deployed at ${farmMainExtension.options.address}`);
-
-            var code = fs.readFileSync(path.resolve(__dirname, '..', 'contracts/farming/dfo/ManageFarmingFunctionality.sol'), 'UTF-8').format(farmMainExtension.options.address);
-            var proposal = await dfoManager.createProposal(dfo, "manageFarming", true, code, "manageFarming(address,uint256,bool,address,address,uint256,bool)", false, true);
-            await dfoManager.finalizeProposal(dfo, proposal);
-
-            transaction = await farmFactory.methods.cloneFarmDefaultExtension().send(blockchainConnection.getSendingOptions());
-            receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
-            clonedDefaultFarmExtension = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
-            console.log(`cloned default farm extension deployed at ${clonedDefaultFarmExtension}`);
-            clonedFarmExtension = new web3.eth.Contract(FarmExtension.abi, clonedDefaultFarmExtension);
 
             var WUSDFarmingExtension = await compile('WUSD/WUSDFarmingExtension');
             wUSDFarmingExtension = await new web3.eth.Contract(WUSDFarmingExtension.abi, "0xD3c460E2b32539e94Eef9ED3498252aB7E4095c0");
@@ -609,6 +591,8 @@ describe("WUSDFarm", () => {
 
         console.log(infos, percentages);
 
+        console.log(dfoHubManager.dfos.covenants.doubleProxyAddress, context.wusdExtensionControllerAddress, ethItemOrchestrator.options.address, context.wusdInteroperableAddress);
+
         var extensionPayload = wUSDFarmingExtension.methods.init(
             dfoHubManager.dfos.covenants.doubleProxyAddress,
             context.wusdExtensionControllerAddress,
@@ -635,13 +619,13 @@ describe("WUSDFarm", () => {
 
         var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
 
+        console.log(payload);
+
         var deployTransaction = await farmFactory.methods.deploy(payload).send(blockchainConnection.getSendingOptions());
         deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
         var farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
 
         farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
-
-        console.log(farmMainContract.options.address);
     });
 
     it("WUSD Extension Controller update Proposal", async () => {
@@ -735,6 +719,15 @@ describe("WUSDFarm", () => {
         }
     }
 
+    it("Cannot rebalance", async () => {
+        try {
+            await wUSDFarmingExtension.methods.rebalanceRewardsPerBlock().send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual((e.message || e).indexOf("Invalid block"), -1);
+        }
+    });
+
     it("Rebalance By Credit by Burn 1", rebalanceByCredit);
 
     it("Rebalance Farm 1", async () => {
@@ -758,6 +751,15 @@ describe("WUSDFarm", () => {
         console.log(dFOBalance, expectedDFOBalance);
         assert.strictEqual(balance, expectedBalance);
         assert.strictEqual(dFOBalance, expectedDFOBalance);
+    });
+
+    it("Fair", async () => {
+        try {
+            await wUSDFarmingExtension.methods.rebalanceRewardsPerBlock().send(blockchainConnection.getSendingOptions());
+            assert(false);
+        } catch(e) {
+            assert.notStrictEqual((e.message || e).indexOf("Invalid block"), -1);
+        }
     });
 
     it("should activate both the setup 1", async () => {
