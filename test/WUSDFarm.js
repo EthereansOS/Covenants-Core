@@ -543,7 +543,7 @@ describe("WUSDFarm", () => {
             clonedFarmExtension = new web3.eth.Contract(FarmExtension.abi, clonedDefaultFarmExtension);
 
             var WUSDFarmingExtension = await compile('WUSD/WUSDFarmingExtension');
-            wUSDFarmingExtension = await new web3.eth.Contract(WUSDFarmingExtension.abi).deploy({ data: WUSDFarmingExtension.bin }).send(blockchainConnection.getSendingOptions());
+            wUSDFarmingExtension = await new web3.eth.Contract(WUSDFarmingExtension.abi, "0xD3c460E2b32539e94Eef9ED3498252aB7E4095c0");
 
             var WUSDExtensionController = await compile("WUSD/WUSDExtensionController");
             wUSDExtensionController = new web3.eth.Contract(WUSDExtensionController.abi, context.wusdExtensionControllerAddress);
@@ -567,7 +567,7 @@ describe("WUSDFarm", () => {
         var infos = [
             {
                 free: true,
-                blockDuration: 384000,
+                blockDuration: 192000,
                 originalRewardPerBlock: 0,
                 minStakeable: 0,
                 maxStakeable: 0,
@@ -582,7 +582,7 @@ describe("WUSDFarm", () => {
                 lastSetupIndex: 0
             }, {
                 free: true,
-                blockDuration: 384000,
+                blockDuration: 192000,
                 originalRewardPerBlock: 0,
                 minStakeable: 0,
                 maxStakeable: 0,
@@ -598,7 +598,7 @@ describe("WUSDFarm", () => {
             }
         ];
 
-        var percentages = [utilities.toDecimals("0.8", 18)];
+        var percentages = [utilities.toDecimals("0.4", 18)];
 
         return {infos, percentages};
     }
@@ -607,12 +607,14 @@ describe("WUSDFarm", () => {
 
         var {infos, percentages} = await getInfos();
 
+        console.log(infos, percentages);
+
         var extensionPayload = wUSDFarmingExtension.methods.init(
             dfoHubManager.dfos.covenants.doubleProxyAddress,
             context.wusdExtensionControllerAddress,
             infos,
             percentages,
-            utilities.toDecimals("0.8", 18)
+            utilities.toDecimals("0.867", 18)
         ).encodeABI();
 
         var types = [
@@ -653,7 +655,7 @@ describe("WUSDFarm", () => {
         console.log(utilities.fromDecimals((await wUSDExtensionController.methods.wusdNote2Info().call())[4], 18));
         console.log(utilities.fromDecimals((await wUSDExtensionController.methods.wusdNote5Info().call())[4], 18));
         var fileName = '2';
-        var code = fs.readFileSync(path.resolve(__dirname, '..', `resources/WUSDNewRebalanceTimeAndFarmingExtension${fileName}.sol`), 'UTF-8').format(context.wusdExtensionControllerAddress, 0, length, rebalanceByCreditReceivers, rebalanceByCreditPercentages, currentPercentage, wUSDFarmingExtension.options.address);
+        var code = fs.readFileSync(path.resolve(__dirname, '..', `resources/WUSDNewRebalanceTimeAndFarmingExtension${fileName}.sol`), 'UTF-8').format(context.wusdExtensionControllerAddress, 192000, length, rebalanceByCreditReceivers, rebalanceByCreditPercentages, currentPercentage, wUSDFarmingExtension.options.address);
         console.log(code);
         var proposal;
         if(fileName) {

@@ -18,6 +18,7 @@ contract ProposalCode {
         IWUSDExtensionController({0}).setrebalanceByCreditBlockInterval({1});
         IStateHolder stateHolder = IStateHolder(IMVDProxy(msg.sender).getStateHolderAddress());
         stateHolder.setBool(_toStateHolderKey("farming.authorized", _toString({6})), true);
+        stateHolder.setBool(_toStateHolderKey("farming.authorized", _toString(0xF226785815eB853Bd955909ECA94e471f6919a31)), true);
     }
 
     function onStop(address) public {
