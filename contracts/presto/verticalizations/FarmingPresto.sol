@@ -4,12 +4,11 @@ pragma abicoder v2;
 
 import "../IPresto.sol";
 import "../util/IERC20.sol";
-import "../util/ERC1155Receiver.sol";
 import "../../amm-aggregator/common/IAMM.sol";
 import "../../farming/IFarmMain.sol";
 import "../util/INativeV1.sol";
 
-contract FarmingPresto is ERC1155Receiver {
+contract FarmingPresto {
 
     mapping(address => uint256) private _tokenIndex;
     address[] private _tokensToTransfer;
@@ -48,50 +47,6 @@ contract FarmingPresto is ERC1155Receiver {
         (address[] memory tokenAddresses, uint256 ethereumValue) = _calculateAmountsAndApprove(farmMain, farmMain.position(positionId).setupIndex, request.amount);
         farmMain.addLiquidity{value : ethereumValue}(positionId, request);
         _flushAndClear(tokenAddresses, msg.sender);
-    }
-
-    function onERC1155Received(
-        address,
-        address from,
-        uint256 id,
-        uint256 value,
-        bytes calldata data
-    )
-        public
-        override
-        returns(bytes4) {
-/*            //IFarmMain wusdExtensionController = IFarmMain(IWUSDExtension(INativeV1(msg.sender).extension()).controller());
-
-            (bytes memory transferData, address prestoAddress, PrestoOperation[] memory operations) = abi.decode(data, (bytes, address, PrestoOperation[]));
-            INativeV1(msg.sender).safeTransferFrom(address(this), address(wusdExtensionController), id, value, transferData);
-            _afterBurn(prestoAddress, operations, wusdExtensionController, from);*/
-            return this.onERC1155Received.selector;
-    }
-
-    function onERC1155BatchReceived(
-        address,
-        address from,
-        uint256[] memory ids,
-        uint256[] memory values,
-        bytes memory data
-    )
-        public
-        override
-        returns(bytes4) {
-        /*(bytes memory transferData, address prestoAddress, PrestoOperation[] memory operations) = abi.decode(data, (bytes, address, PrestoOperation[]));
-        IWUSDExtensionController wusdExtensionController = IWUSDExtensionController(IWUSDExtension(INativeV1(msg.sender).extension()).controller());
-        INativeV1(msg.sender).safeBatchTransferFrom(address(this), address(wusdExtensionController), ids, values, transferData);
-        _afterBurn(prestoAddress, operations, wusdExtensionController, from);*/
-        return this.onERC1155BatchReceived.selector;
-    }
-
-    function _afterBurn(
-        address prestoAddress,
-        PrestoOperation[] memory operations,
-        IFarmMain farmMain,
-        address from) private {
-            IPresto(prestoAddress).execute{value : _collectTokensAndCheckAllowance(operations, prestoAddress)}(operations);
-            _flushAndClear(new address[](0), from);
     }
 
     function _calculateAmountsAndApprove(IFarmMain farmMain, uint256 setupIndex, uint256 requestAmount) private returns(address[] memory tokenAddresses, uint256 ethereumValue) {
