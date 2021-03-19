@@ -191,7 +191,7 @@ describe("Farming Presto", () => {
         await dumpAllowedAMMS();
     });
 
-    it("WUSD - Swap for ETH", async () => {
+    it("Open Position - Swap for ETH", async () => {
 
         var setups = await farmMain.methods.setups().call();
 
@@ -215,6 +215,8 @@ describe("Farming Presto", () => {
         var halfValue = web3.utils.toBN(value).div(web3.utils.toBN(2)).toString();
 
         var ethereumAddress = (await amm.methods.data().call())[0];
+
+        console.log("WeWE2");
 
         async function calculateBestLP(firstToken, secondToken, firstDecimals, secondDecimals) {
 
@@ -257,6 +259,8 @@ describe("Farming Presto", () => {
             token0EthLiquidityPoolAddress = bestLP.secondTokenEthLiquidityPoolAddress;
             token1EthLiquidityPoolAddress = bestLP.firstTokenEthLiquidityPoolAddress;
         }
+
+        console.log("WeWE2");
 
         var expectedWUSDBalance = await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call();
         expectedWUSDBalance = web3.utils.toBN(expectedWUSDBalance).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedFirstTokenAmount))).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedSecondTokenAmount))).toString();
