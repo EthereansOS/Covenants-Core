@@ -147,7 +147,7 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         );
         // pos.uniqueOwner = to;
         uint256 newPositionId = uint256(keccak256(abi.encode(to, _setupsInfo[_setups[pos.setupIndex].infoIndex].free ? 0 : block.number, pos.setupIndex)));
-        require(_positions[newPositionId].creationBlock == 0 || _setupsInfo[_setups[pos.setupIndex].infoIndex].free, "Invalid transfer");
+        require(_positions[newPositionId].creationBlock == 0, "Invalid transfer");
         _positions[newPositionId] = abi.decode(abi.encode(pos), (FarmingPosition));
         _positions[newPositionId].uniqueOwner = to;
         delete _positions[positionId];
