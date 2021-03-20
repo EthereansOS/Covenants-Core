@@ -525,7 +525,7 @@ describe("WUSDFarm", () => {
             console.log(`simple farm extension deployed at ${farmMainExtension.options.address}`);
 
             var WUSDFarmingExtension = await compile('WUSD/WUSDFarmingExtension');
-            wUSDFarmingExtension = await new web3.eth.Contract(WUSDFarmingExtension.abi, "0xD3c460E2b32539e94Eef9ED3498252aB7E4095c0");
+            wUSDFarmingExtension = await new web3.eth.Contract(WUSDFarmingExtension.abi, "0xc90825B09B1F31D2872788CdaBb1A259F110D30F");
 
             var WUSDExtensionController = await compile("WUSD/WUSDExtensionController");
             wUSDExtensionController = new web3.eth.Contract(WUSDExtensionController.abi, context.wusdExtensionControllerAddress);
@@ -643,7 +643,7 @@ describe("WUSDFarm", () => {
         console.log(code);
         var proposal;
         if(fileName) {
-            proposal = await dfoHubManager.createProposal("covenants", "manageFarming", true, code, "manageFarming(address,uint256,bool,address,address,uint256,bool)", false, true);
+            proposal = await dfoHubManager.createProposal("covenants", "manageFarming", true, code, "manageFarming(address,uint256,bool,address,address,uint256,bool)", false, true, "manageFarming");
         } else {
             proposal = await dfoHubManager.createProposal("covenants", "", true, code, "callOneTime(address)");
         }
