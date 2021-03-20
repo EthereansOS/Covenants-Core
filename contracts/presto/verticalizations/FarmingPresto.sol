@@ -79,7 +79,7 @@ contract FarmingPresto {
         eth = _collectTokensAndCheckAllowance(operations, operator);
         for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
             if(_tokensToTransfer[i] == address(0)) {
-                require(msg.value == _tokenAmounts[i], "Incorrect ETH value");
+                require(msg.value >= _tokenAmounts[i], "Incorrect ETH value");
             } else {
                 _safeTransferFrom(_tokensToTransfer[i], msg.sender, address(this), _tokenAmounts[i]);
             }

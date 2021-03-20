@@ -142,7 +142,7 @@ describe("Farming Presto", () => {
         var WUSDExtensionController = await compile('WUSD/WUSDExtensionController');
         var FarmMain = await compile("farming/FarmMain");
 
-        farmMain = new web3.eth.Contract(FarmMain.abi, "0x41Bff124bfF2046Af9fbaF11EcB685cBb70C01Ed");
+        farmMain = new web3.eth.Contract(FarmMain.abi, "0x8EAC3aCd75188C759E0Db3DFa59367acDe2BbBe8");
 
         wusdExtensionController = new web3.eth.Contract(WUSDExtensionController.abi, context.wusdExtensionControllerAddress);
         var data = await wusdExtensionController.methods.wusdInfo().call();
@@ -194,10 +194,15 @@ describe("Farming Presto", () => {
     it("Open Position - Swap for ETH", async () => {
 
         var setups = await farmMain.methods.setups().call();
+        var setup = setups.filter(it => it.active)[0];
+        var setupIndex = setups.indexOf(setup);
 
-        var info = (await farmMain.methods.setup(setups.indexOf(setups.filter(it => it.active)[0])).call())[1];
+        var info = (await farmMain.methods.setup(setupIndex).call())[1];
 
         var ammContract = Object.values(amms).filter(it => it.address === info.ammPlugin)[0].contract;
+
+        var ammEthereumAddress = (await ammContract.methods.data().call())[0];
+
         var liquidityPool = info.liquidityPoolTokenAddress;
 
         var tokens = await ammContract.methods.byLiquidityPool(liquidityPool).call();
@@ -216,11 +221,14 @@ describe("Farming Presto", () => {
 
         var ethereumAddress = (await amm.methods.data().call())[0];
 
-        console.log("WeWE2");
-
         async function calculateBestLP(firstToken, secondToken, firstDecimals, secondDecimals) {
 
             var liquidityPoolAddress = (await amm.methods.byTokens([ethereumAddress, firstToken]).call())[2];
+
+            if(liquidityPoolAddress === utilities.voidEthereumAddress) {
+                return {updatedSecondTokenAmount : 1, updatedFirstTokenAmount : 0};
+            }
+
             var firstTokenEthLiquidityPoolAddress = liquidityPoolAddress;
             var token0Value = (await amm.methods.getSwapOutput(ethereumAddress, halfValue, [liquidityPoolAddress], [firstToken]).call())[1];
 
@@ -233,7 +241,10 @@ describe("Farming Presto", () => {
 
             liquidityPoolAddress = (await amm.methods.byTokens([ethereumAddress, secondToken]).call())[2];
             var secondTokenEthLiquidityPoolAddress = liquidityPoolAddress;
-            var token1ValueETH = (await amm.methods.getSwapOutput(secondToken, token1Value, [liquidityPoolAddress], [ethereumAddress]).call())[1];
+            var token1ValueETH = "0";
+            if(secondTokenEthLiquidityPoolAddress !== utilities.voidEthereumAddress) {
+                token1ValueETH = (await amm.methods.getSwapOutput(secondToken, token1Value, [liquidityPoolAddress], [ethereumAddress]).call())[1];
+            }
 
             return { lpAmount, updatedFirstTokenAmount, updatedSecondTokenAmount, token0Value, token1Value, token1ValueETH, firstTokenEthLiquidityPoolAddress, secondTokenEthLiquidityPoolAddress };
         }
@@ -260,12 +271,12 @@ describe("Farming Presto", () => {
             token1EthLiquidityPoolAddress = bestLP.firstTokenEthLiquidityPoolAddress;
         }
 
-        console.log("WeWE2");
-
         var expectedWUSDBalance = await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call();
         expectedWUSDBalance = web3.utils.toBN(expectedWUSDBalance).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedFirstTokenAmount))).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedSecondTokenAmount))).toString();
 
-        var operations = [{
+        var operations = [];
+
+        token0EthLiquidityPoolAddress !== utilities.voidEthereumAddress && operations.push({
             inputTokenAddress : ethereumAddress,
             inputTokenAmount : firstTokenETH,
             ammPlugin : amm.options.address,
@@ -275,7 +286,9 @@ describe("Farming Presto", () => {
             exitInETH : false,
             receivers : [farmingPresto.options.address],
             receiversPercentages : []
-        }, {
+        });
+
+        token1EthLiquidityPoolAddress !== utilities.voidEthereumAddress && operations.push({
             inputTokenAddress : ethereumAddress,
             inputTokenAmount : secondTokenETH,
             ammPlugin : amm.options.address,
@@ -285,24 +298,40 @@ describe("Farming Presto", () => {
             exitInETH : false,
             receivers : [farmingPresto.options.address],
             receiversPercentages : []
-        }];
+        });
 
-        var value = web3.utils.toBN(firstTokenETH).add(web3.utils.toBN(secondTokenETH)).toString();
+        var ethValue = 0;
+        token0EthLiquidityPoolAddress !== utilities.voidEthereumAddress && (ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(firstTokenETH)).toString());
+        token1EthLiquidityPoolAddress !== utilities.voidEthereumAddress && (ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(secondTokenETH)).toString());
+        info.involvingETH && token0.options.address === ammEthereumAddress && (ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(firstTokenAmount)).toString());
+        info.involvingETH && token1.options.address === ammEthereumAddress && (ethValue = web3.utils.toBN(ethValue).add(web3.utils.toBN(secondTokenAmount)).toString());
+
+        var request = {
+            setupIndex,
+            amount : firstTokenAmount,
+            amountIsLiquidityPool : false,
+            positionOwner : accounts[0]
+        }
 
         var expectedETHBalance = await web3.eth.getBalance(accounts[0]);
-        expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(value)).toString();
+        expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(ethValue)).toString();
+
+        !info.involvingETH || token0.options.address !== ammEthereumAddress && token0.methods.approve(farmingPresto.options.address, await token0.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
+        !info.involvingETH || token1.options.address !== ammEthereumAddress && token1.methods.approve(farmingPresto.options.address, await token1.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
+
+        await nothingInContracts(farmMain.options.address);
 
         var transaction = await farmingPresto.methods.openPosition(
             presto.options.address,
             operations,
             farmMain.options.address,
-            ammPosition,
-            liquidityPoolPosition
-        ).send(blockchainConnection.getSendingOptions({value}));
+            request
+        ).send(blockchainConnection.getSendingOptions({value: ethValue}));
         var transactionFee = await blockchainConnection.calculateTransactionFee(transaction);
 
-        await nothingInContracts(wusdPresto.options.address);
+        await nothingInContracts(farmingPresto.options.address);
         await nothingInContracts(presto.options.address);
+        await nothingInContracts(farmMain.options.address);
 
         expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(transactionFee)).toString();
         var ethBalance = await web3.eth.getBalance(accounts[0]);
@@ -310,14 +339,6 @@ describe("Farming Presto", () => {
         ethBalance = utilities.fromDecimals(ethBalance, 18);
 
         assert.strictEqual(ethBalance, expectedETHBalance, "Incorrect ETH Balance");
-
-        expectedWUSDBalance = utilities.fromDecimals(expectedWUSDBalance, 18);
-        var wusdBalance = await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call();
-        wusdBalance = utilities.fromDecimals(wusdBalance, 18);
-
-        console.log(wusdBalance, expectedWUSDBalance);
-
-        assert(utilities.formatNumber(wusdBalance) <= utilities.formatNumber(expectedWUSDBalance), "Incorrect WUSD Balance");
     });
 
 });
