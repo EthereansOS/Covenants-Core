@@ -33,22 +33,6 @@ contract FarmingPresto {
         _flushAndClear(tokenAddresses, msg.sender);
     }
 
-    function addLiquidity(
-        address prestoAddress,
-        PrestoOperation[] memory operations,
-        address farmMainAddress,
-        uint256 positionId,
-        FarmingPositionRequest memory request
-    ) public payable {
-        request.positionOwner = request.positionOwner != address(0) ? request.positionOwner : msg.sender;
-        uint256 eth = _transferToMeAndCheckAllowance(operations, prestoAddress);
-        IPresto(prestoAddress).execute{value : eth}(_operations);
-        IFarmMain farmMain = IFarmMain(farmMainAddress);
-        (address[] memory tokenAddresses, uint256 ethereumValue) = _calculateAmountsAndApprove(farmMain, farmMain.position(positionId).setupIndex, request.amount);
-        farmMain.addLiquidity{value : ethereumValue}(positionId, request);
-        _flushAndClear(tokenAddresses, msg.sender);
-    }
-
     function _calculateAmountsAndApprove(IFarmMain farmMain, uint256 setupIndex, uint256 requestAmount) private returns(address[] memory tokenAddresses, uint256 ethereumValue) {
         (, FarmingSetupInfo memory setupInfo) = farmMain.setup(setupIndex);
         uint256[] memory tokensAmounts;

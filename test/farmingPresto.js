@@ -51,8 +51,10 @@ describe("Farming Presto", () => {
         }
     }
 
-    async function nothingInContracts(address) {
-        var toCheck = [utilities.voidEthereumAddress];
+    async function nothingInContracts(address, others) {
+        others = others || [];
+        others = others instanceof Array ? others : [others];
+        var toCheck = [...others, utilities.voidEthereumAddress];
         toCheck.push(...tokens.map(it => it));
         for (var tkn of toCheck) {
             try {
@@ -170,6 +172,8 @@ describe("Farming Presto", () => {
         }
         uniswapAMM = amms["UniswapV2"].contract;
 
+        delete amms["Balancer"];
+
         presto = await new web3.eth.Contract(Presto.abi, context.prestoAddress);
         farmingPresto = await new web3.eth.Contract(FarmingPresto.abi).deploy({ data: FarmingPresto.bin }).send(blockchainConnection.getSendingOptions());
 
@@ -193,11 +197,21 @@ describe("Farming Presto", () => {
 
     it("Open Position - Swap for ETH", async () => {
 
+        var amount = "1";
+
         var setups = await farmMain.methods.setups().call();
         var setup = setups.filter(it => it.active)[0];
-        var setupIndex = setups.indexOf(setup);
+        var setupIndex = 5;setups.indexOf(setup);
 
-        var info = (await farmMain.methods.setup(setupIndex).call())[1];
+        var info = (await farmMain.methods.setup(setupIndex).call());
+        setup = info[0];
+        info = info[1];
+
+        !setup.active && await farmMain.methods.activateSetup(setupIndex).send(blockchainConnection.getSendingOptions());
+
+        var info = (await farmMain.methods.setup(setupIndex).call());
+        setup = info[0];
+        info = info[1];
 
         var ammContract = Object.values(amms).filter(it => it.address === info.ammPlugin)[0].contract;
 
@@ -211,9 +225,9 @@ describe("Farming Presto", () => {
         var token0decimals = tokens[2][0] === utilities.voidEthereumAddress ? 18 : await token0.methods.decimals().call();
         var token1decimals = tokens[2][1] === utilities.voidEthereumAddress ? 18 : await token1.methods.decimals().call();
 
-        var amm = utilities.getRandomArrayElement(Object.values(amms)).contract;
+        var mainTokenIndex = tokens[2].indexOf(info.mainTokenAddress);
 
-        var amount = 0.1;
+        var amm = ammContract;//utilities.getRandomArrayElement(Object.values(amms)).contract;
 
         var value = utilities.toDecimals(utilities.numberToString(amount), 18);
 
@@ -225,8 +239,8 @@ describe("Farming Presto", () => {
 
             var liquidityPoolAddress = (await amm.methods.byTokens([ethereumAddress, firstToken]).call())[2];
 
-            if(liquidityPoolAddress === utilities.voidEthereumAddress) {
-                return {updatedSecondTokenAmount : 1, updatedFirstTokenAmount : 0};
+            if (liquidityPoolAddress === utilities.voidEthereumAddress) {
+                return {};
             }
 
             var firstTokenEthLiquidityPoolAddress = liquidityPoolAddress;
@@ -259,7 +273,7 @@ describe("Farming Presto", () => {
         var token0EthLiquidityPoolAddress = bestLP.firstTokenEthLiquidityPoolAddress;
         var token1EthLiquidityPoolAddress = bestLP.secondTokenEthLiquidityPoolAddress;
 
-        if (bestLP.updatedSecondTokenAmount > bestLP.updatedFirstTokenAmount) {
+        if (token0.options.address === ammEthereumAddress || !lpAmount) {
             bestLP = await calculateBestLP(token1.options.address, token0.options.address, token1decimals, token0decimals);
 
             lpAmount = bestLP.lpAmount;
@@ -270,9 +284,6 @@ describe("Farming Presto", () => {
             token0EthLiquidityPoolAddress = bestLP.secondTokenEthLiquidityPoolAddress;
             token1EthLiquidityPoolAddress = bestLP.firstTokenEthLiquidityPoolAddress;
         }
-
-        var expectedWUSDBalance = await wusdCollection.methods.balanceOf(accounts[0], wusdObjectId).call();
-        expectedWUSDBalance = web3.utils.toBN(expectedWUSDBalance).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedFirstTokenAmount))).add(web3.utils.toBN(utilities.numberToString(bestLP.updatedSecondTokenAmount))).toString();
 
         var operations = [];
 
@@ -308,30 +319,35 @@ describe("Farming Presto", () => {
 
         var request = {
             setupIndex,
-            amount : firstTokenAmount,
+            amount : mainTokenIndex === 0 ? firstTokenAmount : secondTokenAmount,
             amountIsLiquidityPool : false,
             positionOwner : accounts[0]
         }
 
         var expectedETHBalance = await web3.eth.getBalance(accounts[0]);
-        expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(ethValue)).toString();
-
-        !info.involvingETH || token0.options.address !== ammEthereumAddress && token0.methods.approve(farmingPresto.options.address, await token0.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
-        !info.involvingETH || token1.options.address !== ammEthereumAddress && token1.methods.approve(farmingPresto.options.address, await token1.methods.balanceOf(accounts[0]).call()).send(blockchainConnection.getSendingOptions());
-
-        await nothingInContracts(farmMain.options.address);
+        expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(value)).toString();
 
         var transaction = await farmingPresto.methods.openPosition(
             presto.options.address,
             operations,
             farmMain.options.address,
             request
-        ).send(blockchainConnection.getSendingOptions({value: ethValue}));
+        ).send(blockchainConnection.getSendingOptions({value}));
+        var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash || transaction);
+        global.positionId = web3.eth.abi.decodeParameter("uint256", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3("Transfer(uint256,address,address)"))[0].topics[1])
+        console.log(global.positionId);
         var transactionFee = await blockchainConnection.calculateTransactionFee(transaction);
 
-        await nothingInContracts(farmingPresto.options.address);
-        await nothingInContracts(presto.options.address);
-        await nothingInContracts(farmMain.options.address);
+        info = (await farmMain.methods.setup(setupIndex).call());
+        setup = info[0];
+        info = info[1];
+
+        var collection = new web3.eth.Contract(context.INativeV1ABI, await farmMain.methods._farmTokenCollection().call());
+        var interoperable = new web3.eth.Contract(context.IERC20ABI, await collection.methods.asInteroperable(setup.objectId).call());
+
+        await nothingInContracts(farmingPresto.options.address, setup.objectId !== '0' ? interoperable : null);
+        await nothingInContracts(presto.options.address, setup.objectId !== '0' ? interoperable : null);
+        await nothingInContracts(farmMain.options.address, setup.objectId !== '0' ? interoperable : null);
 
         expectedETHBalance = web3.utils.toBN(expectedETHBalance).sub(web3.utils.toBN(transactionFee)).toString();
         var ethBalance = await web3.eth.getBalance(accounts[0]);
@@ -339,6 +355,9 @@ describe("Farming Presto", () => {
         ethBalance = utilities.fromDecimals(ethBalance, 18);
 
         assert.strictEqual(ethBalance, expectedETHBalance, "Incorrect ETH Balance");
-    });
 
+        console.log(await web3.eth.getBalance(farmingPresto.options.address));
+        console.log(await web3.eth.getBalance(presto.options.address));
+        console.log(await web3.eth.getBalance(farmMain.options.address));
+    });
 });
