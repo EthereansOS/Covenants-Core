@@ -45,7 +45,7 @@ describe("WUSD", () => {
 
     function encodeRealWUSDControllerInitializer() {
         var wUSDInitializer = {
-            orchestratorAddress: web3.utils.toChecksumAddress("0x86ab19d36c38aa81f092eab4b1a8a4b553612465"),
+            orchestratorAddress: web3.utils.toChecksumAddress(context.ethItemOrchestratorAddress),
             doubleProxyAddress: web3.utils.toChecksumAddress("0xF869538e3904778A0cb1FF620C8E83c7df36B946"),
             rebalanceByCreditPercentageForCaller: utilities.toDecimals("0.02", 18),
             rebalanceByCreditBlockInterval: 90000,
