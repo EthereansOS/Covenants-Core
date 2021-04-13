@@ -606,6 +606,8 @@ contract FarmMain is IFarmMain, ERC1155Receiver {
         FarmingSetup storage setup = _setups[setupIndex];
         // require(!setup.active || block.number >= setup.endBlock, "Not valid activation");
 
+        require(block.number > _setupsInfo[setup.infoIndex].startBlock, "Too early for this setup");
+
         if (setup.active && block.number >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
             setup.active = false;
             return;

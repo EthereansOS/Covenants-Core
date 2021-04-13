@@ -18,6 +18,7 @@ struct FarmingSetupConfiguration {
 struct FarmingSetupInfo {
     bool free; // if the setup is a free farming setup or a locked one.
     uint256 blockDuration; // duration of setup
+    uint256 startBlock; // optional start block used for the delayed activation of the first setup
     uint256 originalRewardPerBlock;
     uint256 minStakeable; // minimum amount of staking tokens.
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
