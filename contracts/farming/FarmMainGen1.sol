@@ -110,15 +110,15 @@ contract FarmMainGen1 is IFarmMainGen1, ERC1155Receiver {
         }
     }
 
-    function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override byExtension {
+    function finalFlush(address[] calldata tokens, uint256[] calldata amounts) public  {
         for(uint256 i = 0; i < _farmingSetupsCount; i++) {
-            require(_setupPositionsCount[i] == 0, "Not Empty");
+            require(_setupPositionsCount[i] == 0 && !_setups[i].active && _setups[i].totalSupply == 0, "Not Empty");
         }
-        require(tokens.length == amounts.length && amounts.length == receivers.length, "length");
+        (,,, address receiver,) = IFarmExtensionGen1(_extension).data();
+        require(tokens.length == amounts.length, "length");
         for(uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             uint256 amount = amounts[i];
-            address receiver = receivers[i];
             require(receiver != address(0));
             if(token == address(0)) {
                 (bool result,) = receiver.call{value : amount}("");
@@ -153,6 +153,11 @@ contract FarmMainGen1 is IFarmMainGen1, ERC1155Receiver {
 
     function activateSetup(uint256 setupInfoIndex) public {
         require(_setupsInfo[setupInfoIndex].renewTimes > 0 && !_setups[_setupsInfo[setupInfoIndex].lastSetupIndex].active, "Invalid toggle.");
+        _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
+    }
+
+    function toggleSetup(uint256 setupInfoIndex) public {
+        require(_setups[_setupsInfo[setupInfoIndex].lastSetupIndex].active && block.number > _setups[_setupsInfo[setupInfoIndex].lastSetupIndex].endBlock, "Invalid toggle.");
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 

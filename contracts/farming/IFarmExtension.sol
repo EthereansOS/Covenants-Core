@@ -3,9 +3,8 @@ pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 import "./FarmData.sol";
-import "./IFinalFlush.sol";
 
-interface IFarmExtension is IFinalFlush {
+interface IFarmExtension {
 
     function init(bool byMint, address host, address treasury) external;
 

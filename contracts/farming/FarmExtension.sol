@@ -72,10 +72,6 @@ contract FarmExtension is IFarmExtension {
         IFarmMain(_farmMainContract).setFarmingSetups(farmingSetups);
     }
 
-    function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override hostOnly {
-        IFinalFlush(_farmMainContract).finalFlush(tokens, amounts, receivers);
-    }
-
     /** @dev transfers the input amount to the caller farming contract.
       * @param amount amount of erc20 to transfer or mint.
      */

@@ -7,7 +7,6 @@ import "../farming/IFarmMain.sol";
 import "../farming/util/DFOHub.sol";
 import "./IWUSDExtensionController.sol";
 import "./util/IERC20.sol";
-import "./util/INativeV1.sol";
 
 contract WUSDFarmingExtension is IFarmExtension {
 
@@ -142,10 +141,6 @@ contract WUSDFarmingExtension is IFarmExtension {
     /** @dev this function calls the liquidity mining contract with the given address and sets the given liquidity mining setups.*/
     function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public override hostOnly {
         IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
-    }
-
-    function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override hostOnly {
-        IFinalFlush(_farmingContract).finalFlush(tokens, amounts, receivers);
     }
 
     function setWusdExtensionControllerAddress(address _wusdExtensionControllerAddress) public hostOnly {

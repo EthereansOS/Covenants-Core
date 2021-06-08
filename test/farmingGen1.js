@@ -173,7 +173,7 @@ describe("FarmingGen1", () => {
         await farmMainContract.methods.addLiquidity(actor.positionId, stake).send({...actor.from, value: (!stake.amountIsLiquidityPool && setupInfo.involvingETH) ? mainToken === utilities.voidEthereumAddress ? mainTokenAmount : secondaryTokenAmount : 0});
         var endingSetup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
         var endingPosition = await farmMainContract.methods.position(actor.positionId).call();
-        assert.strictEqual(utilities.fromDecimals(parseInt(startingPosition.liquidityPoolTokenAmount) * 2, 4).slice(0, -1), utilities.fromDecimals(parseInt(endingPosition.liquidityPoolTokenAmount), 4).slice(0, -1));
+        assert.strictEqual(parseInt(startingPosition.liquidityPoolTokenAmount) * 2, parseInt(endingPosition.liquidityPoolTokenAmount));
         assert.strictEqual(parseInt(endingSetup.totalSupply), parseInt(startingSetup.totalSupply) + (parseInt(endingPosition.liquidityPoolTokenAmount) - parseInt(startingPosition.liquidityPoolTokenAmount)));
         actor.position = endingPosition;
     }
@@ -286,54 +286,12 @@ describe("FarmingGen1", () => {
 
     async function finalFlush() {
         var balance = await rewardToken.methods.balanceOf(farmMainContract.options.address).call();
-        var receiver = await clonedFarmExtension.methods.data().call();
-        var host = receiver.host;
-        receiver = receiver.treasury;
+        var receiver = (await clonedFarmExtension.methods.data().call()).treasury;
         var expectedReceiverBalance = web3.utils.toBN(await rewardToken.methods.balanceOf(receiver).call()).add(web3.utils.toBN(balance)).toString();
-        if(host !== dfo.doubleProxyAddress) {
-            await clonedFarmExtension.methods.finalFlush([rewardToken.options.address], [balance], [receiver]).send(blockchainConnection.getSendingOptions());
-        } else {
-            var code = `/* Discussion:
-            * //discord.com/invite/66tafq3
-            */
-           /* Description:
-            * Preparation to Uniswap V3 farm
-            */
-           //SPDX-License-Identifier: MIT
-           pragma solidity ^0.7.6;
-           pragma abicoder v2;
-           
-           contract ProposalCode {
-               string private _metadataLink;
-           
-               constructor(string memory metadataLink) {
-                   _metadataLink = metadataLink;
-               }
-           
-               function getMetadataLink() public view returns (string memory) {
-                   return _metadataLink;
-               }
-           
-               function callOneTime(address) public {
-                   address[] memory tokens = new address[](1);
-                   address[] memory amounts = new uint256[](1);
-                   address[] memory receivers = new address[](1);
-                   tokens[0] = ${web3.utils.toChecksumAddress(rewardToken.options.address)};
-                   amounts[0] = ${balance};
-                   receivers[0] = ${receiver};
-                   IFinalFlush(${web3.utils.toChecksumAddress(clonedFarmExtension.options.address)}).finalFlush(tokens, amounts, receivers);
-               }
-           }
-           
-           interface IFinalFlush {
-               function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) external;
-           }`;
-           var proposal = dfoManager.createProposal(dfo, '', true, code, 'callOneTime(address)');
-           await dfoManager.finalizeProposal(dfo, proposal);
-        };
+        await farmMainContract.methods.finalFlush([rewardToken.options.address], [balance]).send(blockchainConnection.getSendingOptions());
         assert.strictEqual(await rewardToken.methods.balanceOf(farmMainContract.options.address).call(), '0');
         assert.strictEqual(await rewardToken.methods.balanceOf(receiver).call(), expectedReceiverBalance);
-    };
+    }
 
     before(async () => {
         try {

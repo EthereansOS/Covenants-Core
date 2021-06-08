@@ -2,12 +2,12 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "../IFarmExtension.sol";
-import "../IFarmMain.sol";
+import "../IFarmExtensionGen1.sol";
+import "../IFarmMainGen1.sol";
 import "../util/IERC20.sol";
 import "../util/DFOHub.sol";
 
-contract DFOBasedFarmExtension is IFarmExtension {
+contract DFOBasedFarmExtension is IFarmExtensionGen1 {
 
     string private constant FUNCTIONALITY_NAME = "manageFarming";
 
@@ -42,7 +42,7 @@ contract DFOBasedFarmExtension is IFarmExtension {
     function init(bool byMint, address host, address) public virtual override {
         require(_farmingContract == address(0), "Already init");
         require((_doubleProxy = host) != address(0), "blank host");
-        _rewardTokenAddress = IFarmMain(_farmingContract = msg.sender)._rewardTokenAddress();
+        _rewardTokenAddress = IFarmMainGen1(_farmingContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
     }
 
@@ -87,7 +87,7 @@ contract DFOBasedFarmExtension is IFarmExtension {
       * @param farmingSetups array containing all the farming setups.
      */
     function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public override hostOnly {
-        IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
+        IFarmMainGen1(_farmingContract).setFarmingSetups(farmingSetups);
     }
 
     /** PRIVATE METHODS */

@@ -3,9 +3,8 @@ pragma solidity ^0.7.6;
 pragma abicoder v2;
 
 import "./FarmDataGen1.sol";
-import "./IFinalFlush.sol";
 
-interface IFarmMainGen1 is IFinalFlush {
+interface IFarmMainGen1 {
 
     function ONE_HUNDRED() external view returns(uint256);
     function _rewardTokenAddress() external view returns(address);
