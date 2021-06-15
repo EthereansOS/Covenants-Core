@@ -2,10 +2,10 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./FarmData.sol";
+import "./FarmDataGen1.sol";
 import "./IFinalFlush.sol";
 
-interface IFarmExtension is IFinalFlush {
+interface IFarmExtensionGen1 is IFinalFlush {
 
     function init(bool byMint, address host, address treasury) external;
 
@@ -18,4 +18,5 @@ interface IFarmExtension is IFinalFlush {
     function backToYou(uint256 amount) external payable;
 
     function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external;
+
 }

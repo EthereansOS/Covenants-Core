@@ -91,6 +91,10 @@ contract DFOBasedFarmExtension is IFarmExtension {
         IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
     }
 
+    function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override hostOnly {
+        IFinalFlush(_farmingContract).finalFlush(tokens, amounts, receivers);
+    }
+
     /** PRIVATE METHODS */
 
     /** @dev this function returns the address of the functionality with the FUNCTIONALITY_NAME.

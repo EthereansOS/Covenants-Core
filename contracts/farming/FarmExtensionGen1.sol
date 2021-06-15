@@ -2,12 +2,12 @@
 pragma solidity ^0.7.6;
 pragma abicoder v2;
 
-import "./IFarmExtension.sol";
-import "./IFarmMain.sol";
+import "./IFarmExtensionGen1.sol";
+import "./IFarmMainGen1.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
 
-contract FarmExtension is IFarmExtension {
+contract FarmExtensionGen1 is IFarmExtensionGen1 {
 
     // wallet who has control on the extension and treasury
     address internal _host;
@@ -42,7 +42,7 @@ contract FarmExtension is IFarmExtension {
     function init(bool byMint, address host, address treasury) public virtual override {
         require(_farmMainContract == address(0), "Already init");
         require((_host = host) != address(0), "blank host");
-        _rewardTokenAddress = IFarmMain(_farmMainContract = msg.sender)._rewardTokenAddress();
+        _rewardTokenAddress = IFarmMainGen1(_farmMainContract = msg.sender)._rewardTokenAddress();
         _byMint = byMint;
         _treasury = treasury != address(0) ? treasury : host;
     }
@@ -69,7 +69,7 @@ contract FarmExtension is IFarmExtension {
       * @param farmingSetups array containing all the farming setups.
      */
     function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public virtual override hostOnly {
-        IFarmMain(_farmMainContract).setFarmingSetups(farmingSetups);
+        IFarmMainGen1(_farmMainContract).setFarmingSetups(farmingSetups);
     }
 
     function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override hostOnly {

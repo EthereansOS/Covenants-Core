@@ -144,6 +144,10 @@ contract WUSDFarmingExtension is IFarmExtension {
         IFarmMain(_farmingContract).setFarmingSetups(farmingSetups);
     }
 
+    function finalFlush(address[] calldata tokens, uint256[] calldata amounts, address[] calldata receivers) public override hostOnly {
+        IFinalFlush(_farmingContract).finalFlush(tokens, amounts, receivers);
+    }
+
     function setWusdExtensionControllerAddress(address _wusdExtensionControllerAddress) public hostOnly {
         wusdExtensionControllerAddress = _wusdExtensionControllerAddress;
     }

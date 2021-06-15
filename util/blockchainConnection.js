@@ -7,8 +7,7 @@ module.exports = {
                 gasLimit: 10000000,
                 db: require('memdown')(),
                 total_accounts: 15,
-                default_balance_ether: 9999999999999999999,
-                asyncRequestProcessing : true,
+                default_balance_ether: 9999999999999999999
             };
             if (process.env.blockchain_connection_string) {
                 options.fork = process.env.blockchain_connection_string;
@@ -32,15 +31,13 @@ module.exports = {
     },
     async fastForward(blocks) {
         var blockNumber = parseInt(await web3.eth.getBlockNumber()) + (blocks = blocks && parseInt(blocks) || 1);
-        await new Promise(async function (ok) {
-            async function consume() {
-                if(--blocks < 0) {
-                    return ok();
-                }
-                await web3.currentProvider.sendAsync({ "id": new Date().getTime() + blocks, "jsonrpc": "2.0", "method": "evm_mine", "params": [] }, consume);
-            }
-            consume();
-        });
+        var promises = [];
+        while (blocks-- > 0) {
+            promises.push(new Promise(function(ok) {
+                web3.currentProvider.sendAsync({ "id": 0, "jsonrpc": "2.0", "method": "evm_mine", "params": [] }, ok);
+            }));
+        }
+        await Promise.all(promises);
         while (parseInt(await web3.eth.getBlockNumber()) < blockNumber) {
             await new Promise(ok => setTimeout(ok, 1000));
         }
