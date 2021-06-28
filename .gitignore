@@ -11,3 +11,4 @@
 /**/.env
 /**/*.env
 /**/tmp
+truffle-config.js

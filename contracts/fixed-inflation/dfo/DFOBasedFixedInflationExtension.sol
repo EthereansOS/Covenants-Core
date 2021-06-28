@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.0;
 pragma abicoder v2;
 
 import "../FixedInflationData.sol";
@@ -7,6 +7,7 @@ import "../IFixedInflationExtension.sol";
 import "../util/DFOHub.sol";
 import "../IFixedInflation.sol";
 import "../util/IERC20.sol";
+import "../util/IERC20Burnable.sol";
 
 contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
 
@@ -69,6 +70,15 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
         active = false;
     }
 
+    function burnToken(address erc20TokenAddress, uint256 value) external override fixedInflationOnly {
+        _safeTransferFrom(erc20TokenAddress, _fixedInflationContract, address(this), value);
+        _burn(erc20TokenAddress, value);
+    }
+
+    function _burn(address erc20TokenAddress, uint256 value) internal virtual {
+        IERC20Burnable(erc20TokenAddress).burn(value);
+    }
+
     function _getFunctionalityAddress() private view returns(address functionalityAddress) {
         (functionalityAddress,,,,) = IMVDFunctionalitiesManager(IMVDProxy(IDoubleProxy(_host).proxy()).getMVDFunctionalitiesManagerAddress()).getFunctionalityData(FUNCTIONALITY_NAME);
     }
@@ -103,6 +113,11 @@ contract DFOBasedFixedInflationExtension is IFixedInflationExtension {
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) private {
         bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
+    }
+
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
     function _call(address location, bytes memory payload) private returns(bytes memory returnData) {

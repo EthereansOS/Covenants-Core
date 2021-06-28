@@ -1,6 +1,6 @@
 var assert = require("assert");
 var utilities = require("../util/utilities");
-var context = require("../util/context.json");
+
 var compile = require("../util/compile");
 var blockchainConnection = require("../util/blockchainConnection");
 var dfoManager = require("../util/dfo");

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.0;
 
 abstract contract ERC1155Receiver {
     bytes4 private constant _INTERFACE_ID_ERC165 = 0x01ffc9a7;

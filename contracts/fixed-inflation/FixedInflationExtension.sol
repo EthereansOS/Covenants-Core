@@ -1,11 +1,12 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.0;
 pragma abicoder v2;
 
 import "./FixedInflationData.sol";
 import "./IFixedInflationExtension.sol";
 import "./util/IERC20.sol";
 import "./util/IERC20Mintable.sol";
+import "./util/IERC20Burnable.sol";
 import "./IFixedInflation.sol";
 
 contract FixedInflationExtension is IFixedInflationExtension {
@@ -29,7 +30,7 @@ contract FixedInflationExtension is IFixedInflationExtension {
     receive() external payable {
     }
 
-    function init(address host) override public {
+    function init(address host) override public virtual {
         require(_host == address(0), "Already init");
         require((_host = host) != address(0), "blank host");
         _fixedInflationContract = msg.sender;
@@ -75,20 +76,29 @@ contract FixedInflationExtension is IFixedInflationExtension {
         active = false;
     }
 
+    function burnToken(address erc20TokenAddress, uint256 value) external override fixedInflationOnly {
+        _safeTransferFrom(erc20TokenAddress, _fixedInflationContract, address(this), value);
+        _burn(erc20TokenAddress, value);
+    }
+
     /** INTERNAL METHODS */
 
     function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual {
         IERC20Mintable(erc20TokenAddress).mint(recipient, value);
     }
 
-    /** @dev function used to safe transfer ERC20 tokens.
-      * @param erc20TokenAddress address of the token to transfer.
-      * @param to receiver of the tokens.
-      * @param value amount of tokens to transfer.
-     */
+    function _burn(address erc20TokenAddress, uint256 value) internal virtual {
+        IERC20Burnable(erc20TokenAddress).burn(value);
+    }
+
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
         bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
+    }
+
+    function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal {
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
     function _call(address location, bytes memory payload) private returns(bytes memory returnData) {

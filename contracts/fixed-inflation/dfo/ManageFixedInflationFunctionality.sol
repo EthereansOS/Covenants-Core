@@ -5,7 +5,7 @@
  * Fixed Inflation Management Functionality
  */
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.0;
 pragma abicoder v2;
 
 contract ProposalCode {

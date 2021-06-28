@@ -13,7 +13,7 @@ var voidBytes32 = "0x00000000000000000000000000000000000000000000000000000000000
 
 global.formatMoneyDecPlaces = 4;
 
-function fromDecimals(n, d, noFormat) {
+function fromDecimalsRaw(n, d, noFormat) {
     n = (n && n.value || n);
     d = (d && d.value || d);
     if (!n || !d) {
@@ -22,7 +22,7 @@ function fromDecimals(n, d, noFormat) {
     var decimals = (typeof d).toLowerCase() === 'string' ? parseInt(d) : d;
     var symbol = toEthereumSymbol(decimals);
     if (symbol) {
-        var result = web3.utils.fromWei((typeof n).toLowerCase() === 'string' ? n : numberToString(n), symbol);
+        var result = web3.utils.fromWei(((typeof n).toLowerCase() === 'string' ? n : numberToString(n)).split('.')[0], symbol);
         return noFormat === true ? result : formatMoney(result);
     }
     var number = (typeof n).toLowerCase() === 'string' ? parseInt(n) : n;
@@ -30,11 +30,11 @@ function fromDecimals(n, d, noFormat) {
         return '0';
     }
     var nts = parseFloat(numberToString((number / (decimals < 2 ? 1 : Math.pow(10, decimals)))));
-    nts = numberToString(Math.round(nts * 100) / 100);
+    nts = numberToString(nts);
     return noFormat === true ? nts : formatMoney(nts);
 }
 
-function toDecimals(n, d) {
+function toDecimalsRaw(n, d) {
     n = (n && n.value || n);
     d = (d && d.value || d);
     if (!n || !d) {
@@ -45,9 +45,9 @@ function toDecimals(n, d) {
     if (symbol) {
         return web3.utils.toWei((typeof n).toLowerCase() === 'string' ? n : numberToString(n), symbol);
     }
-    var number = (typeof n).toLowerCase() === 'string' ? parseInt(n) : n;
+    var number = (typeof n).toLowerCase() === 'string' ? parseFloat(n) : n;
     if (!number || isNaN(number)) {
-        return 0;
+        return "0";
     }
     return numberToString(number * (decimals < 2 ? 1 : Math.pow(10, decimals)));
 }
@@ -132,6 +132,78 @@ function sleep(millis) {
     });
 }
 
+global.op = function op(a, operator, b) {
+    var operations = {
+        '+' : 'add',
+        '-' : 'sub',
+        '*' : 'mul',
+        '/' : 'div'
+    };
+    a = (a.add ? a.toString() : numberToString(a)).split(',').join('').split('.')[0];
+    b = (b.add ? b.toString() : numberToString(b)).split(',').join('').split('.')[0];
+    return web3.utils.toBN(a)[operations[operator] || operator](web3.utils.toBN(b)).toString();
+}
+
+global.add = function add(a, b) {
+    return op(a, '+', b);
+}
+
+global.sub = function sub(a, b) {
+    return op(a, '-', b);
+}
+
+global.mul = function mul(a, b) {
+    return op(a, '*', b);
+}
+
+global.div = function div(a, b) {
+    return op(a, '/', b);
+}
+
+String.prototype.add = String.prototype.add || function add(b) {
+    return op(this, '+', b);
+};
+
+String.prototype.sub = function sub(b) {
+    return op(this, '-', b);
+};
+
+String.prototype.mul = String.prototype.mul || function mul(b) {
+    return op(this, '*', b);
+};
+
+String.prototype.div = String.prototype.div || function div(b) {
+    return op(this, '/', b);
+};
+
+String.prototype.toDecimals = String.prototype.toDecimals || function toDecimals(dec) {
+    return toDecimalsRaw(this, dec);
+};
+
+String.prototype.fromDecimals = String.prototype.fromDecimals || function fromDecimals(dec, noFormat) {
+    return fromDecimalsRaw(this, dec, noFormat);
+};
+
+Number.prototype.add = Number.prototype.add || function add(b) {
+    return op(this, '+', b);
+};
+
+Number.prototype.sub = Number.prototype.sub || function sub(b) {
+    return op(this, '-', b);
+};
+
+Number.prototype.mul = Number.prototype.mul || function mul(b) {
+    return op(this, '*', b);
+};
+
+Number.prototype.div = Number.prototype.div || function div(b) {
+    return op(this, '/', b);
+};
+
+Number.prototype.toDecimals = Number.prototype.toDecimals || function toDecimals(dec) {
+    return toDecimalsRaw(this, dec);
+};
+
 function toEthereumSymbol(decimals) {
     var symbols = {
         "noether": "0",
@@ -175,8 +247,8 @@ function toEthereumSymbol(decimals) {
 module.exports = {
     voidEthereumAddress,
     voidBytes32,
-    fromDecimals,
-    toDecimals,
+    fromDecimals : fromDecimalsRaw,
+    toDecimals : toDecimalsRaw,
     numberToString,
     formatNumber,
     formatMoney,
@@ -185,5 +257,10 @@ module.exports = {
     sleep,
     normalizeValue,
     getRandomArrayIndex,
-    getRandomArrayElement
+    getRandomArrayElement,
+    op,
+    add,
+    sub,
+    mul,
+    div
 }

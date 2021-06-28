@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity >=0.7.0;
 pragma abicoder v2;
 
 import "./FixedInflationData.sol";
@@ -23,4 +23,6 @@ interface IFixedInflationExtension {
     function active() external view returns(bool);
 
     function setActive(bool _active) external;
+
+    function burnToken(address erc20TokenAddress, uint256 value) external;
 }
