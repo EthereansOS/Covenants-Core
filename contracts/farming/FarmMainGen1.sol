@@ -623,6 +623,7 @@ contract FarmMainGen1 is IFarmMainGen1, ERC1155Receiver {
                 _updateFreeSetup(setupIndex, 0, 0, false);
             }
             _rewardReceived[setupIndex] -= amount;
+            _giveBack(amount);
             return;
         }
 

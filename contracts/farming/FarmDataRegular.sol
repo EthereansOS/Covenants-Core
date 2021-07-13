@@ -38,7 +38,7 @@ struct FarmingSetup {
     uint256 startBlock; // farming setup start block.
     uint256 endBlock; // farming setup end block.
     uint256 lastUpdateBlock; // number of the block where an update was triggered.
-    uint256 objectId; // need for gen2. uniswapV3 NFT position Id
+    uint256 deprecatedObjectId; // need for gen2. uniswapV3 NFT position Id
     uint256 rewardPerBlock; // farming setup reward per single block.
     uint128 totalSupply; // Total LP token liquidity of all the positions of this setup
 }
@@ -47,6 +47,6 @@ struct FarmingPosition {
     address uniqueOwner; // address representing the owner of the position.
     uint256 setupIndex; // the setup index related to this position.
     uint256 creationBlock; // block when this position was created.
-    uint128 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
+    uint256 tokenId; // amount of liquidity pool token in the position.
     uint256 reward; // position reward.
 }
