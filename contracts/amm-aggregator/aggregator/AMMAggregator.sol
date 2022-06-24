@@ -6,39 +6,27 @@ import "./IAMMAggregator.sol";
 
 contract AMMAggregator is IAMMAggregator {
 
-    address private _doubleProxy;
+    address public override host;
 
     uint256 private _ammsLength;
     mapping(uint256 => address) private _amms;
 
-    constructor(address dFODoubleProxy, address[] memory ammsToAdd) {
-        _doubleProxy = dFODoubleProxy;
-        for(uint256 i = 0 ; i < ammsToAdd.length; i++) {
+    constructor(address _host, address[] memory ammsToAdd) {
+        host = _host;
+        for(uint256 i = 0; i < ammsToAdd.length; i++) {
             IAMM amm = IAMM(_amms[_ammsLength++] = ammsToAdd[i]);
             (string memory name, uint256 version) = amm.info();
             emit AMM(ammsToAdd[i], name, version);
         }
     }
 
-    modifier byDFO virtual {
-        require(_isFromDFO(msg.sender), "Unauthorized action");
+    modifier authorizedOnly virtual {
+        require(msg.sender == host, "Unauthorized action");
         _;
     }
 
-    function _isFromDFO(address sender) private view returns(bool) {
-        IMVDProxy proxy = IMVDProxy(IDoubleProxy(_doubleProxy).proxy());
-        if(IMVDFunctionalitiesManager(proxy.getMVDFunctionalitiesManagerAddress()).isAuthorizedFunctionality(sender)) {
-            return true;
-        }
-        return proxy.getMVDWalletAddress() == sender;
-    }
-
-    function doubleProxy() public view override returns (address) {
-        return _doubleProxy;
-    }
-
-    function setDoubleProxy(address newDoubleProxy) public override byDFO {
-        _doubleProxy = newDoubleProxy;
+    function setHost(address newHost) public override authorizedOnly {
+        host = newHost;
     }
 
     function amms() public override view returns (address[] memory returnData) {
@@ -48,13 +36,13 @@ contract AMMAggregator is IAMMAggregator {
         }
     }
 
-    function remove(uint256 index) public override byDFO {
+    function remove(uint256 index) public override authorizedOnly {
         require(index < _ammsLength--, "Invalid index");
         _amms[index] = _amms[_ammsLength];
         delete _amms[_ammsLength];
     }
 
-    function add(address[] memory ammsToAdd) public override byDFO {
+    function add(address[] memory ammsToAdd) public override authorizedOnly {
         for(uint256 i = 0 ; i < ammsToAdd.length; i++) {
             IAMM amm = IAMM(_amms[_ammsLength++] = ammsToAdd[i]);
             (string memory name, uint256 version) = amm.info();

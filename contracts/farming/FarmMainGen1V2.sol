@@ -8,8 +8,9 @@ import "./IFarmExtensionGen1.sol";
 import "./util/IERC20.sol";
 import "./util/IEthItemOrchestrator.sol";
 import "./util/INativeV1.sol";
+import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
-contract FarmMainGen1V2 is IFarmMainGen1 {
+contract FarmMainGen1V2 is IFarmMainGen1, BlockRetriever {
 
     // percentage
     uint256 public override constant ONE_HUNDRED = 1e18;
@@ -66,7 +67,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
     /** @dev activeSetupOnly modifier used to check for function calls only if the setup is active. */
     modifier activeSetupOnly(uint256 setupIndex) {
         require(_setups[setupIndex].active, "Setup not active");
-        require(_setups[setupIndex].startBlock <= block.number && _setups[setupIndex].endBlock > block.number, "Invalid setup");
+        require(_setups[setupIndex].startBlock <= _blockNumber() && _setups[setupIndex].endBlock > _blockNumber(), "Invalid setup");
         _;
     }
 
@@ -145,7 +146,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
     }
 
     function toggleSetup(uint256 setupInfoIndex) public {
-        require(_setups[_setupsInfo[setupInfoIndex].lastSetupIndex].active && block.number > _setups[_setupsInfo[setupInfoIndex].lastSetupIndex].endBlock, "Invalid toggle.");
+        require(_setups[_setupsInfo[setupInfoIndex].lastSetupIndex].active && _blockNumber() > _setups[_setupsInfo[setupInfoIndex].lastSetupIndex].endBlock, "Invalid toggle.");
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
@@ -159,7 +160,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
         // create the position id
-        positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : block.number, request.setupIndex)));
+        positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : _blockNumber(), request.setupIndex)));
         require(_positions[positionId].creationBlock == 0, "Invalid open");
         // create the lp data for the amm
         (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
@@ -175,7 +176,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
             mainTokenAmount: mainTokenAmount,
             reward: reward,
             lockedRewardPerBlock: lockedRewardPerBlock,
-            creationBlock: block.number
+            creationBlock: _blockNumber()
         });
         _setupPositionsCount[request.setupIndex] += (1 + (_setupsInfo[chosenSetup.infoIndex].free ? 0 : liquidityPoolData.amount));
         emit Transfer(positionId, address(0), uniqueOwner);
@@ -190,12 +191,12 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
         // create the lp data for the amm
         (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
         // rebalance the reward per token
-        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.number - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((_blockNumber() - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
         farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
         farmingPosition.liquidityPoolTokenAmount += liquidityPoolData.amount;
         // update the last block update variablex
-        chosenSetup.lastUpdateBlock = block.number;
+        chosenSetup.lastUpdateBlock = _blockNumber();
         chosenSetup.totalSupply += liquidityPoolData.amount;
     }
 
@@ -207,19 +208,19 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
         // retrieve farming position
         FarmingPosition storage farmingPosition = _positions[positionId];
         uint256 reward = farmingPosition.reward;
-        uint256 currentBlock = block.number;
+        uint256 currentBlock = _blockNumber();
         if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
             // check if reward is available
             require(farmingPosition.reward > 0, "No reward");
             // check if it's a partial reward or not
-            // if (_setups[farmingPosition.setupIndex].endBlock > block.number) {
+            // if (_setups[farmingPosition.setupIndex].endBlock > _blockNumber()) {
             // calculate the reward from the farming position creation block to the current block multiplied by the reward per block
             (reward,) = calculateLockedFarmingReward(0, 0, true, positionId);
             //}
             require(reward <= farmingPosition.reward, "Reward is bigger than expected");
             // remove the partial reward from the liquidity mining position total reward
             farmingPosition.reward = currentBlock >= _setups[farmingPosition.setupIndex].endBlock ? 0 : farmingPosition.reward - reward;
-            farmingPosition.creationBlock = block.number;
+            farmingPosition.creationBlock = _blockNumber();
         } else {
             // rebalance setup
             currentBlock = currentBlock > _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : currentBlock;
@@ -240,7 +241,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
             }
             _rewardPaid[farmingPosition.setupIndex] += reward;
         }
-        if (_setups[farmingPosition.setupIndex].endBlock <= block.number) {
+        if (_setups[farmingPosition.setupIndex].endBlock <= _blockNumber()) {
             if (_setups[farmingPosition.setupIndex].active) {
                 _toggleSetup(farmingPosition.setupIndex);
             }
@@ -289,13 +290,13 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
             // retrieve the position
             FarmingPosition memory farmingPosition = _positions[positionId];
             // calculate the reward
-            uint256 currentBlock = block.number >= _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : block.number;
+            uint256 currentBlock = _blockNumber() >= _setups[farmingPosition.setupIndex].endBlock ? _setups[farmingPosition.setupIndex].endBlock : _blockNumber();
             reward = ((currentBlock - farmingPosition.creationBlock) * farmingPosition.lockedRewardPerBlock);
         } else {
             FarmingSetup memory setup = _setups[setupIndex];
             // check if main token amount is less than the stakeable liquidity
             require(mainTokenAmount <= _setupsInfo[_setups[setupIndex].infoIndex].maxStakeable - setup.totalSupply, "Invalid liquidity");
-            uint256 remainingBlocks = block.number >= setup.endBlock ? 0 : setup.endBlock - block.number;
+            uint256 remainingBlocks = _blockNumber() >= setup.endBlock ? 0 : setup.endBlock - _blockNumber();
             // get amount of remaining blocks
             require(remainingBlocks > 0, "FarmingSetup ended");
             // get total reward still available (= 0 if rewardPerBlock = 0)
@@ -313,7 +314,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
         FarmingPosition memory farmingPosition = _positions[positionId];
         reward = ((_rewardPerTokenPerSetup[farmingPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * farmingPosition.liquidityPoolTokenAmount) / 1e18;
         if (isExt) {
-            uint256 currentBlock = block.number < _setups[farmingPosition.setupIndex].endBlock ? block.number : _setups[farmingPosition.setupIndex].endBlock;
+            uint256 currentBlock = _blockNumber() < _setups[farmingPosition.setupIndex].endBlock ? _blockNumber() : _setups[farmingPosition.setupIndex].endBlock;
             uint256 lastUpdateBlock = _setups[farmingPosition.setupIndex].lastUpdateBlock < _setups[farmingPosition.setupIndex].startBlock ? _setups[farmingPosition.setupIndex].startBlock : _setups[farmingPosition.setupIndex].lastUpdateBlock;
             uint256 rpt = (((currentBlock - lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
             reward += (rpt * farmingPosition.liquidityPoolTokenAmount) / 1e18;
@@ -387,9 +388,9 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
 
         if (setup.active && _setupsInfo[_setups[setupIndex].infoIndex].free) {
             setup = _setups[setupIndex];
-            if(block.number < setup.endBlock) {
+            if(_blockNumber() < setup.endBlock) {
                 uint256 difference = info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock ? farmingSetupInfo.originalRewardPerBlock - info.originalRewardPerBlock : info.originalRewardPerBlock - farmingSetupInfo.originalRewardPerBlock;
-                uint256 duration = setup.endBlock - block.number;
+                uint256 duration = setup.endBlock - _blockNumber();
                 uint256 amount = difference * duration;
                 if (amount > 0) {
                     if (info.originalRewardPerBlock > farmingSetupInfo.originalRewardPerBlock) {
@@ -495,7 +496,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
         if (!setupInfo.free && _setups[setupIndex].active && !isUnlock) {
             _toggleSetup(setupIndex);
         } else if (setupInfo.free && positionId != 0) {
-            if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endBlock <= block.number) {
+            if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endBlock <= _blockNumber()) {
                 _toggleSetup(farmingPosition.setupIndex);
             }
             // delete the farming position after the withdraw
@@ -559,7 +560,7 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
       * @param fromExit if it's from an exit or not.
      */
     function _updateFreeSetup(uint256 setupIndex, uint256 amount, uint256 positionId, bool fromExit) private {
-        uint256 currentBlock = block.number < _setups[setupIndex].endBlock ? block.number : _setups[setupIndex].endBlock;
+        uint256 currentBlock = _blockNumber() < _setups[setupIndex].endBlock ? _blockNumber() : _setups[setupIndex].endBlock;
         if (_setups[setupIndex].totalSupply != 0) {
             uint256 lastUpdateBlock = _setups[setupIndex].lastUpdateBlock < _setups[setupIndex].startBlock ? _setups[setupIndex].startBlock : _setups[setupIndex].lastUpdateBlock;
             _rewardPerTokenPerSetup[setupIndex] += (((currentBlock - lastUpdateBlock) * _setups[setupIndex].rewardPerBlock) * 1e18) / _setups[setupIndex].totalSupply;
@@ -576,18 +577,18 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
 
     function _toggleSetup(uint256 setupIndex) private {
         FarmingSetup storage setup = _setups[setupIndex];
-        // require(!setup.active || block.number >= setup.endBlock, "Not valid activation");
+        // require(!setup.active || _blockNumber() >= setup.endBlock, "Not valid activation");
 
-        require(block.number > _setupsInfo[setup.infoIndex].startBlock, "Too early for this setup");
+        require(_blockNumber() > _setupsInfo[setup.infoIndex].startBlock, "Too early for this setup");
 
-        if (setup.active && block.number >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
+        if (setup.active && _blockNumber() >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
             setup.active = false;
             return;
-        } else if (block.number >= setup.startBlock && block.number < setup.endBlock && setup.active) {
+        } else if (_blockNumber() >= setup.startBlock && _blockNumber() < setup.endBlock && setup.active) {
             setup.active = false;
             _setupsInfo[setup.infoIndex].renewTimes = 0;
-            uint256 amount = (setup.endBlock - block.number) * setup.rewardPerBlock;
-            setup.endBlock = block.number;
+            uint256 amount = (setup.endBlock - _blockNumber()) * setup.rewardPerBlock;
+            setup.endBlock = _blockNumber();
             if (_setupsInfo[setup.infoIndex].free) {
                 _updateFreeSetup(setupIndex, 0, 0, false);
             }
@@ -609,16 +610,16 @@ contract FarmMainGen1V2 is IFarmMainGen1 {
             _setupsInfo[setup.infoIndex].renewTimes -= 1;
             _setupsInfo[setup.infoIndex].setupsCount += 1;
             _setupsInfo[setup.infoIndex].lastSetupIndex = _farmingSetupsCount;
-            _setups[_farmingSetupsCount].startBlock = block.number;
-            _setups[_farmingSetupsCount].endBlock = block.number + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].blockDuration;
+            _setups[_farmingSetupsCount].startBlock = _blockNumber();
+            _setups[_farmingSetupsCount].endBlock = _blockNumber() + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].blockDuration;
             _setups[_farmingSetupsCount].objectId = 0;
             _setups[_farmingSetupsCount].totalSupply = 0;
             _farmingSetupsCount += 1;
         } else if (setup.active && !wasActive) {
             _rewardReceived[setupIndex] = setup.rewardPerBlock * _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
             // update new setup
-            _setups[setupIndex].startBlock = block.number;
-            _setups[setupIndex].endBlock = block.number + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
+            _setups[setupIndex].startBlock = _blockNumber();
+            _setups[setupIndex].endBlock = _blockNumber() + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
             _setups[setupIndex].totalSupply = 0;
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes -= 1;
         } else {

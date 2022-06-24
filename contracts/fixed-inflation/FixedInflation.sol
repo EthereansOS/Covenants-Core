@@ -8,8 +8,9 @@ import "./util/IERC20.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "./IFixedInflationFactory.sol";
 import "./IFixedInflation.sol";
+import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
-contract FixedInflation is IFixedInflation {
+contract FixedInflation is IFixedInflation, BlockRetriever {
 
     event Executed(bool);
 
@@ -65,7 +66,7 @@ contract FixedInflation is IFixedInflation {
     }
 
     function nextBlock() public view returns(uint256) {
-        return _entry.lastBlock == 0 ? block.number : (_entry.lastBlock + _entry.blockInterval);
+        return _entry.lastBlock == 0 ? _blockNumber() : (_entry.lastBlock + _entry.blockInterval);
     }
 
     function flushBack(address[] memory tokenAddresses) public override extensionOnly {
@@ -75,11 +76,11 @@ contract FixedInflation is IFixedInflation {
     }
 
     function execute(bool earnByAmounts) public activeExtensionOnly returns(bool executed) {
-        require(block.number >= nextBlock(), "Too early to execute");
+        require(_blockNumber() >= nextBlock(), "Too early to execute");
         require(_operations.length > 0, "No operations");
         emit Executed(executed = _ensureExecute());
         if(executed) {
-            _entry.lastBlock = block.number;
+            _entry.lastBlock = _blockNumber();
             _execute(earnByAmounts, msg.sender);
         } else {
             try IFixedInflationExtension(extension).deactivationByFailure() {

@@ -6,9 +6,9 @@ import "../common/IAMM.sol";
 
 interface IAMMAggregator is IAMM {
 
-    function doubleProxy() external view returns (address);
+    function host() external view returns (address);
 
-    function setDoubleProxy(address newDoubleProxy) external;
+    function setHost(address newHost) external;
 
     function amms() external view returns (address[] memory);
 

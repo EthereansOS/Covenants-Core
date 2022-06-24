@@ -12,8 +12,9 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
+import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
-contract FixedInflationUniV3 is IFixedInflation {
+contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
 
     event Executed(bool);
 
@@ -76,7 +77,7 @@ contract FixedInflationUniV3 is IFixedInflation {
     }
 
     function nextBlock() public view returns(uint256) {
-        return _entry.lastBlock == 0 ? block.number : (_entry.lastBlock + _entry.blockInterval);
+        return _entry.lastBlock == 0 ? _blockNumber() : (_entry.lastBlock + _entry.blockInterval);
     }
 
     function flushBack(address[] memory tokenAddresses) public override extensionOnly {
@@ -90,11 +91,11 @@ contract FixedInflationUniV3 is IFixedInflation {
     }
 
     function executeWithMinAmounts(bool earnByAmounts, uint256[] memory minAmounts) public activeExtensionOnly returns(bool executed, uint256[] memory outputAmounts) {
-        require(block.number >= nextBlock(), "Too early to execute");
+        require(_blockNumber() >= nextBlock(), "Too early to execute");
         require(_operations.length > 0, "No operations");
         emit Executed(executed = _ensureExecute());
         if(executed) {
-            _entry.lastBlock = block.number;
+            _entry.lastBlock = _blockNumber();
             outputAmounts = _execute(earnByAmounts, msg.sender, minAmounts);
         } else {
             try IFixedInflationExtension(host).deactivationByFailure() {

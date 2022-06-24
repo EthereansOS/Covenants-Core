@@ -195,6 +195,8 @@ contract PrestoUniV3 is IPrestoUniV3 {
 
         outputAmount = operation.ammPlugin == UNISWAP_V3_SWAP_ROUTER_ADDRESS ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swapLiquidity{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
 
+        require(outputAmount >= minAmount, "slippage");
+
         _transferTo(operation.exitInETH ? address(0) : outputToken, outputAmount, operation.receivers, operation.receiversPercentages);
     }
 
