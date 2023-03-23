@@ -3,8 +3,8 @@ pragma solidity >=0.7.0;
 
 struct FixedInflationEntry {
     string name;
-    uint256 blockInterval;
-    uint256 lastBlock;
+    uint256 eventInterval;
+    uint256 lastEvent;
     uint256 callerRewardPercentage;
 }
 

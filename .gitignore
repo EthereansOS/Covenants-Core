@@ -12,3 +12,4 @@
 /**/*.env
 /**/tmp
 truffle-config.js
+.todo
