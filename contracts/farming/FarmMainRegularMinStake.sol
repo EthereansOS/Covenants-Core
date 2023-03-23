@@ -9,9 +9,8 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
-import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
-contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
+contract FarmMainRegularMinStake is IFarmMainRegular {
 
     // percentage
     uint256 public override constant ONE_HUNDRED = 1e18;
@@ -39,7 +38,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
     uint256 public _farmingSetupsCount;
     // mapping containing all the positions
     mapping(uint256 => FarmingPosition) private _positions;
-    // mapping containing the reward per token per setup per block
+    // mapping containing the reward per token per setup per event
     mapping(uint256 => uint256) private _rewardPerTokenPerSetup;
     // mapping containing the reward per token paid per position
     mapping(uint256 => uint256) private _rewardPerTokenPaid;
@@ -50,6 +49,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
     mapping(uint256 => uint256) public _rewardPaid;
 
     address private _WETH;
+    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
 
     /** Modifiers. */
 
@@ -61,14 +61,14 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
 
     /** @dev byPositionOwner modifier used to check for unauthorized accesses. */
     modifier byPositionOwner(uint256 positionId) {
-        require(_positions[positionId].uniqueOwner == msg.sender && _positions[positionId].creationBlock != 0, "Not owned");
+        require(_positions[positionId].uniqueOwner == msg.sender && _positions[positionId].creationEvent != 0, "Not owned");
         _;
     }
 
     /** @dev activeSetupOnly modifier used to check for function calls only if the setup is active. */
     modifier activeSetupOnly(uint256 setupIndex) {
         require(_setups[setupIndex].active, "Setup not active");
-        require(_setups[setupIndex].startBlock <= _blockNumber() && _setups[setupIndex].endBlock > _blockNumber(), "Invalid setup");
+        require(_setups[setupIndex].startEvent <= block.timestamp && _setups[setupIndex].endEvent > block.timestamp, "Invalid setup");
         _;
     }
 
@@ -159,7 +159,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
 
     function toggleSetup(uint256 setupInfoIndex) public {
         uint256 setupIndex = _setupsInfo[setupInfoIndex].lastSetupIndex;
-        require(_setups[setupIndex].active && _blockNumber() > _setups[setupIndex].endBlock, "Invalid toggle.");
+        require(_setups[setupIndex].active && block.timestamp > _setups[setupIndex].endEvent, "Invalid toggle.");
         _toggleSetup(setupIndex);
         _tryClearSetup(setupIndex);
     }
@@ -169,12 +169,12 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
             activateSetup(_setups[request.setupIndex].infoIndex);
         }
         require(_setups[request.setupIndex].active, "Setup not active");
-        require(_setups[request.setupIndex].startBlock <= _blockNumber() && _setups[request.setupIndex].endBlock > _blockNumber(), "Invalid setup");
+        require(_setups[request.setupIndex].startEvent <= block.timestamp && _setups[request.setupIndex].endEvent > block.timestamp, "Invalid setup");
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
         // create the position id
         positionId = uint256(keccak256(abi.encode(uniqueOwner, request.setupIndex)));
-        require(_positions[positionId].creationBlock == 0, "Invalid open");
+        require(_positions[positionId].creationEvent == 0, "Invalid open");
         (uint256 tokenId, uint128 liquidityAmount) = _addLiquidity(request.setupIndex, request, 0);
         _updateFreeSetup(request.setupIndex, liquidityAmount, positionId, false);
         _positions[positionId] = FarmingPosition({
@@ -182,7 +182,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
             setupIndex : request.setupIndex,
             tokenId: tokenId,
             reward: 0,
-            creationBlock: _blockNumber()
+            creationEvent: block.timestamp
         });
         _setupPositionsCount[request.setupIndex] += 1;
         emit Transfer(positionId, address(0), uniqueOwner);
@@ -193,12 +193,12 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         FarmingPosition storage farmingPosition = _positions[positionId];
         FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
         // rebalance the reward per token
-        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((_blockNumber() - chosenSetup.lastUpdateBlock) * chosenSetup.rewardPerBlock) * 1e18) / chosenSetup.totalSupply;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.timestamp - chosenSetup.lastUpdateEvent) * chosenSetup.rewardPerEvent) * 1e18) / chosenSetup.totalSupply;
         farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
         (, uint128 liquidityAmount) = _addLiquidity(farmingPosition.setupIndex, request, farmingPosition.tokenId);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
         // update the last block update variablex
-        chosenSetup.lastUpdateBlock = _blockNumber();
+        chosenSetup.lastUpdateEvent = block.timestamp;
         chosenSetup.totalSupply += liquidityAmount;
     }
 
@@ -219,21 +219,21 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         FarmingPosition storage farmingPosition = _positions[positionId];
         FarmingSetup storage farmingSetup = _setups[farmingPosition.setupIndex];
         uint256 reward = farmingPosition.reward;
-        uint256 currentBlock = _blockNumber();
+        uint256 currentEvent = block.timestamp;
         // rebalance setup
-        currentBlock = currentBlock > farmingSetup.endBlock ? farmingSetup.endBlock : currentBlock;
-        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentBlock - farmingSetup.lastUpdateBlock) * farmingSetup.rewardPerBlock) * 1e18) / farmingSetup.totalSupply;
+        currentEvent = currentEvent > farmingSetup.endEvent ? farmingSetup.endEvent : currentEvent;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentEvent - farmingSetup.lastUpdateEvent) * farmingSetup.rewardPerEvent) * 1e18) / farmingSetup.totalSupply;
         reward = calculateFreeFarmingReward(positionId, false);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
         farmingPosition.reward = 0;
-        // update the last block update variable
-        farmingSetup.lastUpdateBlock = currentBlock;
+        // update the last event update variable
+        farmingSetup.lastUpdateEvent = currentEvent;
         _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward);
 
         _retrieveGen2LiquidityAndFees(positionId, farmingPosition.tokenId, farmingPosition.uniqueOwner, liquidityToRemove, amount0Min, amount1Min, burnData);
 
         _rewardPaid[farmingPosition.setupIndex] += reward;
-        if (farmingSetup.endBlock <= _blockNumber() && farmingSetup.active) {
+        if (farmingSetup.endEvent <= block.timestamp && farmingSetup.active) {
             _toggleSetup(farmingPosition.setupIndex);
         }
     }
@@ -252,7 +252,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         uint128 liquidityPoolTokenAmount = _getLiquidityPoolTokenAmount(farmingPosition.tokenId);
         // current owned liquidity
         require(
-            farmingPosition.creationBlock != 0 &&
+            farmingPosition.creationEvent != 0 &&
             removedLiquidity <= liquidityPoolTokenAmount &&
             farmingPosition.uniqueOwner == msg.sender,
             "Invalid withdraw"
@@ -288,9 +288,9 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         uint128 liquidityPoolTokenAmount = _getLiquidityPoolTokenAmount(farmingPosition.tokenId);
         reward = ((_rewardPerTokenPerSetup[farmingPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * liquidityPoolTokenAmount) / 1e18;
         if (isExt) {
-            uint256 currentBlock = _blockNumber() < _setups[farmingPosition.setupIndex].endBlock ? _blockNumber() : _setups[farmingPosition.setupIndex].endBlock;
-            uint256 lastUpdateBlock = _setups[farmingPosition.setupIndex].lastUpdateBlock < _setups[farmingPosition.setupIndex].startBlock ? _setups[farmingPosition.setupIndex].startBlock : _setups[farmingPosition.setupIndex].lastUpdateBlock;
-            uint256 rpt = (((currentBlock - lastUpdateBlock) * _setups[farmingPosition.setupIndex].rewardPerBlock) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
+            uint256 currentEvent = block.timestamp < _setups[farmingPosition.setupIndex].endEvent ? block.timestamp : _setups[farmingPosition.setupIndex].endEvent;
+            uint256 lastUpdateEvent = _setups[farmingPosition.setupIndex].lastUpdateEvent < _setups[farmingPosition.setupIndex].startEvent ? _setups[farmingPosition.setupIndex].startEvent : _setups[farmingPosition.setupIndex].lastUpdateEvent;
+            uint256 rpt = (((currentEvent - lastUpdateEvent) * _setups[farmingPosition.setupIndex].rewardPerEvent) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
             reward += (rpt * liquidityPoolTokenAmount) / 1e18;
         }
         reward += farmingPosition.reward;
@@ -304,6 +304,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
 
     function _setOrAddFarmingSetupInfo(FarmingSetupInfo memory info, bool add, bool disable, uint256 setupIndex) private {
         FarmingSetupInfo memory farmingSetupInfo = info;
+        farmingSetupInfo.eventDuration = farmingSetupInfo.eventDuration / TIME_SLOTS_IN_SECONDS;
 
         if(add || !disable) {
             farmingSetupInfo.renewTimes = farmingSetupInfo.renewTimes + 1;
@@ -315,7 +316,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         if (add) {
             require(
                 farmingSetupInfo.liquidityPoolTokenAddress != address(0) &&
-                farmingSetupInfo.originalRewardPerBlock > 0,
+                farmingSetupInfo.originalRewardPerEvent > 0,
                 "Invalid setup configuration"
             );
             _checkTicks(farmingSetupInfo.tickLower, farmingSetupInfo.tickUpper);
@@ -338,7 +339,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
             require(!farmingSetupInfo.involvingETH || ethTokenFound, "No ETH token");
             farmingSetupInfo.setupsCount = 0;
             _setupsInfo[_farmingSetupsInfoCount] = farmingSetupInfo;
-            _setups[_farmingSetupsCount] = FarmingSetup(_farmingSetupsInfoCount, false, 0, 0, 0, 0, farmingSetupInfo.originalRewardPerBlock, 0);
+            _setups[_farmingSetupsCount] = FarmingSetup(_farmingSetupsInfoCount, false, 0, 0, 0, 0, farmingSetupInfo.originalRewardPerEvent, 0);
             _setupsInfo[_farmingSetupsInfoCount].lastSetupIndex = _farmingSetupsCount;
             _farmingSetupsInfoCount += 1;
             _farmingSetupsCount += 1;
@@ -358,20 +359,20 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
 
         if (setup.active) {
             setup = _setups[setupIndex];
-            if(_blockNumber() < setup.endBlock) {
-                uint256 difference = info.originalRewardPerBlock < farmingSetupInfo.originalRewardPerBlock ? farmingSetupInfo.originalRewardPerBlock - info.originalRewardPerBlock : info.originalRewardPerBlock - farmingSetupInfo.originalRewardPerBlock;
-                uint256 duration = setup.endBlock - _blockNumber();
+            if(block.timestamp < setup.endEvent) {
+                uint256 difference = info.originalRewardPerEvent < farmingSetupInfo.originalRewardPerEvent ? farmingSetupInfo.originalRewardPerEvent - info.originalRewardPerEvent : info.originalRewardPerEvent - farmingSetupInfo.originalRewardPerEvent;
+                uint256 duration = setup.endEvent - block.timestamp;
                 uint256 amount = difference * duration;
                 if (amount > 0) {
-                    if (info.originalRewardPerBlock > farmingSetupInfo.originalRewardPerBlock) {
+                    if (info.originalRewardPerEvent > farmingSetupInfo.originalRewardPerEvent) {
                         require(_ensureTransfer(amount), "Insufficient reward in extension.");
                         _rewardReceived[setupIndex] += amount;
                     }
                     _updateFreeSetup(setupIndex, 0, 0, false);
-                    setup.rewardPerBlock = info.originalRewardPerBlock;
+                    setup.rewardPerEvent = info.originalRewardPerEvent;
                 }
             }
-            _setupsInfo[_setups[setupIndex].infoIndex].originalRewardPerBlock = info.originalRewardPerBlock;
+            _setupsInfo[_setups[setupIndex].infoIndex].originalRewardPerEvent = info.originalRewardPerEvent;
         }
         if(_setupsInfo[_setups[setupIndex].infoIndex].renewTimes > 0) {
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes = info.renewTimes;
@@ -460,13 +461,13 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
       * @param fromExit if it's from an exit or not.
      */
     function _updateFreeSetup(uint256 setupIndex, uint128 amount, uint256 positionId, bool fromExit) private {
-        uint256 currentBlock = _blockNumber() < _setups[setupIndex].endBlock ? _blockNumber() : _setups[setupIndex].endBlock;
+        uint256 currentEvent = block.timestamp < _setups[setupIndex].endEvent ? block.timestamp : _setups[setupIndex].endEvent;
         if (_setups[setupIndex].totalSupply != 0) {
-            uint256 lastUpdateBlock = _setups[setupIndex].lastUpdateBlock < _setups[setupIndex].startBlock ? _setups[setupIndex].startBlock : _setups[setupIndex].lastUpdateBlock;
-            _rewardPerTokenPerSetup[setupIndex] += (((currentBlock - lastUpdateBlock) * _setups[setupIndex].rewardPerBlock) * 1e18) / _setups[setupIndex].totalSupply;
+            uint256 lastUpdateEvent = _setups[setupIndex].lastUpdateEvent < _setups[setupIndex].startEvent ? _setups[setupIndex].startEvent : _setups[setupIndex].lastUpdateEvent;
+            _rewardPerTokenPerSetup[setupIndex] += (((currentEvent - lastUpdateEvent) * _setups[setupIndex].rewardPerEvent) * 1e18) / _setups[setupIndex].totalSupply;
         }
-        // update the last block update variable
-        _setups[setupIndex].lastUpdateBlock = currentBlock;
+        // update the last event update variable
+        _setups[setupIndex].lastUpdateEvent = currentEvent;
         if (positionId != 0) {
             _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[setupIndex];
         }
@@ -477,18 +478,18 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
 
     function _toggleSetup(uint256 setupIndex) private {
         FarmingSetup storage setup = _setups[setupIndex];
-        // require(!setup.active || _blockNumber() >= setup.endBlock, "Not valid activation");
+        // require(!setup.active || block.timestamp >= setup.endEvent, "Not valid activation");
 
-        require(_blockNumber() > _setupsInfo[setup.infoIndex].startBlock, "Too early for this setup");
+        require(block.timestamp > _setupsInfo[setup.infoIndex].startEvent, "Too early for this setup");
 
-        if (setup.active && _blockNumber() >= setup.endBlock && _setupsInfo[setup.infoIndex].renewTimes == 0) {
+        if (setup.active && block.timestamp >= setup.endEvent && _setupsInfo[setup.infoIndex].renewTimes == 0) {
             setup.active = false;
             return;
-        } else if (_blockNumber() >= setup.startBlock && _blockNumber() < setup.endBlock && setup.active) {
+        } else if (block.timestamp >= setup.startEvent && block.timestamp < setup.endEvent && setup.active) {
             setup.active = false;
             _setupsInfo[setup.infoIndex].renewTimes = 0;
-            uint256 amount = (setup.endBlock - _blockNumber()) * setup.rewardPerBlock;
-            setup.endBlock = _blockNumber();
+            uint256 amount = (setup.endEvent - block.timestamp) * setup.rewardPerEvent;
+            setup.endEvent = block.timestamp;
             _updateFreeSetup(setupIndex, 0, 0, false);
             _rewardReceived[setupIndex] -= amount;
             _giveBack(amount);
@@ -496,10 +497,11 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         }
 
         bool wasActive = setup.active;
-        setup.active = _ensureTransfer(setup.rewardPerBlock * _setupsInfo[setup.infoIndex].blockDuration);
+        uint256 eventDurationInSeconds = _setupsInfo[setup.infoIndex].eventDuration * TIME_SLOTS_IN_SECONDS;
+        setup.active = _ensureTransfer(setup.rewardPerEvent * eventDurationInSeconds);
 
         if (setup.active && wasActive) {
-            _rewardReceived[_farmingSetupsCount] = setup.rewardPerBlock * _setupsInfo[setup.infoIndex].blockDuration;
+            _rewardReceived[_farmingSetupsCount] = setup.rewardPerEvent * eventDurationInSeconds;
             // set new setup
             _setups[_farmingSetupsCount] = abi.decode(abi.encode(setup), (FarmingSetup));
             // update old setup
@@ -508,16 +510,16 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
             _setupsInfo[setup.infoIndex].renewTimes -= 1;
             _setupsInfo[setup.infoIndex].setupsCount += 1;
             _setupsInfo[setup.infoIndex].lastSetupIndex = _farmingSetupsCount;
-            _setups[_farmingSetupsCount].startBlock = _blockNumber();
-            _setups[_farmingSetupsCount].endBlock = _blockNumber() + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].blockDuration;
+            _setups[_farmingSetupsCount].startEvent = block.timestamp;
+            _setups[_farmingSetupsCount].endEvent = block.timestamp + eventDurationInSeconds;
             _setups[_farmingSetupsCount].deprecatedObjectId = 0;
             _setups[_farmingSetupsCount].totalSupply = 0;
             _farmingSetupsCount += 1;
         } else if (setup.active && !wasActive) {
-            _rewardReceived[setupIndex] = setup.rewardPerBlock * _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
+            _rewardReceived[setupIndex] = setup.rewardPerEvent * eventDurationInSeconds;
             // update new setup
-            _setups[setupIndex].startBlock = _blockNumber();
-            _setups[setupIndex].endBlock = _blockNumber() + _setupsInfo[_setups[setupIndex].infoIndex].blockDuration;
+            _setups[setupIndex].startEvent = block.timestamp;
+            _setups[setupIndex].endEvent = block.timestamp + eventDurationInSeconds;
             _setups[setupIndex].totalSupply = 0;
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes -= 1;
         } else {

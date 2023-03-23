@@ -1,22 +1,26 @@
 {
-  "name": "@ethereansos/covenants",
-  "version": "1.0.0",
-  "description": "ETH Affairs",
-  "main": "util/build-contracts.js",
-  "scripts": {
-    "test": "mocha"
-  },
-  "config": {
-    "solidityVersion": "0.7.6"
-  },
-  "mocha": {
-    "timeout": false,
-    "require": "util/mocha"
-  },
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@ethereansos/swissknife": "git+https://github.com/EthereansOS/ethereansos-swissknife.git#os_up_4",
-    "@uniswap/v3-periphery": "^1.1.0"
-  }
+    "name": "@ethereansos/covenants-core",
+    "version": "1.0.0",
+    "description": "Covenants",
+    "scripts": {
+        "compile": "multiverse compile",
+        "flat": "multiverse flat",
+        "start": "multiverse",
+        "test": "mocha"
+    },
+    "multiverse": {
+        "knowledgeBase": "resources/knowledgeBase",
+        "solidityVersion": "0.7.6"
+    },
+    "mocha": {
+        "timeout": false,
+        "require": "@ethereansos/multiverse"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git",
+        "@ethereansos/swissknife": "git+https://github.com/EthereansOS/ethereansos-swissknife.git#os_up_4",
+        "@uniswap/v3-periphery": "^1.1.0"
+    }
 }

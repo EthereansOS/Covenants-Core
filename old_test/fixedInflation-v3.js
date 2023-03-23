@@ -3,6 +3,7 @@ var path = require('path');
 var fs = require('fs');
 
 var buildOSStuff = require('../resources/OS/buildOsStuff');
+require("../util/mocha");
 
 var ethItemOrchestrator;
 var uniswapV2Factory;

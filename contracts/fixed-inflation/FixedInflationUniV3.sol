@@ -12,9 +12,8 @@ import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
-import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
-contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
+contract FixedInflationUniV3 is IFixedInflation {
 
     event Executed(bool);
 
@@ -36,6 +35,8 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
 
     address private UNISWAP_V3_SWAP_ROUTER_ADDRESS;
     address private ETHEREUM_ADDRESS;
+
+    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
 
     function lazyInit(bytes memory lazyInitData) public returns(bytes memory extensionInitResult) {
 
@@ -78,8 +79,8 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
         _set(newEntry, newOperations);
     }
 
-    function nextBlock() public view returns(uint256) {
-        return _entry.lastBlock == 0 ? _blockNumber() : (_entry.lastBlock + _entry.blockInterval);
+    function nextEvent() public view returns(uint256) {
+        return _entry.lastEvent == 0 ? block.timestamp : (_entry.lastEvent + _entry.eventInterval * TIME_SLOTS_IN_SECONDS);
     }
 
     function flushBack(address[] memory tokenAddresses) public override extensionOnly {
@@ -93,11 +94,11 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
     }
 
     function executeWithMinAmounts(bool earnByAmounts, uint256[] memory minAmounts) public activeExtensionOnly returns(bool executed, uint256[] memory outputAmounts) {
-        require(_blockNumber() >= nextBlock(), "Too early to execute");
+        require(block.timestamp >= nextEvent(), "Too early to execute");
         require(_operations.length > 0, "No operations");
         emit Executed(executed = _ensureExecute());
         if(executed) {
-            _entry.lastBlock = _blockNumber();
+            _entry.lastEvent = block.timestamp;
             outputAmounts = _execute(earnByAmounts, msg.sender, minAmounts);
         } else {
             try IFixedInflationExtension(host).deactivationByFailure() {
@@ -306,7 +307,8 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
 
     function _set(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations) private {
         require(keccak256(bytes(fixedInflationEntry.name)) != keccak256(""), "Name");
-        require(fixedInflationEntry.blockInterval > 0, "Interval");
+        fixedInflationEntry.eventInterval = fixedInflationEntry.eventInterval / TIME_SLOTS_IN_SECONDS;
+        require(fixedInflationEntry.eventInterval > 0, "Interval");
         require(fixedInflationEntry.callerRewardPercentage < ONE_HUNDRED, "Percentage");
         _entry = fixedInflationEntry;
         _setOperations(operations);

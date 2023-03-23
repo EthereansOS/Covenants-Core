@@ -1,0 +1,1 @@
+describe("Multiverse", () => it("Procedures", require("@ethereansos/multiverse/environments/runner")));

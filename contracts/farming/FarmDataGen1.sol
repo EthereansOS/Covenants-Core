@@ -19,9 +19,9 @@ struct FarmingSetupConfiguration {
 
 struct FarmingSetupInfo {
     bool free; // if the setup is a free farming setup or a locked one.
-    uint256 blockDuration; // duration of setup
-    uint256 startBlock; // optional start block used for the delayed activation of the first setup
-    uint256 originalRewardPerBlock;
+    uint256 eventDuration; // duration of setup
+    uint256 startEvent; // optional start event used for the delayed activation of the first setup
+    uint256 originalRewardPerEvent;
     uint256 minStakeable; // minimum amount of staking tokens.
     uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
     uint256 renewTimes; // if the setup is renewable or if it's one time.
@@ -38,20 +38,20 @@ struct FarmingSetupInfo {
 struct FarmingSetup {
     uint256 infoIndex; // setup info
     bool active; // if the setup is active or not.
-    uint256 startBlock; // farming setup start block.
-    uint256 endBlock; // farming setup end block.
-    uint256 lastUpdateBlock; // number of the block where an update was triggered.
+    uint256 startEvent; // farming setup start event.
+    uint256 endEvent; // farming setup end event.
+    uint256 lastUpdateEvent; // number of the event where an update was triggered.
     uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
-    uint256 rewardPerBlock; // farming setup reward per single block.
+    uint256 rewardPerEvent; // farming setup reward per single event.
     uint256 totalSupply; // If free it's the LP amount, if locked is currentlyStaked.
 }
 
 struct FarmingPosition {
     address uniqueOwner; // address representing the owner of the position.
     uint256 setupIndex; // the setup index related to this position.
-    uint256 creationBlock; // block when this position was created.
+    uint256 creationEvent; // event when this position was created.
     uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
     uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).
     uint256 reward; // position reward (used only if free is false).
-    uint256 lockedRewardPerBlock; // position locked reward per block (used only if free is false).
+    uint256 lockedRewardPerEvent; // position locked reward per event (used only if free is false).
 }

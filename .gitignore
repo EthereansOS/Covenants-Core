@@ -11,4 +11,8 @@
 /**/.env
 /**/*.env
 /**/tmp
+/**/dump
+/**/data
 truffle-config.js
+.todo
+yarn-error.log

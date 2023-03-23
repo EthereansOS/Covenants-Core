@@ -2,9 +2,9 @@
 pragma solidity >=0.7.0;
 pragma abicoder v2;
 
-import "../../contracts/fixed-inflation/FixedInflationExtension.sol";
+import "../../contracts/routines/impl/RoutinesExtension.sol";
 
-contract OSFixedInflationExtension is FixedInflationExtension {
+contract OSRoutinesExtension is RoutinesExtension {
 
     address public osMinterAddress;
 

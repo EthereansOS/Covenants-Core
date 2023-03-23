@@ -2,9 +2,9 @@
 pragma solidity >=0.7.0;
 pragma abicoder v2;
 
-import "../../contracts/farming/FarmExtension.sol";
+import "../../contracts/farming/impl/FarmingGen1Extension.sol";
 
-contract OSFarmExtension is FarmExtension {
+contract OSFarmingExtension is FarmingGen1Extension {
 
     address public osMinterAddress;
 

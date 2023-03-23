@@ -1,0 +1,282 @@
+{
+    "delegationFactoryUri": "REAL_URI_HERE",
+    "subDAOFactoryUri": "REAL_URI_HERE",
+    "dfoFactoryUri": "REAL_URI_HERE",
+    "ourDFOUri": "ipfs://ipfs/QmcoCXWR49UiQNBiwodjSHv3RTLsmard3rwYCexeB4Mt3j",
+    "ourSubDAOUri": "ipfs://ipfs/QmcoCXWR49UiQNBiwodjSHv3RTLsmard3rwYCexeB4Mt3j",
+    "fixedInflationFactoryUri": "REAL_URI_HERE",
+    "farmingFactoryUri": "REAL_URI_HERE",
+    "proposalsFactoryUri": "REAL_URI_HERE",
+    "fixedInflationStartBlock": "",
+    "treasurySplitterStartBlock": "",
+    "OSFarmingStartBlock": "",
+    "swapToETHStartBlock": "",
+    "executorRewardPercentage": "50000000000000000",
+    "DAYS_IN_YEAR": "365",
+    "ONE_YEAR_IN_BLOCKS": "2336000",
+    "WEEK_IN_BLOCKS": "44800",
+    "MONTH_IN_BLOCKS": "192000",
+    "DAY_IN_BLOCKS": "6400",
+    "ONE_HUNDRED": "1000000000000000000",
+    "OS_ADDRESS": "0x6100dd79fCAA88420750DceE3F735d168aBcB771",
+    "PRESTO_ADDRESS": "0x80B448c22535A336Be43183da9dd4e7e74a22dC7",
+    "UINT256_MAX": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "presetValues": "7",
+    "delegationsMaxSize": "15",
+    "DIVIDENDS_FARMING": "0xC7bf1D7Aa00b194bC6d0b1895390802F2bbC4593",
+    "OS_FARMING": "0x2Dd69cdE3b2abAaa371d74ADC29A2e5526f27aF8",
+    "AMM_AGGREGATOR": "0x6fD896b5F8DA1e371e6bba1366b4C14506D4C418",
+    "UNISWAP_V3_NONFUNGIBLE_POSITION_MANAGER": "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
+    "WETH_ADDRESS": "0x4200000000000000000000000000000000000006",
+    "OS_ETH_LP": "0xccc42cf5d6a2f3ed8f948541455950ed6ce14707",
+    "L1StandardBridge": "0x40E0C049f4671846E9Cff93AAEd88f2B48E527bB",
+    "L2StandardBridge": "0x4200000000000000000000000000000000000010",
+    "L2StandardTokenFactory": "0x4200000000000000000000000000000000000012",
+    "OptimismGateway": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
+    "OVM_ETH": "0xDeadDeAddeAddEAddeadDEaDDEAdDeaDDeAD0000",
+    "ERC721DeckWrapper": "0x18aFd644BA51b4D112A18D6baf0a745D92Ee3207",
+    "ERC1155DeckWrapper": "0x506cC9dEA8aA4361012da9A940a16E2F4AdB8a30",
+    "OS_HOLDERS": [
+        "0x3CD8adf058b068e6F5FeB30cc6BB1268a269429e",
+        "0xeE0a58AC0298292C5546780aB9565AdF82514061",
+        "0xccC42CF5D6A2F3ED8f948541455950ed6ce14707"
+    ],
+    "ERC20Tokens": {
+        "USDC": {
+            "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            "holders": [
+                "0xda8cfc9360b266e2e5efda88819599f97179fecb",
+                "0x35099fde8aa40a352884aaa72c78098bb1ea961a",
+                "0xca58b3fba4cea02d127132ea42aada8c184c764a"
+            ]
+        },
+        "DAI": {
+            "address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+            "holders": [
+                "0x4967ec98748efb98490663a65b16698069a1eb35",
+                "0xad0135af20fa82e106607257143d0060a7eb5cbf",
+                "0x2feb1512183545f48f6b9c5b4ebfcaf49cfca6f3"
+            ]
+        },
+        "WBTC": {
+            "address": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+            "holders": [
+                "0xcffad3200574698b78f32232aa9d63eabd290703",
+                "0x47cc445c8845f7186a1eab87ae5d60cda69b630c",
+                "0x984822e8ee521cb9171789c5e88d9f0fd6f867b0"
+            ]
+        },
+        "UNI": {
+            "address": "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984",
+            "holders": [
+                "0x7d2d43e63666f45b40316b44212325625dbaeb40",
+                "0x177df24addc9a216f927d2a894ab0b6eec59eb09",
+                "0x63b53181bdc48a9fbf1d23d461d3cfd82b0abc83"
+            ]
+        },
+        "SUSHI": {
+            "address": "0x6B3595068778DD592e39A122f4f5a5cF09C90fE2",
+            "holders": [
+                "0x967159c42568a54d11a4761fc86a6089ed42b7ba",
+                "0x7d55ebc8dd94d5fd27a70d73bb5954236fad3fb5",
+                "0x25f253ac2797acd132900c95207c9105a081a0ea"
+            ]
+        },
+        "USDT": {
+            "address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            "holders": [
+                "0x82e1d4ddd636857ebcf6a0e74b9b0929c158d7fb",
+                "0x2fc2dbb8540863bc3a7d00066899d5e99ead2408",
+                "0x7abe0ce388281d2acf297cb089caef3819b13448"
+            ]
+        },
+        "MKR": {
+            "address": "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2",
+            "holders": [
+                "0x7d6149ad9a573a6e2ca6ebf7d4897c1b766841b4",
+                "0xf37216a8ac034d08b4663108d7532dfcb44583ed",
+                "0x642ae78fafbb8032da552d619ad43f1d81e4dd7c"
+            ]
+        },
+        "AAVE": {
+            "address": "0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9",
+            "holders": [
+                "0x26a78d5b6d7a7aceedd1e6ee3229b372a624d8b7",
+                "0x4048c47b546b68ad226ea20b5f0acac49b086a21",
+                "0x3744da57184575064838bbc87a0fc791f5e39ea2"
+            ]
+        },
+        "LINK": {
+            "address": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+            "holders": [
+                "0x5a52e96bacdabb82fd05763e25335261b270efcb",
+                "0x0d4f1ff895d12c34994d6b65fabbeefdc1a9fb39",
+                "0x3264225f2fd3bb8d5dc50587ea7506aa8638b966"
+            ]
+        },
+        "CRO": {
+            "address": "0xA0b73E1Ff0B80914AB6fe0444E65848C4C34450b",
+            "holders": [
+                "0xae6ae4daa32d9b1af31460573a8e075fdbb11ea8",
+                "0xcffad3200574698b78f32232aa9d63eabd290703",
+                "0x09fa1f3461152d243ca1e5c59d0e228caaf1f2b8"
+            ]
+        },
+        "OS": {
+            "address": "0x6100dd79fCAA88420750DceE3F735d168aBcB771",
+            "holders": [
+                "0x3cd8adf058b068e6f5feb30cc6bb1268a269429e",
+                "0x94c5a4b47f49afdddda4c781a5b3e47882c05bbf",
+                "0xee0a58ac0298292c5546780ab9565adf82514061"
+            ]
+        },
+        "GNO": {
+            "address": "0x6810e776880C02933D47DB1b9fc05908e5386b96",
+            "holders": [
+                "0x2ef2e49695f00fa835fb851c0575822f5f076a13",
+                "0xa4a6a282a7fc7f939e01d62d884355d79f5046c1",
+                "0x70e278941ed3c0d2c6d6105df184831992aca856"
+            ]
+        }
+    },
+    "delegationFactoryCollectionHeader": {
+        "host": "0x0000000000000000000000000000000000000000",
+        "name": "Ethereans Delegations",
+        "symbol": "D",
+        "uri": "REAL_URI_HERE"
+    },
+    "OS_MINT_AUTH": {
+        "lastTokenPercentage": "80000000000000000"
+    },
+    "TREASURY_SPLITTER_MANAGER": {
+        "splitInterval": "576000",
+        "keys": [
+            "0x3104750b9808e498d0ff489ed3bdbb01b8ea8018a22c284a054db2dc8fc580a7",
+            "0x4f3ad97a91794a00945c0ead3983f793d34044c6300048d8b4ef95636edd234b",
+            "0x49b87f4ee20613c184485be8eadb46851dd4294a8359f902606085b8be6e7ae6",
+            "0xcfe1633df53a0649d88d788961f26058c5e7a0b5644675f19f67bb2975827ba2"
+        ],
+        "flushKey": "0x4f3ad97a91794a00945c0ead3983f793d34044c6300048d8b4ef95636edd234b",
+        "percentages": [
+            "270000000000000000",
+            "250000000000000000",
+            "400000000000000000"
+        ]
+    },
+    "INVESTMENTS_MANAGER": {
+        "componentManager": "0x87a92f6bd20613c184485be8eadb46851dd4294a8359f902606085b8be6e7ae6",
+        "swapToETHInterval": "44800",
+        "tokensFromETH": [
+            "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "0xDe30da39c46104798bB5aA3fe8B9e0e1F348163F",
+            "0x1494CA1F11D487c2bBe4543E90080AeBa4BA3C2b",
+            "0x72e364F2ABdC788b7E918bc238B21f109Cd634D7"
+        ],
+        "tokensToETH": [
+            "0xC18360217D8F7Ab5e7c516566761Ea12Ce7F9D72",
+            "0xDe30da39c46104798bB5aA3fe8B9e0e1F348163F",
+            "0x1494CA1F11D487c2bBe4543E90080AeBa4BA3C2b",
+            "0x72e364F2ABdC788b7E918bc238B21f109Cd634D7",
+            "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+        ],
+        "tokensToETHPercentages": [
+            "10000000000000000",
+            "10000000000000000",
+            "30000000000000000",
+            "30000000000000000",
+            "50000000000000000"
+        ]
+    },
+    "mintOwnerAddress": "0x0E03fB6b2252F96282ebf0a867E5aFE58e4B03fA",
+    "fromAddress": "0xEc10A7fc423507D65bbcC217826751Eb10D26C2A",
+    "balanceBefore": "417052287289040150035",
+    "balanceBeforePlain": "417.0523",
+    "grimoire": {
+        "COMPONENT_KEY_TREASURY_MANAGER": "0xcfe1633df53a0649d88d788961f26058c5e7a0b5644675f19f67bb2975827ba2",
+        "COMPONENT_KEY_STATE_MANAGER": "0xd1d09e8f5708558865b8acd5f13c69781ae600e42dbc7f52b8ef1b9e33dbcd36",
+        "COMPONENT_KEY_MICROSERVICES_MANAGER": "0x0aef4c8f864010d3e1817691f51ade95a646fffafd7f3df9cb8200def342cfd7",
+        "COMPONENT_KEY_PROPOSALS_MANAGER": "0xa504406933af7ca120d20b97dfc79ea9788beb3c4d3ac1ff9a2c292b2c28e0cc",
+        "ENTRY_TYPE_ADDRESS": "0x421683f821a0574472445355be6d2b769119e8515f8376a1d7878523dfdecf7b",
+        "ENTRY_TYPE_ADDRESS_ARRAY": "0x23d8ff3dc5aed4a634bcf123581c95e70c60ac0e5246916790aef6d4451ff4c1",
+        "ENTRY_TYPE_BOOL": "0xc1053bdab4a5cf55238b667c39826bbb11a58be126010e7db397c1b67c24271b",
+        "ENTRY_TYPE_BOOL_ARRAY": "0x8761250c4d2c463ce51f91f5d2c2508fa9142f8a42aa9f30b965213bf3e6c2ac",
+        "ENTRY_TYPE_BYTES": "0xb963e9b45d014edd60cff22ec9ad383335bbc3f827be2aee8e291972b0fadcf2",
+        "ENTRY_TYPE_BYTES_ARRAY": "0x084b42f8a8730b98eb0305d92103d9107363192bb66162064a34dc5716ebe1a0",
+        "ENTRY_TYPE_STRING": "0x97fc46276c172633607a331542609db1e3da793fca183d594ed5a61803a10792",
+        "ENTRY_TYPE_STRING_ARRAY": "0xa227fd7a847724343a7dda3598ee0fb2d551b151b73e4a741067596daa6f5658",
+        "ENTRY_TYPE_UINT256": "0xec13d6d12b88433319b64e1065a96ea19cd330ef6603f5f6fb685dde3959a320",
+        "ENTRY_TYPE_UINT256_ARRAY": "0xc1b76e99a35aa41ed28bbbd9e6c7228760c87b410ebac94fa6431da9b592411f",
+        "SUBDAO_KEY_ETHEREANSOS_V1": "0x1d3784c94477427ee3ebf963dc80bcdc1be400c47ff2754fc2a9cd7328837eb4",
+        "COMPONENT_KEY_TOKEN_MINTER": "0x4668877ff569021c2e8188be2e797f8aa73265eac3479789edfd2531e130b1a1",
+        "COMPONENT_KEY_TOKEN_MINTER_AUTH": "0x9c4db151be7222e332a1dcdb260c7b85b81f214f6b6d83d96c94f814d48a75a5",
+        "COMPONENT_KEY_DIVIDENDS_FARMING": "0x3104750b9808e498d0ff489ed3bdbb01b8ea8018a22c284a054db2dc8fc580a7",
+        "COMPONENT_KEY_OS_FARMING": "0x8ec6626208f22327b5df97db347dd390d4bbb54909af6bc9e8b044839ff9c2ef",
+        "STATEMANAGER_ENTRY_NAME_FACTORY_OF_FACTORIES_FEE_PERCENTAGE_FOR_TRANSACTED": "factoryOfFactoriesFeePercentageTransacted",
+        "STATEMANAGER_ENTRY_NAME_FACTORY_OF_FACTORIES_FEE_PERCENTAGE_FOR_BURN": "factoryOfFactoriesFeePercentageBurn",
+        "STATEMANAGER_ENTRY_NAME_FARMING_FEE_PERCENTAGE_FOR_TRANSACTED": "farmingFeePercentageTransacted",
+        "STATEMANAGER_ENTRY_NAME_FARMING_FEE_FOR_BURNING_OS": "farmingFeeBurnOS",
+        "STATEMANAGER_ENTRY_NAME_INFLATION_FEE_PERCENTAGE_FOR_TRANSACTED": "inflationFeePercentageTransacted",
+        "COMPONENT_KEY_TREASURY_SPLITTER_MANAGER": "0x87a92f6bd20613c184485be8eadb46851dd4294a8359f902606085b8be6e7ae6",
+        "COMPONENT_KEY_SUBDAOS_MANAGER": "0x5b87d6e94145c2e242653a71b7d439a3638a93c3f0d32e1ea876f9fb1feb53e2",
+        "COMPONENT_KEY_DELEGATIONS_MANAGER": "0x49b87f4ee20613c184485be8eadb46851dd4294a8359f902606085b8be6e7ae6",
+        "COMPONENT_KEY_INVESTMENTS_MANAGER": "0x4f3ad97a91794a00945c0ead3983f793d34044c6300048d8b4ef95636edd234b",
+        "COMPONENT_KEY_TOKENS_MANAGER": "0x62b56c3ab20613c184485be8eadb46851dd4294a8359f902606085b8be9f7dc5"
+    },
+    "chainId": 10,
+    "THREE_MONTHS_IN_BLOCKS": "576000",
+    "OS_ID": "553791398095120659341456634783597180523460212593",
+    "ITEM_MAININTERFACE": "0x5581F111D96F593b20699042D5f3472A8A367C26",
+    "OS_COLLECTION_ID": "0xab859dbc805e9ca3b6e03cb25d7a73c7b3c686f6095d3c4e012b2a59332e2732",
+    "OS_PROJECTION": "0x56faFdE0a7503F91c94c888C01Ac3e33e3564351",
+    "DYNAMIC_URI_RESOLVER": "0x343510198aC9D96C603Db7b70A7a6F63e9999c93",
+    "ITEM_PROJECTION_FACTORY": "0xA9a88Fc8339016bb5033fD1Ac7b5364F6b5d9DEd",
+    "PROPOSAL_MODELS_FACTORY": "0x3839d95BEC1D47916696ddF27F6d4ae328e46A09",
+    "models": {
+        "BySpecificAddress": "0x2Af569F45BB66180E09DC38e94cDa2D2355F6da0",
+        "ValidateQuorum": "0x50Aaa4BA494f4fD5796BB68A9F75fC5968BDB40F",
+        "ChangeOrganizationUriProposal": "0x533552Cf15DE6Fc4ec0dd0F7817aD435A37BDEF0",
+        "CanBeValidBeforeBlockLength": "0x56Dec78E1D1126C25a5654E0758c086a09891014",
+        "CanBeTerminatedWhenHardCapReached": "0x1C4f4A5a37eAe811B36FcCC17755fB375f468874",
+        "CanBeTerminatedAfterBlockLength": "0xdE61D33B3C624419673c77b21343f9139aB5E1F5",
+        "ProposalsManager": "0xBccE1c1F330825987E2cD0a617bee8242c84Ea34",
+        "FarmMainRegularMinStake": "0x27e3eC3a99FF3e9FEDA35d0BA1F9c1D009f5F377",
+        "FarmExtension": "0xD189E503ED2099F021ceAF24516A7b59742eb779",
+        "FixedInflationExtension": "0xDDad5216D60952f7062a344494118f8a5e027de9",
+        "FixedInflationUniV3": "0x0389BA91a1F298052c11b4E1c8ed6d74214E9bb0",
+        "Organization": "0xf8A097978aA03d498B338CFDa94bE94FB0C0F86D",
+        "StateManager": "0xBdf64ae59bBe95317E25702CfAB99a3D092111Fc",
+        "TreasuryManager": "0xE5168e2f9e93BCA6B7b0d94d6BEaC02bB81Eaf3f",
+        "MicroservicesManager": "0x420021c08B804005E357DeFe7c4B98142b1cC0d5",
+        "InvestmentsManager": "0x399b717748407e79fea6Be30ca5A018CA7A482eF",
+        "SubDAO": "0x497a9487037d1cF31272ef1e8d251493Ae081fBe",
+        "SubDAOsManager": "0x81134B36d941Dfa49c968571F22397e07fdAD80B",
+        "DelegationsManager": "0x138A41E7Ae1A4ac664E539f8fabc5290370041fE",
+        "TreasurySplitterManager": "0xB7B98E849f6bD6196Ef5900F495f569393373BF6",
+        "OSFixedInflationManager": "0xCdd8F62FaB493bfa9ad211800cCc38aC45209A93",
+        "OSMinter": "0x403057AFD74f7540f5A6A634EcE74bF1146aF5c9",
+        "DelegationTokensManager": "0x8c6ad7C3b6dDDe7e4E797b853C950f994cCeC3B1",
+        "DelegationChangeRulesProposal": "0x7957A1f07205611b308c731b248007E3a8594b5B",
+        "DelegationTransferManagerProposal": "0x6EFbAdE3b339A47F16d7Eee97276CC2682B98a36",
+        "DelegationsManagerAttacherProposal": "0xaa2313d13C48C2bf6Ba813a2F5d58eb58D053509",
+        "VoteProposal": "0x5D14Ce935fc35Bfdc1EE896D8acd6825c5F8E050"
+    },
+    "balanceAfter": "390692926822040150035",
+    "balanceAfterPlain": "390.6929",
+    "spent": "26359360467000000000",
+    "spentPlain": "26.3594",
+    "COLONY_L2_ADDRESS": "0xC72b54f84f516eF9BF05977C667a18Ca5BE6cC77",
+    "reserveTimeInBlocks": 64000,
+    "ERC20Wrapper": "0x32d32f0965a50168cfbe4E4bcC781fdaC1CC04d2",
+    "ERC721Wrapper": "0xBa273b447420E8127B91040C2Ad10164248f2260",
+    "ERC1155Wrapper": "0x8E66008cB3b9E0F003f27e67b0D9C061a9C8A71B",
+    "Creator": "0xAD635642c63c712464f9e799Cc3EDC343F5707C1",
+    "Initializer": "0xa0F1e5206737AdDD66Ef042bd8C7a84229893d8B",
+    "FACTORY_OF_FACTORIES": "0x241c5FAd7e3Dc73a0c8303F37a3Ecf43f9f4e1E9",
+    "factoryIndices": {
+        "farming": "0",
+        "fixedInflation": "1"
+    },
+    "FARMING_FACTORY": "0x13709C231F460235F9B1780Ea881643E38786f50",
+    "FIXED_INFLATION_FACTORY": "0x24b52b9EeDf48c324B2658bA3A1C4a50686a2881",
+    "deckPresto": "0xb4F0DbF6e8eC9e55E4be88e96350975B211E8713"
+}
