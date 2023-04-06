@@ -36,6 +36,8 @@ contract FixedInflationUniV3 is IFixedInflation {
     address private constant UNISWAP_V3_SWAP_ROUTER_ADDRESS = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
     address private ETHEREUM_ADDRESS;
 
+    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
+
     function lazyInit(bytes memory lazyInitData) public returns(bytes memory extensionInitResult) {
 
         require(initializer == address(0), "Already init");
@@ -76,7 +78,7 @@ contract FixedInflationUniV3 is IFixedInflation {
     }
 
     function nextEvent() public view returns(uint256) {
-        return _entry.lastEvent == 0 ? block.timestamp : (_entry.lastEvent + _entry.eventInterval);
+        return _entry.lastEvent == 0 ? block.timestamp : (_entry.lastEvent + _entry.eventInterval * TIME_SLOTS_IN_SECONDS);
     }
 
     function flushBack(address[] memory tokenAddresses) public override extensionOnly {
@@ -303,6 +305,7 @@ contract FixedInflationUniV3 is IFixedInflation {
 
     function _set(FixedInflationEntry memory fixedInflationEntry, FixedInflationOperation[] memory operations) private {
         require(keccak256(bytes(fixedInflationEntry.name)) != keccak256(""), "Name");
+        fixedInflationEntry.eventInterval = fixedInflationEntry.eventInterval / TIME_SLOTS_IN_SECONDS;
         require(fixedInflationEntry.eventInterval > 0, "Interval");
         require(fixedInflationEntry.callerRewardPercentage < ONE_HUNDRED, "Percentage");
         _entry = fixedInflationEntry;

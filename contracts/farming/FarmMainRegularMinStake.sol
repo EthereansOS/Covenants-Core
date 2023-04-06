@@ -49,6 +49,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular {
     mapping(uint256 => uint256) public _rewardPaid;
 
     address private _WETH;
+    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
 
     /** Modifiers. */
 
@@ -302,6 +303,7 @@ contract FarmMainRegularMinStake is IFarmMainRegular {
 
     function _setOrAddFarmingSetupInfo(FarmingSetupInfo memory info, bool add, bool disable, uint256 setupIndex) private {
         FarmingSetupInfo memory farmingSetupInfo = info;
+        farmingSetupInfo.eventDuration = farmingSetupInfo.eventDuration / TIME_SLOTS_IN_SECONDS;
 
         if(add || !disable) {
             farmingSetupInfo.renewTimes = farmingSetupInfo.renewTimes + 1;
@@ -494,10 +496,11 @@ contract FarmMainRegularMinStake is IFarmMainRegular {
         }
 
         bool wasActive = setup.active;
-        setup.active = _ensureTransfer(setup.rewardPerEvent * _setupsInfo[setup.infoIndex].eventDuration);
+        uint256 eventDurationInSeconds = _setupsInfo[setup.infoIndex].eventDuration * TIME_SLOTS_IN_SECONDS;
+        setup.active = _ensureTransfer(setup.rewardPerEvent * eventDurationInSeconds);
 
         if (setup.active && wasActive) {
-            _rewardReceived[_farmingSetupsCount] = setup.rewardPerEvent * _setupsInfo[setup.infoIndex].eventDuration;
+            _rewardReceived[_farmingSetupsCount] = setup.rewardPerEvent * eventDurationInSeconds;
             // set new setup
             _setups[_farmingSetupsCount] = abi.decode(abi.encode(setup), (FarmingSetup));
             // update old setup
@@ -507,15 +510,15 @@ contract FarmMainRegularMinStake is IFarmMainRegular {
             _setupsInfo[setup.infoIndex].setupsCount += 1;
             _setupsInfo[setup.infoIndex].lastSetupIndex = _farmingSetupsCount;
             _setups[_farmingSetupsCount].startEvent = block.timestamp;
-            _setups[_farmingSetupsCount].endEvent = block.timestamp + _setupsInfo[_setups[_farmingSetupsCount].infoIndex].eventDuration;
+            _setups[_farmingSetupsCount].endEvent = block.timestamp + eventDurationInSeconds;
             _setups[_farmingSetupsCount].deprecatedObjectId = 0;
             _setups[_farmingSetupsCount].totalSupply = 0;
             _farmingSetupsCount += 1;
         } else if (setup.active && !wasActive) {
-            _rewardReceived[setupIndex] = setup.rewardPerEvent * _setupsInfo[_setups[setupIndex].infoIndex].eventDuration;
+            _rewardReceived[setupIndex] = setup.rewardPerEvent * eventDurationInSeconds;
             // update new setup
             _setups[setupIndex].startEvent = block.timestamp;
-            _setups[setupIndex].endEvent = block.timestamp + _setupsInfo[_setups[setupIndex].infoIndex].eventDuration;
+            _setups[setupIndex].endEvent = block.timestamp + eventDurationInSeconds;
             _setups[setupIndex].totalSupply = 0;
             _setupsInfo[_setups[setupIndex].infoIndex].renewTimes -= 1;
         } else {
