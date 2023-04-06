@@ -3,6 +3,8 @@ var fs = require('fs');
 
 var buildOSStuff = require('../resources/OS/buildOsStuff');
 
+var utilities = require("../util/utilities");
+
 // Contracts
 var FarmMain;
 // var PinnedFarmMain;
@@ -314,7 +316,7 @@ describe("Farming Regular Min Stake", () => {
         rewardDestination = dfo.mvdWalletAddress;
         var farmMainModel = await new web3.eth.Contract(FarmMain.abi).deploy({ data: FarmMain.bin }).send(blockchainConnection.getSendingOptions());
         console.log(`simple farm model deployed at ${farmMainModel.options.address}`);
-        // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());  
+        // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());
         var farmExtensionModel = await new web3.eth.Contract(FarmExtension.abi).deploy({ data: FarmExtension.bin }).send(blockchainConnection.getSendingOptions());
         console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
 
