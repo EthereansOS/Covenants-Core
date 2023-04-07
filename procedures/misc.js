@@ -1,4 +1,5 @@
 require("../util/mocha");
+const { compile } = require("@ethereansos/multiverse");
 
 const TIME_SLOTS_IN_SECONDS = 15;
 
@@ -26,10 +27,23 @@ function deploySwapRouter() {
     return swapRouter;
 }
 
-function printFarmingContractABI(contract) {
+function deployEthItemOrchestrator() {
+    var ethItemOrchestrator = new web3.eth.Contract(knowledgeBase.ethItemOrchestratorABI, knowledgeBase.ethItemOrchestratorAddress);
+    assert.notStrictEqual(ethItemOrchestrator, undefined);
+    return ethItemOrchestrator;
+}
+
+function printContractABI(contract) {
     console.log("* " + contract.name + " ABI *");
     console.log(contract.abi);
     console.log("°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°");
+}
+
+async function compileFixedInflationContract(filename, subfolders) {
+    var subpath = subfolders != null ? subfolders + "/" : "";
+    var path = "fixed-inflation/" + subpath + filename;
+    const contract = await compile(path);
+    return contract;
 }
 
 async function compileFarmingContract(filename, subfolders) {
@@ -50,10 +64,12 @@ async function compileAmmAggregatorContract(filename, subfolders) {
 module.exports = {
     TIME_SLOTS_IN_SECONDS,
     compileAmmAggregatorContract,
+    compileFixedInflationContract,
     compileFarmingContract,
+    deployEthItemOrchestrator,
     deploySwapRouter,
     deployUniswapV2Factory,
     deployUniswapV2Router,
     deployUniswapV3Pool,
-    printFarmingContractABI,
+    printContractABI,
     };
