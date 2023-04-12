@@ -1,34 +1,33 @@
-require("../util/mocha");
 const { compile } = require("@ethereansos/multiverse");
 
 const TIME_SLOTS_IN_SECONDS = 15;
 
 function deployUniswapV2Router() {
-    var uniswapV2Router = new web3.eth.Contract(knowledgeBase.uniswapV2RouterABI, knowledgeBase.uniswapV2RouterAddress);
+    var uniswapV2Router = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2RouterABI, web3.currentProvider.knowledgeBase.uniswapV2RouterAddress);
     assert.notStrictEqual(uniswapV2Router, undefined);
     return uniswapV2Router;
 }
 
 function deployUniswapV2Factory() {
-    var uniswapV2Factory = new web3.eth.Contract(knowledgeBase.uniswapV2FactoryABI, knowledgeBase.uniswapV2FactoryAddress);
+    var uniswapV2Factory = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2FactoryABI, web3.currentProvider.knowledgeBase.uniswapV2FactoryAddress);
     assert.notStrictEqual(uniswapV2Factory, undefined);
     return uniswapV2Factory;
 }
 
 function deployUniswapV3Pool(univ3PoolAddress) {
-    var uniswapV3Pool = new web3.eth.Contract(knowledgeBase.UniswapV3PoolABI, univ3PoolAddress);
+    var uniswapV3Pool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.UniswapV3PoolABI, univ3PoolAddress);
     assert.notStrictEqual(uniswapV3Pool, undefined);
     return uniswapV3Pool;
 }
 
 function deploySwapRouter() {
-    var swapRouter = new web3.eth.Contract(knowledgeBase.swapRouterABI, knowledgeBase.swapRouterAddress);
+    var swapRouter = new web3.eth.Contract(web3.currentProvider.knowledgeBase.swapRouterABI, web3.currentProvider.knowledgeBase.swapRouterAddress);
     assert.notStrictEqual(swapRouter, undefined);
     return swapRouter;
 }
 
 function deployEthItemOrchestrator() {
-    var ethItemOrchestrator = new web3.eth.Contract(knowledgeBase.ethItemOrchestratorABI, knowledgeBase.ethItemOrchestratorAddress);
+    var ethItemOrchestrator = new web3.eth.Contract(web3.currentProvider.knowledgeBase.ethItemOrchestratorABI, web3.currentProvider.knowledgeBase.ethItemOrchestratorAddress);
     assert.notStrictEqual(ethItemOrchestrator, undefined);
     return ethItemOrchestrator;
 }
