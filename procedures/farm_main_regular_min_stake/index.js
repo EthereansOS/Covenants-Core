@@ -50,7 +50,7 @@ var secondaryToken;
 var setupMainToken;
 var rewardDestination;
 
-var univ3PoolAddress = "0x77EDFA75eab19b772466a4AFfcF5555b7532BADf";
+var univ3PoolAddress = "0xccc42cf5d6a2f3ed8f948541455950ed6ce14707";
 
 async function compileContracts() {
   FarmMain = await misc.compileFarmingContract("FarmMainRegularMinStake", null);
@@ -199,13 +199,11 @@ async function deploySimpleFarmMainContract() {
     "address",
     "bytes",
     "address",
-    "address",
     "bytes",
   ];
   var params = [
     clonedDefaultFarmExtension, //liquidityMiningExtension.options.address,
     "0x",
-    web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress,
     rewardToken !== VOID_ETHEREUM_ADDRESS ? rewardToken.options.address : VOID_ETHEREUM_ADDRESS,
     abi.encode(["tuple(uint256,uint256,uint256,uint256,uint256,address,address,bool,uint256,uint256,int24,int24)[]"], [setups]),
   ];
@@ -218,7 +216,10 @@ async function deploySimpleFarmMainContract() {
   params[1] = osStuff.farmExtensionLazyInitData;
   byMint = true;
 
-  var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
+  var payload = web3.eth.abi.encodeParameters(types, params);
+  payload = web3.eth.abi.encodeParameters(["address", "bytes"], [web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress, payload]);
+  payload = web3.eth.abi.encodeParameters(["bytes"], [payload]);
+  payload = web3.utils.sha3(`lazyInit(bytes)`).substring(0, 10) + (payload.substring(2));
 
   // FIXME
   var deployTransaction = await blockchainCall(farmFactory.methods.deploy, payload);
