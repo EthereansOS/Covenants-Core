@@ -240,11 +240,17 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
         _transferTo(erc20TokenAddress, rewardReceiver, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 
+        IFixedInflationFactory fixedInflationFactory = IFixedInflationFactory(initializer);
+        address factoryOfFactoriesAddress = fixedInflationFactory.initializer();
         if(erc20TokenAddress != address(0)) {
-            _safeApprove(erc20TokenAddress, IFixedInflationFactory(initializer).initializer(), availableAmount);
+            _safeApprove(erc20TokenAddress, factoryOfFactoriesAddress, availableAmount);
         }
-        currentPartialAmount = IFixedInflationFactory(initializer).payFee{value : erc20TokenAddress != address(0) ? 0 : availableAmount}(address(this), erc20TokenAddress, availableAmount, "");
+        currentPartialAmount = fixedInflationFactory.payFee{value : erc20TokenAddress != address(0) ? 0 : availableAmount}(address(this), erc20TokenAddress, availableAmount, "");
         availableAmount -= currentPartialAmount;
+
+        if(erc20TokenAddress != address(0)) {
+            _safeApprove(erc20TokenAddress, factoryOfFactoriesAddress, 0);
+        }
 
         uint256 stillAvailableAmount = availableAmount;
 

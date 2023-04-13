@@ -530,9 +530,6 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
       * @param value amount to approve for.
      */
     function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        if(value == 0) {
-            return;
-        }
         bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
@@ -660,11 +657,16 @@ contract FarmMainRegularMinStake is IFarmMainRegular, BlockRetriever {
         _safeTransfer(token1, recipient, collectedAmount1 - feeAmount1);
     }
 
-    function _payFee(address tokenAddress, uint256 feeAmount) private returns (uint256) {
+    function _payFee(address tokenAddress, uint256 feeAmount) private returns (uint256 feePaid) {
+        IFarmFactory farmFactory = IFarmFactory(initializer);
+        address factoryOfFactories = farmFactory.initializer();
         if(tokenAddress != address(0)) {
-            _safeApprove(tokenAddress, IFarmFactory(initializer).initializer(), feeAmount);
+            _safeApprove(tokenAddress, factoryOfFactories, feeAmount);
         }
-        return IFarmFactory(initializer).payFee{value : tokenAddress != address(0) ? 0 : feeAmount}(address(this), tokenAddress, feeAmount, "");
+        feePaid = farmFactory.payFee{value : tokenAddress != address(0) ? 0 : feeAmount}(address(this), tokenAddress, feeAmount, "");
+        if(tokenAddress != address(0)) {
+            _safeApprove(tokenAddress, factoryOfFactories, 0);
+        }
     }
 
     function _burnFee(bytes memory burnData) private returns (uint256) {
