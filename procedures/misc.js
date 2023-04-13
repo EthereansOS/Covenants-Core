@@ -1,4 +1,17 @@
-const { compile } = require("@ethereansos/multiverse");
+var {
+    VOID_ETHEREUM_ADDRESS,
+    VOID_BYTES32,
+    blockchainCall,
+    compile,
+    deployContract,
+    abi,
+    MAX_UINT256,
+    web3Utils,
+    fromDecimals,
+    toDecimals,
+    sendBlockchainTransaction,
+    calculateTransactionFee,
+} = require('@ethereansos/multiverse');
 
 const TIME_SLOTS_IN_SECONDS = 15;
 
@@ -57,11 +70,44 @@ async function compileAmmAggregatorContract(filename, subfolders) {
     return contract;
 }
 
+async function buyForETH(token, amount, receiver, ammPlugin, amm) {
+    var value = toDecimals(amount.toString(), '18');
+    if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
+        return await sendBlockchainTransaction(
+            web3.currentProvider,
+            accounts[0],
+            web3.currentProvider.knowledgeBase.wethTokenAddress,
+            web3.utils.sha3("deposit()").substring(0, 10),
+            value
+        );
+    }
+    if (ammPlugin || amm) {
+        ammPlugin = ammPlugin || amm;
+        var ethereumAddress = (await ammPlugin.methods.data().call())[0];
+        var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
+            ethereumAddress,
+            token.options.address
+        ]).call())[2];
+        if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
+            return;
+        }
+        await blockchainCall(ammPlugin.methods.swapLiquidity, {
+            amount: value,
+            enterInETH: true,
+            exitInETH: false,
+            liquidityPoolAddresses: [liquidityPoolAddress],
+            path: [token.options.address],
+            inputToken: ethereumAddress,
+            receiver: receiver || VOID_ETHEREUM_ADDRESS
+        }, { value });
+    }
 
+}
 
 
 module.exports = {
     TIME_SLOTS_IN_SECONDS,
+    buyForETH,
     compileAmmAggregatorContract,
     compileFixedInflationContract,
     compileFarmingContract,
@@ -71,4 +117,4 @@ module.exports = {
     deployUniswapV2Router,
     deployUniswapV3Pool,
     printContractABI,
-    };
+};

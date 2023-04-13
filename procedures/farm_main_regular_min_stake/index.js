@@ -61,6 +61,16 @@ async function compileContracts() {
 
   UniswapV2AMMV1 = await misc.compileAmmAggregatorContract("UniswapV2AMMV1", "models/UniswapV2/1");
   UniswapV3AMMV1 = await misc.compileAmmAggregatorContract("UniswapV3AMMV1", "models/UniswapV3/1");
+
+  uniswapAMM = await deployContract(new web3.eth.Contract(UniswapV3AMMV1.abi), UniswapV3AMMV1.bin,
+    [
+      web3.currentProvider.knowledgeBase.swapRouterAddress,
+      web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress,
+      web3.currentProvider.knowledgeBase.uniswapV3QuoterAddress,
+      "0".toDecimals(18)
+    ]
+  );
+  amm = uniswapAMM;
 }
 
 async function createContractsObjects() {
@@ -88,10 +98,10 @@ async function prepareTokens() {
 
   liquidityPool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken !== VOID_ETHEREUM_ADDRESS ? mainToken.options.address : wethToken.options.address, secondaryToken != VOID_ETHEREUM_ADDRESS ? secondaryToken.options.address : wethToken.options.address).call());
 
-  mainToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(mainToken, ethToSpend);
-  secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend);
+  mainToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(mainToken, ethToSpend, null, null, amm);
+  secondaryToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(secondaryToken, ethToSpend, null, null, amm);
 
-  rewardToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(rewardToken, ethToSpend);
+  rewardToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(rewardToken, ethToSpend, null, null, amm);
 
   setupMainToken = mainToken === VOID_ETHEREUM_ADDRESS ? wethToken : mainToken;
 
@@ -211,7 +221,7 @@ async function deploySimpleFarmMainContract() {
   var payload = web3.utils.sha3(`init(${types.join(',')})`).substring(0, 10) + (web3.eth.abi.encodeParameters(types, params).substring(2));
 
   // FIXME
-  // var deployTransaction = await blockchainCall(farmFactory.methods.deploy, payload);
+  var deployTransaction = await blockchainCall(farmFactory.methods.deploy, payload);
   // deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
   // farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
 
@@ -224,7 +234,7 @@ async function deploySimpleFarmMainContract() {
 
   // // put reward in the extension
   // if (rewardToken !== VOID_ETHEREUM_ADDRESS) {
-  //   await buyForETH(rewardToken, 20000);
+  //   await misc.buyForETH(rewardToken, 20000, null, null, amm);
   //   await rewardToken.methods.transfer(params[0], toDecimals("15000", await rewardToken.methods.decimals().call())).send();
   //   console.log(await rewardToken.methods.balanceOf(clonedDefaultFarmExtension).call());
   // } else {
@@ -244,24 +254,12 @@ async function initActor(name, address, amount0, amount1) {
     amount1
   };
 
-  mainToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(mainToken, ethToSpend, address);
-  secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend, address);
+  mainToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(mainToken, ethToSpend, address, null, amm);
+  secondaryToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(secondaryToken, ethToSpend, address, null, amm);
 
 };
 
-async function buyForETH(token, amount, receiver) {
-  var value = toDecimals(amount.toString(), '18');
-  if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
-    return await sendBlockchainTransaction(
-      web3.currentProvider,
-      accounts[0],
-      web3.currentProvider.knowledgeBase.wethTokenAddress,
-      web3.utils.sha3("deposit()").substring(0, 10),
-      value
-    );
 
-  }
-};
 
 
 
