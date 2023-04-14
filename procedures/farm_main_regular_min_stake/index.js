@@ -98,10 +98,10 @@ async function prepareTokens() {
 
   liquidityPool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken !== VOID_ETHEREUM_ADDRESS ? mainToken.options.address : wethToken.options.address, secondaryToken != VOID_ETHEREUM_ADDRESS ? secondaryToken.options.address : wethToken.options.address).call());
 
-  mainToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(mainToken, ethToSpend, null, null, amm);
-  secondaryToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(secondaryToken, ethToSpend, null, null, amm);
+  mainToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(mainToken, ethToSpend);
+  secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend);
 
-  rewardToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(rewardToken, ethToSpend, null, null, amm);
+  rewardToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(rewardToken, ethToSpend);
 
   setupMainToken = mainToken === VOID_ETHEREUM_ADDRESS ? wethToken : mainToken;
 
@@ -133,6 +133,9 @@ async function deployFactoryAndExtensions() {
 }
 
 async function deploySimpleFarmMainContract() {
+  var currentBlock = await web3.eth.getBlock(await web3.eth.getBlockNumber());
+  var currentTimestamp = currentBlock.timestamp;
+
   if (mainToken != VOID_ETHEREUM_ADDRESS && secondaryToken != VOID_ETHEREUM_ADDRESS) {
     // ERC20 TEST
     var setups = [
@@ -150,7 +153,7 @@ async function deploySimpleFarmMainContract() {
       ],
       [
         800 * misc.TIME_SLOTS_IN_SECONDS,
-        (parseInt(await web3.eth.getBlockNumber()) + 30) * misc.TIME_SLOTS_IN_SECONDS,
+        (parseInt(currentTimestamp) + (30 * misc.TIME_SLOTS_IN_SECONDS)),
         toDecimals(0.003, 18),
         toDecimals(5000, 18),
         1,
@@ -180,7 +183,7 @@ async function deploySimpleFarmMainContract() {
       ],
       [
         800 * misc.TIME_SLOTS_IN_SECONDS,
-        (parseInt(await web3.eth.getBlockNumber()) + 30) * misc.TIME_SLOTS_IN_SECONDS,
+        (parseInt(currentTimestamp) + (30 * misc.TIME_SLOTS_IN_SECONDS)),
         toDecimals(0.003, 18),
         toDecimals(5000, 18),
         1,
@@ -221,30 +224,63 @@ async function deploySimpleFarmMainContract() {
   payload = web3.eth.abi.encodeParameters(["bytes"], [payload]);
   payload = web3.utils.sha3(`lazyInit(bytes)`).substring(0, 10) + (payload.substring(2));
 
-  // FIXME
   var deployTransaction = await blockchainCall(farmFactory.methods.deploy, payload);
-  // deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-  // farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
+  deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
+  farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
 
-  // farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
-  // assert.notStrictEqual(farmMainContract.options.address, VOID_ETHEREUM_ADDRESS);
-  // oneHundred = await farmMainContract.methods.ONE_HUNDRED().call();
+  farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
+  assert.notStrictEqual(farmMainContract.options.address, VOID_ETHEREUM_ADDRESS);
+  oneHundred = await blockchainCall(farmMainContract.methods.ONE_HUNDRED);
 
-  // var availableSetups = await farmMainContract.methods.setups().call()
-  // assert.strictEqual(availableSetups.length, setups.length);
+  var availableSetups = await blockchainCall(farmMainContract.methods.setups);
+  assert.strictEqual(availableSetups.length, setups.length);
 
-  // // put reward in the extension
-  // if (rewardToken !== VOID_ETHEREUM_ADDRESS) {
-  //   await misc.buyForETH(rewardToken, 20000, null, null, amm);
-  //   await rewardToken.methods.transfer(params[0], toDecimals("15000", await rewardToken.methods.decimals().call())).send();
-  //   console.log(await rewardToken.methods.balanceOf(clonedDefaultFarmExtension).call());
-  // } else {
-  //   await web3.eth.sendTransaction(blockchainConnection.getSendingOptions({
-  //     to: params[0],
-  //     value: toDecimals(20000, 18)
-  //   }));
-  // }
+  // put reward in the extension
+  if (rewardToken !== VOID_ETHEREUM_ADDRESS) {
+    await buyForETH(rewardToken, 20000);
+    await blockchainCall(await rewardToken.methods.transfer, params[0], toDecimals("15000", await blockchainCall(rewardToken.methods.decimals)));
+    console.log("params[0] balanceOf rewardToken: " + await blockchainCall(rewardToken.methods.balanceOf, params[0]));
+  } else {
+    await sendBlockchainTransaction(
+      web3.currentProvider,
+      accounts[0],
+      params[0],
+      "0x",
+      toDecimals(20000, 18)
+    );
+  }
 }
+
+async function buyForETH(token, amount, receiver, ammPlugin) {
+  var value = toDecimals(amount.toString(), '18');
+  if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
+      return await sendBlockchainTransaction(
+          web3.currentProvider,
+          accounts[0],
+          web3.currentProvider.knowledgeBase.wethTokenAddress,
+          web3.utils.sha3("deposit()").substring(0, 10),
+          value
+      );
+  }
+  ammPlugin = ammPlugin || amm;
+  var ethereumAddress = (await ammPlugin.methods.data().call())[0];
+  var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
+    ethereumAddress,
+    token.options.address
+  ]).call())[2];
+  if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
+    return;
+  }
+  await blockchainCall(ammPlugin.methods.swapLiquidity, {
+    amount: value,
+    enterInETH: true,
+    exitInETH: false,
+    liquidityPoolAddresses: [liquidityPoolAddress],
+    path: [token.options.address],
+    inputToken: ethereumAddress,
+    receiver: receiver || VOID_ETHEREUM_ADDRESS
+  }, { value: value });
+};
 
 async function initActor(name, address, amount0, amount1) {
   actors[name] = {
@@ -255,8 +291,8 @@ async function initActor(name, address, amount0, amount1) {
     amount1
   };
 
-  mainToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(mainToken, ethToSpend, address, null, amm);
-  secondaryToken !== VOID_ETHEREUM_ADDRESS && await misc.buyForETH(secondaryToken, ethToSpend, address, null, amm);
+  mainToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(mainToken, ethToSpend, address);
+  secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend, address);
 
 };
 
@@ -284,16 +320,15 @@ module.exports = async function run() {
   console.groupEnd();
   console.log("");
 
-  console.log("Preparing tokens.....");
-  await prepareTokens();
-  console.groupEnd();
-  console.log("");
-
-
   console.group("Preparing contracts...");
   console.log("Compiling...");
   await compileContracts();
   if (printABI) misc.printContractABI(UniswapV3AMMV1);
+  console.groupEnd();
+  console.log("");
+
+  console.log("Preparing tokens.....");
+  await prepareTokens();
   console.groupEnd();
   console.log("");
 
@@ -387,8 +422,6 @@ async function createStakingPosition(actor, setupIndex, mainTokenAmount) {
 
   var token0 = await liquidityPool.methods.token0().call();
 
-
-
   var amount0 = token0.toLowerCase() === ((mainToken.options && mainToken.options.address) || web3.currentProvider.knowledgeBase.wethTokenAddress).toLowerCase() ? mainTokenAmount : secondaryTokenAmount;
   var amount1 = token0.toLowerCase() === ((mainToken.options && mainToken.options.address) || web3.currentProvider.knowledgeBase.wethTokenAddress).toLowerCase() ? secondaryTokenAmount : mainTokenAmount;
 
@@ -432,7 +465,7 @@ async function withdrawReward(actor) {
   var rew = await farmMainContract.methods.calculateFreeFarmingReward(actor.positionId, false).call();
   console.log(rew)
   var currentBlock = await web3.eth.getBlockNumber();
-  await web3.currentProvider.jumpToBlock(parseInt(currentBlock) || parseInt(setup.endBlock));
+  await web3.currentProvider.setNextBlockTime(parseInt(currentBlock) || parseInt(setup.endBlock));
   var startingBalance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(actor.address).call() : await web3.eth.getBalance(actor.address);
   var result = await farmMainContract.methods.withdrawReward(actor.positionId).send(actor.from);
   var fee = await calculateTransactionFee(web3, result);
@@ -454,7 +487,7 @@ async function withdrawLiquidity(actor, amount) {
   await farmMainContract.methods.withdrawLiquidity(actor.positionId || 0, amount).send(actor.from);
   var endFarmTokenBalance = 0;
   var position = await loadPosition(actor.positionId);
-  var availableSetups = await farmMainContract.methods.setups().call()
+  var availableSetups = await farmMainContract.methods.setups().call();
   if (amount === actor.position.liquidityPoolTokenAmount) {
     assert.strictEqual(parseInt(position.creationBlock), 0);
   } else {
@@ -479,18 +512,13 @@ async function finalFlush() {
 // TEST FUNCTIONS
 
 async function shouldActiveSetup() {
-  await farmMainContract.methods.activateSetup(0).send();
-  try {
-    await farmMainContract.methods.activateSetup(1).send();
-    assert(false, "This shouldn't happen");
-  } catch (e) {
-    assert.notStrictEqual((e.message || e).toLowerCase().indexOf("too early"), -1, (e.message || e));
-  }
-  await web3.currentProvider.jumpToBlock((await farmMainContract.methods.setup(1).call())[1].startBlock);
-  await farmMainContract.methods.activateSetup(1).send();
+  await blockchainCall(farmMainContract.methods.activateSetup, 0);
+  await assert.catchCall(blockchainCall(farmMainContract.methods.activateSetup, 1), "too early");
+  await web3.currentProvider.setNextBlockTime((await blockchainCall(farmMainContract.methods.setup, 1))[1].startEvent); // FIXME Too early for this setup
+  await blockchainCall(farmMainContract.methods.activateSetup, 1);
   var availableSetups = await farmMainContract.methods.setups().call();
+  console.log(availableSetups);
   await Promise.all(availableSetups.map(async (setup) => {
-    console.log(setup);
     assert.strictEqual(setup.active, true);
   }));
 }
@@ -510,10 +538,10 @@ async function shouldNotActivateNotExistingSetup() {
 module.exports.test = async function test() {
   console.log("* MULTIVERSE - test() started *");
 
-  // console.group("Should activate both the setups");
-  // await shouldActiveSetup();
-  // console.groupEnd();
-  // console.log("");
+  console.group("Should activate both the setups");
+  await shouldActiveSetup();
+  console.groupEnd();
+  console.log("");
 
   // console.group("Should not activate a non existing setup info");
   // await shouldNotActivateNotExistingSetup();

@@ -70,7 +70,7 @@ async function compileAmmAggregatorContract(filename, subfolders) {
     return contract;
 }
 
-async function buyForETH(token, amount, receiver, ammPlugin, amm) {
+async function buyForETH(token, amount, receiver, ammPlugin) {
     var value = toDecimals(amount.toString(), '18');
     if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
         return await sendBlockchainTransaction(
@@ -81,26 +81,26 @@ async function buyForETH(token, amount, receiver, ammPlugin, amm) {
             value
         );
     }
-    if (ammPlugin || amm) {
-        ammPlugin = ammPlugin || amm;
-        var ethereumAddress = (await ammPlugin.methods.data().call())[0];
-        var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
-            ethereumAddress,
-            token.options.address
-        ]).call())[2];
-        if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
-            return;
-        }
-        await blockchainCall(ammPlugin.methods.swapLiquidity, {
-            amount: value,
-            enterInETH: true,
-            exitInETH: false,
-            liquidityPoolAddresses: [liquidityPoolAddress],
-            path: [token.options.address],
-            inputToken: ethereumAddress,
-            receiver: receiver || VOID_ETHEREUM_ADDRESS
-        }, { value });
-    }
+    // if (ammPlugin || amm) {
+    //     ammPlugin = ammPlugin || amm;
+    //     var ethereumAddress = (await ammPlugin.methods.data().call())[0];
+    //     var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
+    //         ethereumAddress,
+    //         token.options.address
+    //     ]).call())[2];
+    //     if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
+    //         return;
+    //     }
+    //     await blockchainCall(ammPlugin.methods.swapLiquidity, {
+    //         amount: value,
+    //         enterInETH: true,
+    //         exitInETH: false,
+    //         liquidityPoolAddresses: [liquidityPoolAddress],
+    //         path: [token.options.address],
+    //         inputToken: ethereumAddress,
+    //         receiver: receiver || VOID_ETHEREUM_ADDRESS
+    //     }, { value: value });
+    // }
 
 }
 
