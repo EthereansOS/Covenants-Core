@@ -7,13 +7,12 @@
         "build": "multiverse compile",
         "compile": "multiverse compile",
         "flat": "multiverse flat",
-        "packages:sort": "sort-package-json",
         "start": "multiverse",
         "test": "mocha"
     },
     "multiverse": {
         "knowledgeBase": "resources/knowledgeBase",
-        "solidityVersion": "0.7.6"
+        "solidityVersion": "0.8.6"
     },
     "mocha": {
         "timeout": false,
@@ -23,8 +22,6 @@
     "license": "ISC",
     "dependencies": {
         "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git",
-        "@ethereansos/swissknife": "git+https://github.com/EthereansOS/ethereansos-swissknife.git",
-        "@uniswap/v3-periphery": "^1.1.0",
-        "sort-package-json": "^2.4.1"
+        "@uniswap/v3-periphery": "^1.1.0"
     }
 }
