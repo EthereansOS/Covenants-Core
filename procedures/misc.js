@@ -104,6 +104,39 @@ async function buyForETH(token, amount, receiver, ammPlugin) {
 
 }
 
+function numberToString(num, locale) {
+    if (num === undefined || num === null) {
+        num = 0;
+    }
+    if ((typeof num).toLowerCase() === 'string') {
+        return num.split(',').join('');
+    }
+    let numStr = String(num);
+
+    if (Math.abs(num) < 1.0) {
+        let e = parseInt(num.toString().split('e-')[1]);
+        if (e) {
+            let negative = num < 0;
+            if (negative) num *= -1
+            num *= Math.pow(10, e - 1);
+            numStr = '0.' + (new Array(e)).join('0') + num.toString().substring(2);
+            if (negative) numStr = "-" + numStr;
+        }
+    } else {
+        let e = parseInt(num.toString().split('+')[1]);
+        if (e > 20) {
+            e -= 20;
+            num /= Math.pow(10, e);
+            numStr = num.toString() + (new Array(e + 1)).join('0');
+        }
+    }
+    if (locale === true) {
+        var numStringSplitted = numStr.split(' ').join('').split('.');
+        return parseInt(numStringSplitted[0]).toLocaleString() + (numStringSplitted.length === 1 ? '' : (Utils.decimalsSeparator + numStringSplitted[1]))
+    }
+    return numStr;
+}
+
 
 module.exports = {
     TIME_SLOTS_IN_SECONDS,
@@ -116,5 +149,6 @@ module.exports = {
     deployUniswapV2Factory,
     deployUniswapV2Router,
     deployUniswapV3Pool,
+    numberToString,
     printContractABI,
 };
