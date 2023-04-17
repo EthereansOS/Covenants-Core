@@ -3,10 +3,10 @@ pragma solidity ^0.8.0;
 
 import "../model/IFarmingGen2Extension.sol";
 import "../../util/IERC20.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
+import "../../util/uniswapV3/IUniswapV3Pool.sol";
+import "../../util/uniswapV3/TickMath.sol";
+import "../../util/uniswapV3/INonfungiblePositionManager.sol";
+import "../../util/uniswapV3/IMulticall.sol";
 
 contract FarmingGen2 is IFarmingGen2 {
 
@@ -113,7 +113,7 @@ contract FarmingGen2 is IFarmingGen2 {
         for(uint256 i = 0; i < _farmingSetupsCount; i++) {
             require(_setupPositionsCount[i] == 0 && !_setups[i].active && _setups[i].totalSupply == 0, "Not Empty");
         }
-        (,,, address receiver,) = IFarmExtensionRegular(host).data();
+        (,,, address receiver,) = IFarmingGen2Extension(host).data();
         require(tokens.length == amounts.length, "length");
         for(uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
@@ -593,10 +593,10 @@ contract FarmingGen2 is IFarmingGen2 {
             return;
         }
         if (_rewardTokenAddress == address(0)) {
-            IFarmExtensionRegular(host).backToYou{value : amount}(amount);
+            IFarmingGen2Extension(host).backToYou{value : amount}(amount);
         } else {
             _safeApprove(_rewardTokenAddress, host, amount);
-            IFarmExtensionRegular(host).backToYou(amount);
+            IFarmingGen2Extension(host).backToYou(amount);
         }
     }
 
@@ -606,7 +606,7 @@ contract FarmingGen2 is IFarmingGen2 {
     function _ensureTransfer(uint256 amount) private returns(bool) {
         uint256 initialBalance = _rewardTokenAddress == address(0) ? address(this).balance : IERC20(_rewardTokenAddress).balanceOf(address(this));
         uint256 expectedBalance = initialBalance + amount;
-        try IFarmExtensionRegular(host).transferTo(amount) {} catch {}
+        try IFarmingGen2Extension(host).transferTo(amount) {} catch {}
         uint256 actualBalance = _rewardTokenAddress == address(0) ? address(this).balance : IERC20(_rewardTokenAddress).balanceOf(address(this));
         if(actualBalance == expectedBalance) {
             return true;
