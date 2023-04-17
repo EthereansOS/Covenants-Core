@@ -75,12 +75,13 @@ contract FarmingGen1 is IFarmingGen1 {
     function lazyInit(bytes memory initPayload) public returns(bytes memory extensionReturnCall) {
         require(initializer == address(0), "Already initialized");
         initializer = msg.sender;
-        (host, initPayload) = abi.decode(initPayload, (address, bytes));
-        require(host != address(0), "extension");
+        address extension;
+        (extension, initPayload) = abi.decode(initPayload, (address, bytes));
+        require((host = extension) != address(0), "extension");
         (bytes memory extensionInitData, address rewardTokenAddress, bytes memory farmingSetupInfosBytes) = abi.decode(initPayload, (bytes, address, bytes));
         emit RewardToken(_rewardTokenAddress = rewardTokenAddress);
         if (keccak256(extensionInitData) != keccak256("")) {
-            extensionReturnCall = _call(host, extensionInitData);
+            extensionReturnCall = _call(extension, extensionInitData);
         }
         if(farmingSetupInfosBytes.length > 0) {
             FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));

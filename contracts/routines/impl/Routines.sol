@@ -4,11 +4,11 @@ pragma solidity ^0.8.0;
 import "../model/IRoutinesExtension.sol";
 import "../../util/IERC20.sol";
 import "../../amm-aggregator/common/IAMM.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
+import "../../util/uniswapV3/IUniswapV3Pool.sol";
+import "../../util/uniswapV3/ISwapRouter.sol";
+import "../../util/uniswapV3/IMulticall.sol";
+import "../../util/uniswapV3/IPeripheryPayments.sol";
+import "../../util/uniswapV3/IPeripheryImmutableState.sol";
 
 contract RoutinesUniV3 is IRoutines {
 
@@ -37,20 +37,19 @@ contract RoutinesUniV3 is IRoutines {
 
     function lazyInit(bytes memory lazyInitData) public returns(bytes memory extensionInitResult) {
 
-        require(initializer == address(0), "Already init");
+        require(initializer == address(0), "Already initialized");
         initializer = msg.sender;
+        address uniswapV3SwapRouterAddress;
+        address extension;
+        (uniswapV3SwapRouterAddress, extension, lazyInitData) = abi.decode(lazyInitData, (address, address, bytes));
+        require((host = extension) != address(0), "extension");
 
-        address _host;
-        (UNISWAP_V3_SWAP_ROUTER_ADDRESS, _host, lazyInitData) = abi.decode(lazyInitData, (address, address, bytes));
-        require(_host != address(0), "Blank host");
-
-        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS).WETH9();
+        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS = uniswapV3SwapRouterAddress).WETH9();
 
         (bytes memory extensionPayload, RoutinesEntry memory newEntry, RoutinesOperation[] memory newOperations) = abi.decode(lazyInitData, (bytes, RoutinesEntry, RoutinesOperation[]));
 
-        host = _host;
         if(keccak256(extensionPayload) != keccak256("")) {
-            extensionInitResult = _call(_host, extensionPayload);
+            extensionInitResult = _call(extension, extensionPayload);
         }
         _set(newEntry, newOperations);
     }
