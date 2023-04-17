@@ -1,8 +1,7 @@
 {
     "name": "@ethereansos/covenants",
     "version": "1.0.0",
-    "description": "ETH Affairs",
-    "main": "util/build-contracts.js",
+    "description": "Covenants",
     "scripts": {
         "build": "multiverse compile",
         "compile": "multiverse compile",
