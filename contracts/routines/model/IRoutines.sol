@@ -25,8 +25,13 @@ struct RoutinesOperation {
 }
 
 interface IRoutines {
+    function entry() external view returns(RoutinesEntry memory, RoutinesOperation[] memory);
 
-    function setEntry(RoutinesEntry memory entryData, RoutinesOperation[] memory operations) external;
+    function setEntry(RoutinesEntry calldata entryData, RoutinesOperation[] memory operations) external;
 
-    function flushBack(address[] memory tokenAddresses) external;
+    function nextEvent() external view returns(uint256);
+
+    function execute(bool earnByAmounts, address rewardReceiver, uint256[] calldata minAmounts) external returns(bool executed, uint256[] memory outputAmounts);
+
+    function flushBack(address[] calldata tokenAddresses) external;
 }
