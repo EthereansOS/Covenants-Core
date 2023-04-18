@@ -1,8 +1,24 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+struct LiquidityPoolData {
+    address liquidityPoolAddress;
+    uint256 amount;
+    address tokenAddress;
+    bool amountIsLiquidityPool;
+    bool involvingETH;
+    address receiver;
+}
 
-import "./AMMData.sol";
+struct SwapData {
+    bool enterInETH;
+    bool exitInETH;
+    address[] liquidityPoolAddresses;
+    address[] path;
+    address inputToken;
+    uint256 amount;
+    address receiver;
+}
 
 interface IAMM {
 

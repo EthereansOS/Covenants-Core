@@ -1,9 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
 import "../../../common/IAMM.sol";
-import "../../../util/IERC20.sol";
 
 interface IBalancerAMMV1 is IAMM {
 }

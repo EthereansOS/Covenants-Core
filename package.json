@@ -1,5 +1,5 @@
 {
-    "name": "@ethereansos/covenants",
+    "name": "@ethereansos/covenants-core",
     "version": "1.0.0",
     "description": "Covenants",
     "scripts": {
