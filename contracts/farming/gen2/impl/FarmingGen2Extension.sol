@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "../model/IFarmingGen2Extension.sol";
-import "../../util/IERC20.sol";
-import "../../util/IERC20Mintable.sol";
+import "../../../util/IERC20.sol";
+import "../../../util/IERC20Mintable.sol";
 
 contract FarmingGen2Extension is IFarmingGen2Extension {
 

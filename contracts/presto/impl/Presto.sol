@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "../model/IPresto.sol";
-import "../../amm-aggregator/aggregator/IAMMAggregator.sol";
+import "../../amm-aggregator/model/IAMMAggregator.sol";
 import "../../util/IERC20.sol";
 import "../../util/IERC20Burnable.sol";
 import "../../util/uniswapV3/IUniswapV3Pool.sol";

@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "../model/IRoutinesExtension.sol";
 import "../../util/IERC20.sol";
-import "../../amm-aggregator/aggregator/IAMMAggregator.sol";
+import "../../amm-aggregator/model/IAMMAggregator.sol";
 import "../../util/uniswapV3/IUniswapV3Pool.sol";
 import "../../util/uniswapV3/ISwapRouter.sol";
 import "../../util/uniswapV3/IMulticall.sol";

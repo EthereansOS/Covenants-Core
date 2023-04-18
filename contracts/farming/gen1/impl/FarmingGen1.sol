@@ -2,8 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "../model/IFarmingGen1Extension.sol";
-import "../../amm-aggregator/common/IAMM.sol";
-import "../../util/IERC20.sol";
+import "../../../amm-aggregator/model/IAMM.sol";
+import "../../../util/IERC20.sol";
 
 contract FarmingGen1 is IFarmingGen1 {
 
@@ -446,6 +446,12 @@ contract FarmingGen1 is IFarmingGen1 {
         }
     }
 
+    function _toMinAmountsArray(uint256 amount0Min, uint256 amount1Min) private pure returns(uint256[] memory minAmounts) {
+        minAmounts = new uint256[](2);
+        minAmounts[0] = amount0Min;
+        minAmounts[1] = amount1Min;
+    }
+
     function _addLiquidity(uint256 setupIndex, FarmingPositionRequest memory request) private returns(LiquidityPoolData memory liquidityPoolData, uint256 tokenAmount) {
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount) = _transferToMeAndCheckAllowance(_setups[setupIndex], request);
         // liquidity pool data struct for the AMM
@@ -455,7 +461,8 @@ contract FarmingGen1 is IFarmingGen1 {
             _setupsInfo[_setups[setupIndex].infoIndex].mainTokenAddress,
             request.amountIsLiquidityPool,
             _setupsInfo[_setups[setupIndex].infoIndex].involvingETH,
-            address(this)
+            address(this),
+            _toMinAmountsArray(request.amount0Min, request.amount1Min)
         );
         tokenAmount = mainTokenAmount;
         // amount is lp check
@@ -518,7 +525,8 @@ contract FarmingGen1 is IFarmingGen1 {
             setupInfo.mainTokenAddress,
             true,
             setupInfo.involvingETH,
-            burnData.length > 0 ? msg.sender : address(this)
+            burnData.length > 0 ? msg.sender : address(this),
+            _toMinAmountsArray(amount0Min, amount1Min)
         );
         _safeApprove(lpData.liquidityPoolAddress, setupInfo.ammPlugin, lpData.amount);
         (, uint256[] memory removedLiquidityAmounts, address[] memory tokens) = IAMM(setupInfo.ammPlugin).removeLiquidity(lpData);

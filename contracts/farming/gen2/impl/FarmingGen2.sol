@@ -2,11 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "../model/IFarmingGen2Extension.sol";
-import "../../util/IERC20.sol";
-import "../../util/uniswapV3/IUniswapV3Pool.sol";
-import "../../util/uniswapV3/TickMath.sol";
-import "../../util/uniswapV3/INonfungiblePositionManager.sol";
-import "../../util/uniswapV3/IMulticall.sol";
+import "../../../util/IERC20.sol";
+import "../../../util/uniswapV3/IUniswapV3Pool.sol";
+import "../../../util/uniswapV3/TickMath.sol";
+import "../../../util/uniswapV3/INonfungiblePositionManager.sol";
+import "../../../util/uniswapV3/IMulticall.sol";
 
 contract FarmingGen2 is IFarmingGen2 {
 
