@@ -1,7 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./IAMM.sol";
+import "../model/IAMM.sol";
 import "../../util/IERC20.sol";
 
 abstract contract AMM is IAMM {

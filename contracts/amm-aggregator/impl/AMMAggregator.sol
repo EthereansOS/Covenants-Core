@@ -1,8 +1,7 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-
-import "./IAMMAggregator.sol";
+import "../model/IAMMAggregator.sol";
 
 contract AMMAggregator is IAMMAggregator {
 

@@ -1,10 +1,157 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./IBalancerAMMV1.sol";
-import "../../../common/AMM.sol";
+import "./AMM.sol";
+import "../../util/WETH.sol";
 
-contract BalancerAMMV1 is IBalancerAMMV1, AMM {
+interface BPool {
+
+    function isPublicSwap()
+        external view
+        returns (bool);
+
+    function isFinalized()
+        external view
+        returns (bool);
+
+    function isBound(address t)
+        external view
+        returns (bool);
+
+    function getNumTokens()
+        external view
+        returns (uint);
+
+    function getCurrentTokens()
+        external view
+        returns (address[] memory tokens);
+
+    function getFinalTokens()
+        external view
+        returns (address[] memory tokens);
+
+    function getDenormalizedWeight(address token)
+        external view
+        returns (uint);
+
+    function getTotalDenormalizedWeight()
+        external view
+        returns (uint);
+
+    function getNormalizedWeight(address token)
+        external view
+        returns (uint);
+
+    function getBalance(address token)
+        external view
+        returns (uint);
+
+    function getSwapFee()
+        external view
+        returns (uint);
+
+    function getController()
+        external view
+        returns (address);
+
+    function calcOutGivenIn(
+        uint tokenBalanceIn,
+        uint tokenWeightIn,
+        uint tokenBalanceOut,
+        uint tokenWeightOut,
+        uint tokenAmountIn,
+        uint swapFee
+    )
+        external pure
+        returns (uint tokenAmountOut);
+
+    function calcInGivenOut(
+        uint tokenBalanceIn,
+        uint tokenWeightIn,
+        uint tokenBalanceOut,
+        uint tokenWeightOut,
+        uint tokenAmountOut,
+        uint swapFee
+    )
+        external pure
+        returns (uint tokenAmountIn);
+
+    function setSwapFee(uint swapFee)
+        external;
+
+    function setController(address manager)
+        external;
+
+    function setPublicSwap(bool public_)
+        external;
+
+    function finalize()
+        external;
+
+    function bind(address token, uint balance, uint denorm)
+        external;
+
+    function rebind(address token, uint balance, uint denorm)
+        external;
+
+    function unbind(address token)
+        external;
+
+    function gulp(address token)
+        external;
+
+    function getSpotPrice(address tokenIn, address tokenOut)
+        external view
+        returns (uint spotPrice);
+
+    function getSpotPriceSansFee(address tokenIn, address tokenOut)
+        external view
+        returns (uint spotPrice);
+
+    function joinPool(uint poolAmountOut, uint[] calldata maxAmountsIn)
+        external;
+
+    function exitPool(uint poolAmountIn, uint[] calldata minAmountsOut)
+        external;
+
+    function swapExactAmountIn(
+        address tokenIn,
+        uint tokenAmountIn,
+        address tokenOut,
+        uint minAmountOut,
+        uint maxPrice
+    )
+        external
+        returns (uint tokenAmountOut, uint spotPriceAfter);
+
+    function swapExactAmountOut(
+        address tokenIn,
+        uint maxAmountIn,
+        address tokenOut,
+        uint tokenAmountOut,
+        uint maxPrice
+    )
+        external
+        returns (uint tokenAmountIn, uint spotPriceAfter);
+
+    function joinswapExternAmountIn(address tokenIn, uint tokenAmountIn, uint minPoolAmountOut)
+        external
+        returns (uint poolAmountOut);
+
+    function joinswapPoolAmountOut(address tokenIn, uint poolAmountOut, uint maxAmountIn)
+        external
+        returns (uint tokenAmountIn);
+
+    function exitswapPoolAmountIn(address tokenOut, uint poolAmountIn, uint minAmountOut)
+        external
+        returns (uint tokenAmountOut);
+
+    function exitswapExternAmountOut(address tokenOut, uint tokenAmountOut, uint maxPoolAmountIn)
+        external
+        returns (uint poolAmountIn);
+}
+
+contract BalancerAMMV1 is AMM {
 
     uint public constant BONE = 10**18;
 
@@ -35,7 +182,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         return bmul(bdiv(numerator, denominator), amount);
     }
 
-    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) view public virtual override(IAMM, AMM) returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) view public virtual override returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
 
         uint256 numerator = liquidityPoolAmount;
         uint256 denominator;
@@ -81,7 +228,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
     function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
             if(data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress) {
-                IWETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
+                WETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
             }
             _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
         }
@@ -98,7 +245,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
                 _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IERC20(data.liquidityPoolTokens[i]).balanceOf(address(this)));
             } else {
                 if(!_multi) {
-                    IWETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
+                    WETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
                     (bool result,) = data.receiver.call{value: tokensAmounts[i]}("");
                     require(result, "ETH transfer failed");
                 }
@@ -108,7 +255,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
 
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
         if(data.enterInETH) {
-            IWETH(_ethereumAddress).deposit{value : data.amount}();
+            WETH(_ethereumAddress).deposit{value : data.amount}();
         }
         outputAmount = data.amount;
         for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
@@ -118,7 +265,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
             (outputAmount, ) = BPool(data.liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, 1, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         }
         if(data.exitInETH) {
-            IWETH(_ethereumAddress).withdraw(outputAmount);
+            WETH(_ethereumAddress).withdraw(outputAmount);
             (bool result,) = data.receiver.call{value:outputAmount}("");
             require(result, "ETH transfer failed");
         } else {
@@ -126,7 +273,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         }
     }
 
-    function addLiquidity(LiquidityPoolData memory data) payable public virtual override(IAMM, AMM) returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+    function addLiquidity(LiquidityPoolData memory data) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
         ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, data.involvingETH);
         (liquidityPoolAmount, tokensAmounts) = _addLiquidity(processedLiquidityPoolData);
@@ -135,7 +282,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         }
     }
 
-    function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override(IAMM, AMM) returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
+    function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
         liquidityPoolAmounts = new uint256[](data.length);
         tokensAmounts = new uint256[][](data.length);
         liquidityPoolTokens = new address[][](data.length);
@@ -150,7 +297,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         _multi = false;
     }
 
-    function removeLiquidityBatch(LiquidityPoolData[] memory data) public virtual override(IAMM, AMM) returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
+    function removeLiquidityBatch(LiquidityPoolData[] memory data) public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
         liquidityPoolAmounts = new uint256[](data.length);
         tokensAmounts = new uint256[][](data.length);
         liquidityPoolTokens = new address[][](data.length);
@@ -165,7 +312,7 @@ contract BalancerAMMV1 is IBalancerAMMV1, AMM {
         _multi = false;
     }
 
-    function swapLiquidityBatch(SwapData[] memory data) payable public virtual override(IAMM, AMM) returns(uint256[] memory outputAmounts) {
+    function swapLiquidityBatch(SwapData[] memory data) payable public virtual override returns(uint256[] memory outputAmounts) {
         outputAmounts = new uint256[](data.length);
         _multi = true;
         for(uint256 i = 0; i < data.length; i++) {
