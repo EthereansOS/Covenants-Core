@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "../model/IPresto.sol";
-import "../../amm-aggregator/common/IAMM.sol";
+import "../../amm-aggregator/aggregator/IAMMAggregator.sol";
 import "../../util/IERC20.sol";
 import "../../util/IERC20Burnable.sol";
 import "../../util/uniswapV3/IUniswapV3Pool.sol";
@@ -10,50 +10,32 @@ import "../../util/uniswapV3/ISwapRouter.sol";
 import "../../util/uniswapV3/IMulticall.sol";
 import "../../util/uniswapV3/IPeripheryPayments.sol";
 import "../../util/uniswapV3/IPeripheryImmutableState.sol";
+import "../../util/uniswapV3/INonfungiblePositionManager.sol";
 
 contract Presto is IPresto {
 
-    uint256 public override constant ONE_HUNDRED = 1e18;
+    uint256 private constant ONE_HUNDRED = 1e18;
 
     mapping(address => uint256) private _tokenIndex;
     address[] private _tokensToTransfer;
     uint256[] private _tokenAmounts;
 
-    address public override doubleProxy;
-    uint256 public override feePercentage;
     address private _ammAggregator;
 
-    address private immutable UNISWAP_V3_SWAP_ROUTER_ADDRESS;
-    address public immutable ETHEREUM_ADDRESS;
+    address private immutable _uniswapV3SwapRouterAddress;
+    address private immutable _uniswapV3NonfungiblePositionManagerAddress;
+    address private immutable _wethTokenAddress;
 
-    constructor(address _doubleProxy, uint256 _feePercentage, address ammAggregator, address uniswapV3SwapRouterAddress) {
-        doubleProxy = _doubleProxy;
-        feePercentage = _feePercentage;
+    constructor(address ammAggregator, address uniswapV3SwapRouterAddress, address uniswapV3NonfungiblePositionManagerAddress) {
         _ammAggregator = ammAggregator;
-        UNISWAP_V3_SWAP_ROUTER_ADDRESS = uniswapV3SwapRouterAddress;
-        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS).WETH9();
+        _wethTokenAddress = IPeripheryImmutableState(_uniswapV3SwapRouterAddress = uniswapV3SwapRouterAddress).WETH9();
+        _uniswapV3NonfungiblePositionManagerAddress = uniswapV3NonfungiblePositionManagerAddress;
     }
 
     receive() external payable {
     }
 
-    modifier onlyDFO() {
-        revert();
-        _;
-    }
-
-    function feePercentageInfo() public override view returns (uint256, address) {
-    }
-
-    function setDoubleProxy(address _doubleProxy) public override onlyDFO {
-        doubleProxy = _doubleProxy;
-    }
-
-    function setFeePercentage(uint256 _feePercentage) public override onlyDFO {
-        feePercentage = _feePercentage;
-    }
-
-    function execute(PrestoOperation[] memory operations) public override payable returns(uint256[] memory outputAmounts) {
+    function execute(PrestoOperation[] memory operations) external override payable returns(uint256[] memory outputAmounts) {
         _transferToMe(operations);
         outputAmounts = new uint256[](operations.length);
         for(uint256 i = 0 ; i < operations.length; i++) {
@@ -82,14 +64,15 @@ contract Presto is IPresto {
     }
 
     function _collectTokens(PrestoOperation[] memory operations) private {
+        address uniswapV3SwapRouterAddress = _uniswapV3SwapRouterAddress;
+        address uniswapV3NonfungiblePositionManagerAddress = _uniswapV3NonfungiblePositionManagerAddress;
+        address wethTokenAddress = _wethTokenAddress;
         address[] memory amms = IAMMAggregator(_ammAggregator).amms();
         for(uint256 i = 0; i < operations.length; i++) {
             PrestoOperation memory operation = operations[i];
-            _isAMMOfAggregator(operation.ammPlugin, amms);
+            address ethereumAddress = _checkAMMAndRetrieveEthereumAddress(operation, wethTokenAddress, uniswapV3SwapRouterAddress, uniswapV3NonfungiblePositionManagerAddress, amms);
             if(operation.ammPlugin != address(0) && operation.liquidityPoolAddresses.length == 0) {
-                IAMM amm = IAMM(operation.ammPlugin);
-                (address ethereumAddress,,) = (amm.data());
-                (uint256[] memory amounts, address[] memory tokensAddresses) = amm.byLiquidityPoolAmount(operation.inputTokenAddress, operation.inputTokenAmount);
+                (uint256[] memory amounts, address[] memory tokensAddresses) = IAMM(operation.ammPlugin).byLiquidityPoolAmount(operation.inputTokenAddress, operation.inputTokenAmount);
                 bool hasEth = false;
                 for(uint256 z = 0; z < tokensAddresses.length; z++) {
                     if(tokensAddresses[z] == ethereumAddress) {
@@ -104,16 +87,21 @@ contract Presto is IPresto {
         }
     }
 
-    function _isAMMOfAggregator(address ammPlugin, address[] memory amms) private view {
-        if(ammPlugin == address(0)) {
-            return;
+    function _checkAMMAndRetrieveEthereumAddress(PrestoOperation memory operation, address wethTokenAddress, address uniswapV3SwapRouterAddress, address uniswapV3NonfungiblePositionManagerAddress, address[] memory amms) private view returns(address) {
+        if(operation.ammPlugin == address(0)) {
+            return address(0);
         }
+        if(operation.liquidityPoolAddresses.length != 0 && operation.ammPlugin == uniswapV3SwapRouterAddress) {
+            return wethTokenAddress;
+        }
+        if(operation.liquidityPoolAddresses.length == 0 && operation.ammPlugin == uniswapV3NonfungiblePositionManagerAddress) {
+            return wethTokenAddress;
+        }
+        address ammPlugin = operation.ammPlugin;
         for(uint256 i = 0; i < amms.length; i++) {
-            if(ammPlugin == UNISWAP_V3_SWAP_ROUTER_ADDRESS) {
-                return;
-            }
-            if(ammPlugin == amms[i]) {
-                return;
+            if(amms[i] == ammPlugin) {
+                (address ethereumAddress,,) = IAMM(ammPlugin).data();
+                return ethereumAddress;
             }
         }
         revert("Unknown AMM");
@@ -157,9 +145,12 @@ contract Presto is IPresto {
             address(0),
             true,
             operation.enterInETH,
-            address(this)
+            address(this),
+            operation.tokenMins
         );
-        (outputAmount,,) = IAMM(operation.ammPlugin).addLiquidity{value : operation.enterInETH ? operation.inputTokenAmount : 0}(liquidityPoolData);
+        uint256[] memory tokenAmounts;
+        (outputAmount,tokenAmounts,) = IAMM(operation.ammPlugin).addLiquidity{value : operation.enterInETH ? operation.inputTokenAmount : 0}(liquidityPoolData);
+        _checkMinAmounts(tokenAmounts, operation.tokenMins);
         _transferTo(operation.inputTokenAddress, outputAmount, operation.receivers, operation.receiversPercentages);
     }
 
@@ -167,8 +158,8 @@ contract Presto is IPresto {
 
         uint256 minAmount = operation.tokenMins.length > 0 ? operation.tokenMins[0] : 0;
 
-        address ethereumAddress = ETHEREUM_ADDRESS;
-        if(operation.ammPlugin != UNISWAP_V3_SWAP_ROUTER_ADDRESS) {
+        address ethereumAddress = _wethTokenAddress;
+        if(operation.ammPlugin != _uniswapV3SwapRouterAddress) {
             (ethereumAddress,,) = IAMM(operation.ammPlugin).data();
         }
 
@@ -185,16 +176,17 @@ contract Presto is IPresto {
             operation.swapPath,
             operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
             operation.inputTokenAmount,
-            address(this)
+            address(this),
+            operation.tokenMins[0]
         );
 
         if(swapData.inputToken != address(0) && !swapData.enterInETH) {
             _safeApprove(swapData.inputToken, operation.ammPlugin, swapData.amount);
         }
 
-        outputAmount = operation.ammPlugin == UNISWAP_V3_SWAP_ROUTER_ADDRESS ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swapLiquidity{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
+        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swapLiquidity{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
 
-        require(outputAmount >= minAmount, "slippage");
+        _checkMinAmount(outputAmount, minAmount);
 
         _transferTo(operation.exitInETH ? address(0) : outputToken, outputAmount, operation.receivers, operation.receiversPercentages);
     }
@@ -206,10 +198,7 @@ contract Presto is IPresto {
     function _transferTo(address erc20TokenAddress, uint256 totalAmount, address[] memory receivers, uint256[] memory receiversPercentages) private {
         uint256 availableAmount = totalAmount;
 
-        (uint256 dfoFeePercentage, address dfoWallet) = feePercentageInfo();
-        uint256 currentPartialAmount = dfoFeePercentage == 0 || dfoWallet == address(0) ? 0 : _calculateRewardPercentage(availableAmount, dfoFeePercentage);
-        _transferTo(erc20TokenAddress, dfoWallet, currentPartialAmount);
-        availableAmount -= currentPartialAmount;
+        uint256 currentPartialAmount;
 
         uint256 stillAvailableAmount = availableAmount;
 
@@ -291,24 +280,30 @@ contract Presto is IPresto {
         });
 
         if(data.enterInETH || data.exitInETH) {
-            return _swapLiquidityMulticall(data.enterInETH, data.exitInETH, data.amount, data.receiver, abi.encodeWithSelector(ISwapRouter(UNISWAP_V3_SWAP_ROUTER_ADDRESS).exactInput.selector, exactInputParams));
+            return _swapLiquidityMulticall(data.enterInETH, data.exitInETH, data.amount, data.receiver, abi.encodeWithSelector(ISwapRouter(_uniswapV3SwapRouterAddress).exactInput.selector, exactInputParams));
         }
-        return ISwapRouter(UNISWAP_V3_SWAP_ROUTER_ADDRESS).exactInput(exactInputParams);
+        return ISwapRouter(_uniswapV3SwapRouterAddress).exactInput(exactInputParams);
     }
 
     function _swapLiquidityMulticall(bool enterInETH, bool exitInETH, uint256 value, address recipient, bytes memory data) private returns (uint256) {
         bytes[] memory multicall = new bytes[](enterInETH && exitInETH ? 3 : 2);
         multicall[0] = data;
         if(enterInETH && exitInETH) {
-            multicall[1] = abi.encodeWithSelector(IPeripheryPayments(UNISWAP_V3_SWAP_ROUTER_ADDRESS).refundETH.selector);
-            multicall[2] = abi.encodeWithSelector(IPeripheryPayments(UNISWAP_V3_SWAP_ROUTER_ADDRESS).unwrapWETH9.selector, 0, recipient);
+            multicall[1] = abi.encodeWithSelector(IPeripheryPayments(address(0)).refundETH.selector);
+            multicall[2] = abi.encodeWithSelector(IPeripheryPayments(address(0)).unwrapWETH9.selector, 0, recipient);
         } else {
-            multicall[1] = enterInETH ? abi.encodeWithSelector(IPeripheryPayments(UNISWAP_V3_SWAP_ROUTER_ADDRESS).refundETH.selector) : abi.encodeWithSelector(IPeripheryPayments(UNISWAP_V3_SWAP_ROUTER_ADDRESS).unwrapWETH9.selector, 0, recipient);
+            multicall[1] = enterInETH ? abi.encodeWithSelector(IPeripheryPayments(address(0)).refundETH.selector) : abi.encodeWithSelector(IPeripheryPayments(_uniswapV3SwapRouterAddress).unwrapWETH9.selector, 0, recipient);
         }
-        return abi.decode(IMulticall(UNISWAP_V3_SWAP_ROUTER_ADDRESS).multicall{value : enterInETH ? value : 0}(multicall)[0], (uint256));
+        return abi.decode(IMulticall(address(0)).multicall{value : enterInETH ? value : 0}(multicall)[0], (uint256));
     }
-}
 
-interface IAMMAggregator {
-    function amms() external view returns (address[] memory);
+    function _checkMinAmounts(uint256[] memory amounts, uint256[] memory minAmounts) private pure {
+        for(uint256 i = 0; i < amounts.length; i++) {
+            _checkMinAmount(amounts[i], minAmounts[i]);
+        }
+    }
+
+    function _checkMinAmount(uint256 amount, uint256 minAmount) private pure {
+        require(amount >= minAmount, "too little received");
+    }
 }

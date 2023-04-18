@@ -210,7 +210,8 @@ contract RoutinesUniV3 is IRoutines {
             operation.swapPath,
             operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
             amountIn - inputReward,
-            address(this)
+            address(this),
+            minAmount
         );
 
         if(swapData.inputToken != address(0) && !swapData.enterInETH) {
