@@ -8,6 +8,7 @@ struct LiquidityPoolData {
     bool amountIsLiquidityPool;
     bool involvingETH;
     address receiver;
+    uint256[] minAmounts;
 }
 
 struct SwapData {
@@ -18,6 +19,7 @@ struct SwapData {
     address inputToken;
     uint256 amount;
     address receiver;
+    uint256 minAmount;
 }
 
 interface IAMM {
@@ -40,7 +42,7 @@ interface IAMM {
 
     function byTokenAmount(address liquidityPoolAddress, address tokenAddress, uint256 tokenAmount) external view returns(uint256, uint256[] memory, address[] memory);
 
-    function createLiquidityPoolAndAddLiquidity(address[] calldata tokenAddresses, uint256[] calldata amounts, bool involvingETH, address receiver) external payable returns(uint256, uint256[] memory, address, address[] memory);
+    function createLiquidityPoolAndAddLiquidity(address[] calldata tokenAddresses, uint256[] calldata amounts, bool involvingETH, address receiver, uint256[] calldata minAmounts) external payable returns(uint256, uint256[] memory, address, address[] memory);
 
     function addLiquidity(LiquidityPoolData calldata data) external payable returns(uint256, uint256[] memory, address[] memory);
     function addLiquidityBatch(LiquidityPoolData[] calldata data) external payable returns(uint256[] memory, uint256[][] memory, address[][] memory);
