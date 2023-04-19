@@ -28,10 +28,12 @@ contract UniswapV3AMMV1 is AMM {
     function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
         IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
-
+        tokenAddresses = new address[](2);
         address token0 = pool.token0();
         address token1 = pool.token1();
-        if(IUniswapV3Factory(factoryAddress).getPool(token0, token1, pool.fee()) != liquidityPoolAddress) {
+        uint24 fee = pool.fee();
+
+        if(IUniswapV3Factory(factoryAddress).getPool(token0, token1, fee) != liquidityPoolAddress) {
             return(0, new uint256[](0), new address[](0));
         }
 
