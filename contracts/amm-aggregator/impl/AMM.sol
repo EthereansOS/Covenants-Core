@@ -444,6 +444,17 @@ abstract contract AMM is IAMM {
         }
     }
 
+    function _toNumber(address addr) internal pure returns(uint256) {
+        return uint256(uint160(addr));
+    }
+
+    function _toNumbers(address[] memory addresses) internal pure returns(uint256[] memory numbers) {
+        numbers = new uint256[](addresses.length);
+        for(uint256 i = 0; i < numbers.length; i++) {
+            numbers[i] = _toNumber(addresses[i]);
+        }
+    }
+
     function _calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure returns(uint256) {
         return (amount * numerator) / denominator;
     }

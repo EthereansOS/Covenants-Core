@@ -25,7 +25,9 @@ contract UniswapV3AMMV1 is AMM {
         quoterAddress = _quoterAddress;
     }
 
-    function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+
+        address liquidityPoolAddress = _toAddress(liquidityPoolId);
 
         IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
         tokenAddresses = new address[](2);
@@ -49,8 +51,8 @@ contract UniswapV3AMMV1 is AMM {
         tokenAddresses[1] = token1;
     }
 
-    function byTokens(address[] calldata tokenAddresses) public override view returns(uint256, uint256[] memory, address liquidityPoolAddress, address[] memory tokens) {
-        liquidityPoolAddress = tokenAddresses.length > 2 ? IUniswapV3Factory(factoryAddress).getPool(tokenAddresses[0], tokenAddresses[1], uint24(uint160(tokenAddresses[2]))) : address(0);
+    function byTokens(address[] memory tokenAddresses) public override view returns(uint256, uint256[] memory, uint256 liquidityPoolId, address[] memory tokens) {
+        address liquidityPoolAddress = tokenAddresses.length > 2 ? IUniswapV3Factory(factoryAddress).getPool(tokenAddresses[0], tokenAddresses[1], uint24(uint160(tokenAddresses[2]))) : address(0);
         if(tokenAddresses.length == 2) {
             uint24[3] memory fees = [uint24(500), 3000, 10000];
             for(uint256 i = 0; i < fees.length; i++) {
@@ -64,16 +66,17 @@ contract UniswapV3AMMV1 is AMM {
             tokens = new address[](2);
             tokens[0] = IUniswapV3Pool(liquidityPoolAddress).token0();
             tokens[1] = IUniswapV3Pool(liquidityPoolAddress).token1();
+            liquidityPoolId = _toNumber(liquidityPoolAddress);
         }
     }
 
-    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
     }
 
-    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
     }
 
-    function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
         return swapRouterAddress;
     }
 
@@ -81,10 +84,10 @@ contract UniswapV3AMMV1 is AMM {
         return nonfungiblePositionManagerAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
@@ -96,7 +99,7 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _swapLiquiditySingle(ProcessedSwapData memory data, bool calculateAmountOutMinimum) private returns(uint256) {
-        uint24 fee = _retrieveFee(data.liquidityPoolAddresses[0], data.inputToken, data.path[0]);
+        uint24 fee = _retrieveFee(address(0), data.inputToken, data.path[0]);
         ISwapRouter.ExactInputSingleParams memory exactInputSingleParams = ISwapRouter.ExactInputSingleParams({
             tokenIn : data.inputToken,
             tokenOut : data.path[0],
@@ -114,9 +117,9 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _swapLiquidityMultiple(ProcessedSwapData memory data, bool calculateAmountOutMinimum) private returns(uint256) {
-        bytes memory path = abi.encodePacked(data.inputToken, _retrieveFee(data.liquidityPoolAddresses[0], data.inputToken, data.path[0]), data.path[0]);
-        for(uint256 i = 1; i < data.liquidityPoolAddresses.length; i++) {
-            path = abi.encodePacked(path, _retrieveFee(data.liquidityPoolAddresses[i], data.path[i - 1], data.path[i]), data.path[i]);
+        bytes memory path = abi.encodePacked(data.inputToken, _retrieveFee(address(0), data.inputToken, data.path[0]), data.path[0]);
+        for(uint256 i = 1; i < data.liquidityPoolIds.length; i++) {
+            path = abi.encodePacked(path, _retrieveFee(_toAddress(data.liquidityPoolIds[i]), data.path[i - 1], data.path[i]), data.path[i]);
         }
 
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({

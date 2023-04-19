@@ -76,28 +76,28 @@ interface IUniswapV2Router {
     function swapExactTokensForTokens(
         uint amountIn,
         uint amountOutMin,
-        address[] calldata path,
+        address[] memory path,
         address to,
         uint deadline
     ) external returns (uint[] memory amounts);
     function swapTokensForExactTokens(
         uint amountOut,
         uint amountInMax,
-        address[] calldata path,
+        address[] memory path,
         address to,
         uint deadline
     ) external returns (uint[] memory amounts);
-    function swapExactETHForTokens(uint amountOutMin, address[] calldata path, address to, uint deadline)
+    function swapExactETHForTokens(uint amountOutMin, address[] memory path, address to, uint deadline)
         external
         payable
         returns (uint[] memory amounts);
-    function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
+    function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] memory path, address to, uint deadline)
         external
         returns (uint[] memory amounts);
-    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] calldata path, address to, uint deadline)
+    function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] memory path, address to, uint deadline)
         external
         returns (uint[] memory amounts);
-    function swapETHForExactTokens(uint amountOut, address[] calldata path, address to, uint deadline)
+    function swapETHForExactTokens(uint amountOut, address[] memory path, address to, uint deadline)
         external
         payable
         returns (uint[] memory amounts);
@@ -105,8 +105,8 @@ interface IUniswapV2Router {
     function quote(uint amountA, uint reserveA, uint reserveB) external pure returns (uint amountB);
     function getAmountOut(uint amountIn, uint reserveIn, uint reserveOut) external pure returns (uint amountOut);
     function getAmountIn(uint amountOut, uint reserveIn, uint reserveOut) external pure returns (uint amountIn);
-    function getAmountsOut(uint amountIn, address[] calldata path) external view returns (uint[] memory amounts);
-    function getAmountsIn(uint amountOut, address[] calldata path) external view returns (uint[] memory amounts);
+    function getAmountsOut(uint amountIn, address[] memory path) external view returns (uint[] memory amounts);
+    function getAmountsIn(uint amountOut, address[] memory path) external view returns (uint[] memory amounts);
 }
 
 contract UniswapV2BasedAMMV1 is AMM {
@@ -118,7 +118,9 @@ contract UniswapV2BasedAMMV1 is AMM {
         factoryAddress = IUniswapV2Router(routerAddress = _routerAddress).factory();
     }
 
-    function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+
+        address liquidityPoolAddress = _toAddress(liquidityPoolId);
 
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
@@ -140,13 +142,16 @@ contract UniswapV2BasedAMMV1 is AMM {
         tokenAddresses[1] = token1;
     }
 
-    function byTokens(address[] memory tokenAddresses) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function byTokens(address[] memory tokenAddresses) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]));
+        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
         if(address(pair) == address(0)) {
-            return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
+            return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
         }
+
+        liquidityPoolId = _toNumber(liquidityPoolAddress);
 
         liquidityPoolAmount = pair.totalSupply();
 
@@ -160,15 +165,15 @@ contract UniswapV2BasedAMMV1 is AMM {
         orderedTokens[1] = pair.token1();
     }
 
-    function _getSwapOutput(uint256 value, address[] calldata, address[] calldata path) view internal override returns(uint256[] memory) {
+    function _getSwapOutput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256[] memory) {
         return IUniswapV2Router(routerAddress).getAmountsOut(value, path);
     }
 
-    function _getSwapInput(uint256 value, address[] calldata, address[] calldata path) view internal override returns(uint256[] memory) {
+    function _getSwapInput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256[] memory) {
         return IUniswapV2Router(routerAddress).getAmountsIn(value, path);
     }
 
-    function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
         return routerAddress;
     }
 
@@ -176,7 +181,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         return routerAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
         if(!involvingETH) {
@@ -204,12 +209,14 @@ contract UniswapV2BasedAMMV1 is AMM {
                 block.timestamp + 10000
             );
         }
-        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]));
+        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
+        liquidityPoolId = _toNumber(liquidityPoolAddress);
+        IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
         orderedTokens[0] = pair.token0();
         orderedTokens[1] = pair.token1();
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
         tokensAmounts = new uint256[](2);
         if(!processedLiquidityPoolData.involvingETH) {
             (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidity(
@@ -236,6 +243,8 @@ contract UniswapV2BasedAMMV1 is AMM {
                 block.timestamp + 10000
             );
         }
+        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(processedLiquidityPoolData.liquidityPoolTokens[0], processedLiquidityPoolData.liquidityPoolTokens[1]);
+        liquidityPoolId = _toNumber(liquidityPoolAddress);
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {

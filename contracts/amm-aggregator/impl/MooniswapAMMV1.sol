@@ -25,7 +25,7 @@ interface Mooniswap {
 
     function getReturn(address src, address dst, uint256 amount) external view returns(uint256);
 
-    function deposit(uint256[] calldata amounts, uint256[] calldata minAmounts) external payable returns(uint256 fairSupply);
+    function deposit(uint256[] memory amounts, uint256[] memory minAmounts) external payable returns(uint256 fairSupply);
 
     function withdraw(uint256 amount, uint256[] memory minReturns) external;
 
@@ -40,12 +40,13 @@ contract MooniswapAMMV1 is AMM {
         factory = factoryAddress;
     }
 
-    function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
         return address(0);
     }
 
-    function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
+        address liquidityPoolAddress = _toAddress(liquidityPoolId);
         Mooniswap mooniswap = Mooniswap(liquidityPoolAddress);
 
         liquidityPoolAmount = IERC20(liquidityPoolAddress).totalSupply();
@@ -56,17 +57,18 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function byTokens(address[] memory tokens) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function byTokens(address[] memory tokens) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
         Mooniswap mooniswap = IMooniFactory(factory).pools(tokens[0], tokens[1]);
 
         if(address(mooniswap) == address(0)) {
-            return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
+            return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
         }
 
         orderedTokens = mooniswap.getTokens();
 
-        liquidityPoolAmount = IERC20(liquidityPoolAddress = address(mooniswap)).totalSupply();
+        liquidityPoolId = _toNumber(address(mooniswap));
+        liquidityPoolAmount = IERC20(address(mooniswap)).totalSupply();
 
         tokensAmounts = new uint256[](orderedTokens.length);
         for(uint256 i = 0; i < tokensAmounts.length; i++) {
@@ -74,7 +76,8 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+        address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
         values = new uint256[](path.length);
         values[0] = value;
         for(uint256 i = 1 ; i < path.length; i++) {
@@ -82,7 +85,8 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+        address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
         values = new uint256[](path.length);
         values[values.length - 1] = value;
         for(uint256 i = values.length - 2 ; i >= 0; i--) {
@@ -94,10 +98,11 @@ contract MooniswapAMMV1 is AMM {
         return address(0);
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool, address, address receiver, uint256[] memory minAmounts) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address operator, address receiver, uint256[] memory minAmounts) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
         Mooniswap mooniswap = IMooniFactory(factory).deploy(tokenAddresses[0], tokenAddresses[1]);
-        liquidityPoolAddress = address(mooniswap);
+        address liquidityPoolAddress = address(mooniswap);
+        liquidityPoolId = _toNumber(liquidityPoolAddress);
         orderedTokens = mooniswap.getTokens();
 
         tokensAmounts = new uint256[](orderedTokens.length);
@@ -119,16 +124,16 @@ contract MooniswapAMMV1 is AMM {
         _safeTransfer(liquidityPoolAddress, receiver, liquidityPoolAmount = IERC20(liquidityPoolAddress).balanceOf(address(this)));
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
-
-        Mooniswap mooniswap = Mooniswap(data.liquidityPoolAddress);
+    function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+        address liquidityPoolAddress = _toAddress(liquidityPoolId = data.liquidityPoolId);
+        Mooniswap mooniswap = Mooniswap(liquidityPoolAddress);
 
         liquidityPoolAmount = data.liquidityPoolAmount;
         tokensAmounts = data.tokensAmounts;
 
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
             if(data.liquidityPoolTokens[i] != _ethereumAddress) {
-                _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
+                _safeApprove(data.liquidityPoolTokens[i], liquidityPoolAddress, data.tokensAmounts[i]);
             }
         }
 
@@ -137,12 +142,12 @@ contract MooniswapAMMV1 is AMM {
         } else {
             mooniswap.deposit{value : data.liquidityPoolTokens[0] == _ethereumAddress ? data.tokensAmounts[0] : data.tokensAmounts[1]}(data.tokensAmounts, data.minAmounts);
         }
-        _safeTransfer(data.liquidityPoolAddress, data.receiver, liquidityPoolAmount = IERC20(data.liquidityPoolAddress).balanceOf(address(this)));
+        _safeTransfer(liquidityPoolAddress, data.receiver, liquidityPoolAmount = IERC20(liquidityPoolAddress).balanceOf(address(this)));
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
 
-        Mooniswap(data.liquidityPoolAddress).withdraw(liquidityPoolAmount = data.liquidityPoolAmount, data.minAmounts);
+        Mooniswap(_toAddress(data.liquidityPoolId)).withdraw(liquidityPoolAmount = data.liquidityPoolAmount, data.minAmounts);
 
         tokensAmounts = new uint256[](data.tokensAmounts.length);
         for(uint256 i = 0; i < data.tokensAmounts.length; i++) {
@@ -156,16 +161,17 @@ contract MooniswapAMMV1 is AMM {
     }
 
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
+        address[] memory liquidityPoolAddresses = _toAddresses(data.liquidityPoolIds);
         outputAmount = data.amount;
-        for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
+        for(uint256 i = 0; i < liquidityPoolAddresses.length; i++) {
             address inputToken = i == 0 ? data.inputToken : data.path[i - 1];
             if(inputToken != _ethereumAddress) {
-                _safeApprove(inputToken, data.liquidityPoolAddresses[i], outputAmount);
+                _safeApprove(inputToken, liquidityPoolAddresses[i], outputAmount);
             }
             if(inputToken == _ethereumAddress) {
-                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap{value : outputAmount}(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
+                outputAmount = Mooniswap(liquidityPoolAddresses[i]).swap{value : outputAmount}(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
             } else {
-                outputAmount = Mooniswap(data.liquidityPoolAddresses[i]).swap(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
+                outputAmount = Mooniswap(liquidityPoolAddresses[i]).swap(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
             }
         }
         if(data.path[data.path.length - 1] == _ethereumAddress) {
