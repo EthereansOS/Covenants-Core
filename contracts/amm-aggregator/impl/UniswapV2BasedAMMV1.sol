@@ -8,11 +8,11 @@ import "../../util/uniswapV2/IUniswapV2Factory.sol";
 
 contract UniswapV2BasedAMMV1 is AMM {
 
-    address public routerAddress;
+    address public immutable routerAddress;
     address public immutable factoryAddress;
 
-    constructor(string memory name, uint256 version, address _routerAddress) AMM(name, version, IUniswapV2Router(routerAddress = _routerAddress).WETH(), 2, true) {
-        factoryAddress = IUniswapV2Router(_routerAddress).factory();
+    constructor(string memory name, uint256 version, address _routerAddress) AMM(name, version, IUniswapV2Router(_routerAddress).WETH(), 2, true) {
+        factoryAddress = IUniswapV2Router(routerAddress = _routerAddress).factory();
     }
 
     function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
