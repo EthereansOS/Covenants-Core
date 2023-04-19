@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import "./AMM.sol";
 import "../../util/IWETH.sol";
 
-interface BPool {
+interface BPool is IERC20 {
 
     function isPublicSwap()
         external view
@@ -108,10 +108,10 @@ interface BPool {
         external view
         returns (uint spotPrice);
 
-    function joinPool(uint poolAmountOut, uint[] calldata maxAmountsIn)
+    function joinPool(uint poolAmountOut, uint[] memory maxAmountsIn)
         external;
 
-    function exitPool(uint poolAmountIn, uint[] calldata minAmountsOut)
+    function exitPool(uint poolAmountIn, uint[] memory minAmountsOut)
         external;
 
     function swapExactAmountIn(
@@ -160,11 +160,13 @@ contract BalancerAMMV1 is AMM {
     constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
     }
 
-    function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
         return address(0);
     }
 
-    function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
+
+        address liquidityPoolAddress = _toAddress(liquidityPoolId);
 
         BPool pool = BPool(liquidityPoolAddress);
 
@@ -178,27 +180,28 @@ contract BalancerAMMV1 is AMM {
         }
     }
 
-    function calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure override returns(uint256) {
+    function _calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure override returns(uint256) {
         return bmul(bdiv(numerator, denominator), amount);
     }
 
-    function byLiquidityPoolAmount(address liquidityPoolAddress, uint256 liquidityPoolAmount) view public virtual override returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+    function byLiquidityPoolAmount(uint256 liquidityPoolId, uint256 liquidityPoolAmount) view public virtual override returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
 
         uint256 numerator = liquidityPoolAmount;
         uint256 denominator;
 
-        (denominator, tokensAmounts, liquidityPoolTokens) = byLiquidityPool(liquidityPoolAddress);
+        (denominator, tokensAmounts, liquidityPoolTokens) = byLiquidityPool(liquidityPoolId);
 
         for(uint256 i = 0; i < tokensAmounts.length; i++) {
             tokensAmounts[i] = bmul(bdiv(numerator, denominator), tokensAmounts[i]);
         }
     }
 
-    function byTokens(address[] memory) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
-        return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
+    function byTokens(address[] memory) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+        return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
     }
 
-    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+        address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
         values = new uint256[](path.length);
         values[0] = value;
         for(uint256 i = 1 ; i < values.length; i++) {
@@ -217,7 +220,8 @@ contract BalancerAMMV1 is AMM {
         }
     }
 
-    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+        address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
         values = new uint256[](path.length);
         values[values.length - 1] = value;
         for(uint256 i = values.length - 2 ; i >= 0; i--) {
@@ -240,23 +244,24 @@ contract BalancerAMMV1 is AMM {
         return address(0);
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address, uint256[] memory) internal virtual override returns(uint256, uint256[] memory, address, address[] memory) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address, uint256[] memory) internal virtual override returns(uint256, uint256[] memory, uint256, address[] memory) {
         revert("Balancer");
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+    function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+        address liquidityPoolAddress = _toAddress(liquidityPoolId = data.liquidityPoolId);
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
             if(data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress) {
                 IWETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
             }
-            _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
+            _safeApprove(data.liquidityPoolTokens[i], liquidityPoolAddress, data.tokensAmounts[i]);
         }
-        BPool(data.liquidityPoolAddress).joinPool(liquidityPoolAmount = data.liquidityPoolAmount, tokensAmounts = data.tokensAmounts);
-        _safeTransfer(data.liquidityPoolAddress, data.receiver, liquidityPoolAmount);
+        BPool(liquidityPoolAddress).joinPool(liquidityPoolAmount = data.liquidityPoolAmount, tokensAmounts = data.tokensAmounts);
+        _safeTransfer(liquidityPoolAddress, data.receiver, liquidityPoolAmount);
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
-        BPool(data.liquidityPoolAddress).exitPool(liquidityPoolAmount = data.liquidityPoolAmount, data.tokensAmounts);
+        BPool(_toAddress(data.liquidityPoolId)).exitPool(liquidityPoolAmount = data.liquidityPoolAmount, data.tokensAmounts);
         tokensAmounts = new uint256[](data.tokensAmounts.length);
         for(uint256 i = 0; i < data.tokensAmounts.length; i++) {
             bool eth = data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress;
@@ -273,15 +278,16 @@ contract BalancerAMMV1 is AMM {
     }
 
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
+        address[] memory liquidityPoolAddresses = _toAddresses(data.liquidityPoolIds);
         if(data.enterInETH) {
             IWETH(_ethereumAddress).deposit{value : data.amount}();
         }
         outputAmount = data.amount;
-        for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
+        for(uint256 i = 0; i < liquidityPoolAddresses.length; i++) {
             address inputToken = i == 0 ? data.enterInETH ? _ethereumAddress : data.inputToken : data.path[i - 1];
-            _safeApprove(inputToken, data.liquidityPoolAddresses[i], outputAmount);
-            address outputToken = i != data.liquidityPoolAddresses.length - 1 || !data.exitInETH ? data.path[i] : _ethereumAddress;
-            (outputAmount, ) = BPool(data.liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, data.minAmount, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
+            _safeApprove(inputToken, liquidityPoolAddresses[i], outputAmount);
+            address outputToken = i != liquidityPoolAddresses.length - 1 || !data.exitInETH ? data.path[i] : _ethereumAddress;
+            (outputAmount, ) = BPool(liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, data.minAmount, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         }
         if(data.exitInETH) {
             IWETH(_ethereumAddress).withdraw(outputAmount);
@@ -292,22 +298,23 @@ contract BalancerAMMV1 is AMM {
         }
     }
 
-    function addLiquidity(LiquidityPoolData memory data) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
+    function addLiquidity(LiquidityPoolData memory data) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
         ProcessedLiquidityPoolData memory processedLiquidityPoolData = _processLiquidityPoolData(data);
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, data.involvingETH);
-        (liquidityPoolAmount, tokensAmounts) = _addLiquidity(processedLiquidityPoolData);
+        (liquidityPoolAmount, tokensAmounts, liquidityPoolId) = _addLiquidity(processedLiquidityPoolData);
         if(!_multi) {
             _flushBack(liquidityPoolTokens);
         }
     }
 
-    function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
+    function addLiquidityBatch(LiquidityPoolData[] memory data) payable public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, uint256[] memory liquidityPoolIds, address[][] memory liquidityPoolTokens) {
         liquidityPoolAmounts = new uint256[](data.length);
         tokensAmounts = new uint256[][](data.length);
+        liquidityPoolIds = new uint256[](data.length);
         liquidityPoolTokens = new address[][](data.length);
         _multi = true;
         for(uint256 i = 0; i < data.length; i++) {
-            (liquidityPoolAmounts[i], tokensAmounts[i], liquidityPoolTokens[i]) = addLiquidity(data[i]);
+            (liquidityPoolAmounts[i], tokensAmounts[i], liquidityPoolIds[i], liquidityPoolTokens[i]) = addLiquidity(data[i]);
         }
         for(uint256 i = 0; i < data.length; i++) {
             _flushBack(liquidityPoolTokens[i]);
