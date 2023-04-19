@@ -74,7 +74,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         return routerAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
         if(!involvingETH) {
@@ -83,20 +83,21 @@ contract UniswapV2BasedAMMV1 is AMM {
                 tokenAddresses[1],
                 amounts[0],
                 amounts[1],
-                1,
-                1,
+                minAmounts[0],
+                minAmounts[1],
                 receiver,
                 block.timestamp + 10000
             );
         } else {
-            address token = tokenAddresses[0] != _ethereumAddress ? tokenAddresses[0] : tokenAddresses[1];
-            uint256 amountTokenDesired = tokenAddresses[0] != _ethereumAddress ? amounts[0] : amounts[1];
-            uint256 amountETHDesired = tokenAddresses[0] == _ethereumAddress ? amounts[0] : amounts[1];
+            uint256 tokenIndex = tokenAddresses[0] != _ethereumAddress ? 0 : 1;
+            address token = tokenAddresses[tokenIndex];
+            uint256 amountTokenDesired = amounts[tokenIndex];
+            uint256 amountETHDesired = amounts[1 - tokenIndex];
             (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
-                1,
-                1,
+                minAmounts[tokenIndex],
+                minAmounts[1 - tokenIndex],
                 receiver,
                 block.timestamp + 10000
             );
@@ -114,20 +115,21 @@ contract UniswapV2BasedAMMV1 is AMM {
                 processedLiquidityPoolData.liquidityPoolTokens[1],
                 processedLiquidityPoolData.tokensAmounts[0],
                 processedLiquidityPoolData.tokensAmounts[1],
-                1,
-                1,
+                processedLiquidityPoolData.minAmounts[0],
+                processedLiquidityPoolData.minAmounts[1],
                 processedLiquidityPoolData.receiver,
                 block.timestamp + 10000
             );
         } else {
-            address token = processedLiquidityPoolData.liquidityPoolTokens[0] != _ethereumAddress ? processedLiquidityPoolData.liquidityPoolTokens[0] : processedLiquidityPoolData.liquidityPoolTokens[1];
-            uint256 amountTokenDesired = processedLiquidityPoolData.liquidityPoolTokens[0] != _ethereumAddress ? processedLiquidityPoolData.tokensAmounts[0] : processedLiquidityPoolData.tokensAmounts[1];
-            uint256 amountETHDesired = processedLiquidityPoolData.liquidityPoolTokens[0] == _ethereumAddress ? processedLiquidityPoolData.tokensAmounts[0] : processedLiquidityPoolData.tokensAmounts[1];
+            uint256 tokenIndex = processedLiquidityPoolData.liquidityPoolTokens[0] != _ethereumAddress ? 0 : 1;
+            address token = processedLiquidityPoolData.liquidityPoolTokens[tokenIndex];
+            uint256 amountTokenDesired = processedLiquidityPoolData.tokensAmounts[tokenIndex];
+            uint256 amountETHDesired = processedLiquidityPoolData.tokensAmounts[1 - tokenIndex];
             (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
-                1,
-                1,
+                processedLiquidityPoolData.minAmounts[tokenIndex],
+                processedLiquidityPoolData.minAmounts[1 - tokenIndex],
                 processedLiquidityPoolData.receiver,
                 block.timestamp + 10000
             );

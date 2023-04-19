@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import "./AMM.sol";
-import "../../util/WETH.sol";
+import "../../util/IWETH.sol";
 
 interface BPool {
 
@@ -221,14 +221,14 @@ contract BalancerAMMV1 is AMM {
         return address(0);
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address) internal virtual override returns(uint256, uint256[] memory, address, address[] memory) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address, uint256[] memory) internal virtual override returns(uint256, uint256[] memory, address, address[] memory) {
         revert("Balancer");
     }
 
     function _addLiquidity(ProcessedLiquidityPoolData memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
             if(data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress) {
-                WETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
+                IWETH(_ethereumAddress).deposit{value : data.tokensAmounts[i]}();
             }
             _safeApprove(data.liquidityPoolTokens[i], data.liquidityPoolAddress, data.tokensAmounts[i]);
         }
@@ -245,7 +245,7 @@ contract BalancerAMMV1 is AMM {
                 _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IERC20(data.liquidityPoolTokens[i]).balanceOf(address(this)));
             } else {
                 if(!_multi) {
-                    WETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
+                    IWETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
                     (bool result,) = data.receiver.call{value: tokensAmounts[i]}("");
                     require(result, "ETH transfer failed");
                 }
@@ -255,17 +255,17 @@ contract BalancerAMMV1 is AMM {
 
     function _swapLiquidity(ProcessedSwapData memory data) internal override virtual returns(uint256 outputAmount) {
         if(data.enterInETH) {
-            WETH(_ethereumAddress).deposit{value : data.amount}();
+            IWETH(_ethereumAddress).deposit{value : data.amount}();
         }
         outputAmount = data.amount;
         for(uint256 i = 0; i < data.liquidityPoolAddresses.length; i++) {
             address inputToken = i == 0 ? data.enterInETH ? _ethereumAddress : data.inputToken : data.path[i - 1];
             _safeApprove(inputToken, data.liquidityPoolAddresses[i], outputAmount);
             address outputToken = i != data.liquidityPoolAddresses.length - 1 || !data.exitInETH ? data.path[i] : _ethereumAddress;
-            (outputAmount, ) = BPool(data.liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, 1, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
+            (outputAmount, ) = BPool(data.liquidityPoolAddresses[i]).swapExactAmountIn(inputToken, outputAmount, outputToken, data.minAmount, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         }
         if(data.exitInETH) {
-            WETH(_ethereumAddress).withdraw(outputAmount);
+            IWETH(_ethereumAddress).withdraw(outputAmount);
             (bool result,) = data.receiver.call{value:outputAmount}("");
             require(result, "ETH transfer failed");
         } else {
