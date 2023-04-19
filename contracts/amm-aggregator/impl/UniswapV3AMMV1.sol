@@ -65,7 +65,10 @@ contract UniswapV3AMMV1 is AMM {
         }
     }
 
-    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata, address[] calldata path) view public virtual override returns(uint256[] memory) {
+    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+    }
+
+    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
     }
 
     function _getLiquidityPoolOperator(address, address[] memory) internal override virtual view returns(address) {
@@ -76,7 +79,7 @@ contract UniswapV3AMMV1 is AMM {
         return nonfungiblePositionManagerAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address liquidityPoolAddress, address[] memory orderedTokens) {
     }
 
     function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {

@@ -188,6 +188,50 @@ abstract contract AMM is IAMM {
         _flushBackAndClear();
     }
 
+    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, address[] calldata liquidityPoolAddresses, address[] calldata path) view external override returns(uint256[] memory values) {
+        require(path.length > 1 && liquidityPoolAddresses.length == (path.length - 1), "data");
+        uint256 realValue = value;
+        if(valueIsLiquidityPool) {
+            realValue = 0;
+            (uint256[] memory realValues, address[] memory tokens) = byLiquidityPoolAmount(liquidityPoolAddresses[0], value);
+            address tokenAddress = path[0];
+            for(uint256 i = 0; i < tokens.length; i++) {
+                if(tokens[i] == tokenAddress) {
+                    realValue = realValues[i];
+                    break;
+                }
+            }
+        }
+        require(realValue > 0, "value");
+        values = _getSwapOutput(value, liquidityPoolAddresses, path);
+        require(values.length == path.length, "values");
+        values[0] = realValue;
+    }
+
+    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal virtual returns(uint256[] memory values);
+
+    function getSwapInput(uint256 value, bool valueIsLiquidityPool, address[] calldata liquidityPoolAddresses, address[] calldata path) view external returns(uint256[] memory values) {
+        require(path.length > 1 && liquidityPoolAddresses.length == (path.length - 1), "data");
+        uint256 realValue = value;
+        if(valueIsLiquidityPool) {
+            realValue = 0;
+            (uint256[] memory realValues, address[] memory tokens) = byLiquidityPoolAmount(liquidityPoolAddresses[0], value);
+            address tokenAddress = path[path.length - 1];
+            for(uint256 i = 0; i < tokens.length; i++) {
+                if(tokens[i] == tokenAddress) {
+                    realValue = realValues[i];
+                    break;
+                }
+            }
+        }
+        require(realValue > 0, "value");
+        values = _getSwapInput(value, liquidityPoolAddresses, path);
+        require(values.length == path.length, "values");
+        values[values.length - 1] = realValue;
+    }
+
+    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal virtual returns(uint256[] memory values);
+
     function swapLiquidity(SwapData memory swapData) payable public virtual override returns(uint256 outputAmount) {
         ProcessedSwapData memory processedSwapData = _processSwapData(swapData);
         _transferToMeAndCheckAllowance(processedSwapData.inputToken == _ethereumAddress && processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken, processedSwapData.amount, processedSwapData.liquidityPoolOperator);

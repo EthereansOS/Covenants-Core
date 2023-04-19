@@ -74,11 +74,19 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata liquidityPoolAddresses, address[] calldata path) view public virtual override returns(uint256[] memory realAmounts) {
-        realAmounts = new uint256[](path.length + 1);
-        realAmounts[0] = tokenAmount;
-        for(uint256 i = 0 ; i < path.length; i++) {
-            realAmounts[i + 1] = Mooniswap(liquidityPoolAddresses[i]).getReturn(i == 0 ? tokenAddress : path[i - 1], path[i], realAmounts[i]);
+    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+        values = new uint256[](path.length);
+        values[0] = value;
+        for(uint256 i = 1 ; i < path.length; i++) {
+            values[i] = Mooniswap(liquidityPoolAddresses[i - 1]).getReturn(path[i - 1], path[i], values[i - 1]);
+        }
+    }
+
+    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+        values = new uint256[](path.length);
+        values[values.length - 1] = value;
+        for(uint256 i = values.length - 2 ; i >= 0; i--) {
+            values[i] = Mooniswap(liquidityPoolAddresses[i]).getReturn(path[i + 1], path[i], values[i + 1]);
         }
     }
 

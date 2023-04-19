@@ -112,9 +112,14 @@ contract AMMAggregator is IAMMAggregator {
         return IAMM(amm).removeLiquidityBatch(liquidityPoolData);
     }
 
-    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata liquidityPoolAddresses, address[] calldata path) view external override returns(uint256[] memory) {
+    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, address[] calldata liquidityPoolAddresses, address[] calldata path) view external override returns(uint256[] memory values) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolAddresses[0]);
-        return IAMM(amm).getSwapOutput(tokenAddress, tokenAmount, liquidityPoolAddresses, path);
+        return IAMM(amm).getSwapOutput(value, valueIsLiquidityPool, liquidityPoolAddresses, path);
+    }
+
+    function getSwapInput(uint256 value, bool valueIsLiquidityPool, address[] calldata liquidityPoolAddresses, address[] calldata path) view external returns(uint256[] memory values) {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolAddresses[0]);
+        return IAMM(amm).getSwapInput(value, valueIsLiquidityPool, liquidityPoolAddresses, path);
     }
 
     function swapLiquidity(SwapData calldata swapData) external override payable returns(uint256) {

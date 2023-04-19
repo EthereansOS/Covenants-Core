@@ -198,20 +198,39 @@ contract BalancerAMMV1 is AMM {
         return (liquidityPoolAmount, tokensAmounts, liquidityPoolAddress, orderedTokens);
     }
 
-    function getSwapOutput(address tokenAddress, uint256 tokenAmount, address[] calldata liquidityPoolAddresses, address[] calldata path) view public virtual override returns(uint256[] memory realAmounts) {
-        realAmounts = new uint256[](path.length + 1);
-        realAmounts[0] = tokenAmount;
-        for(uint256 i = 0 ; i < path.length; i++) {
-            BPool bPool = BPool(liquidityPoolAddresses[i]);
-            address tokenIn = i == 0 ? tokenAddress : path[i - 1];
-            tokenIn = tokenIn == address(0) ? _ethereumAddress : tokenIn;
+    function _getSwapOutput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+        values = new uint256[](path.length);
+        values[0] = value;
+        for(uint256 i = 1 ; i < values.length; i++) {
+            address tokenIn = path[i - 1] == address(0) ? _ethereumAddress : path[i - 1];
             address tokenOut = path[i] == address(0) ? _ethereumAddress : path[i];
-            realAmounts[i + 1] = bPool.calcOutGivenIn(
-                IERC20(tokenIn).balanceOf(liquidityPoolAddresses[i]),
+            address liquidityPoolAddress = liquidityPoolAddresses[i - 1];
+            BPool bPool = BPool(liquidityPoolAddress);
+            values[i] = bPool.calcOutGivenIn(
+                IERC20(tokenIn).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenIn),
-                IERC20(tokenOut).balanceOf(liquidityPoolAddresses[i]),
+                IERC20(tokenOut).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenOut),
-                realAmounts[i],
+                values[i - 1],
+                bPool.getSwapFee()
+            );
+        }
+    }
+
+    function _getSwapInput(uint256 value, address[] calldata liquidityPoolAddresses, address[] calldata path) view internal override returns(uint256[] memory values) {
+        values = new uint256[](path.length);
+        values[values.length - 1] = value;
+        for(uint256 i = values.length - 2 ; i >= 0; i--) {
+            address tokenIn = path[i] == address(0) ? _ethereumAddress : path[i];
+            address tokenOut = path[i + 1] == address(0) ? _ethereumAddress : path[i + 1];
+            address liquidityPoolAddress = liquidityPoolAddresses[i];
+            BPool bPool = BPool(liquidityPoolAddress);
+            values[i] = bPool.calcInGivenOut(
+                IERC20(tokenIn).balanceOf(liquidityPoolAddress),
+                bPool.getNormalizedWeight(tokenIn),
+                IERC20(tokenOut).balanceOf(liquidityPoolAddress),
+                bPool.getNormalizedWeight(tokenOut),
+                values[i + 1],
                 bPool.getSwapFee()
             );
         }
