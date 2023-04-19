@@ -96,7 +96,7 @@ async function compileContracts() {
     // DFOBasedFarmExtensionFactory = await compile('farming/dfo/DFOBasedFarmExtensionFactory');
     // DFOBasedFarmExtension = await compile('farming/dfo/DFOBasedFarmExtension');
 
-    UniswapV2AMMV1 = misc.compileAmmAggregatorContractImpl("UniswapV2AMMV1");
+    UniswapV2AMMV1 = misc.compileAmmAggregatorContractImpl("UniswapV2BasedAMMV1");
 }
 
 

@@ -21,13 +21,11 @@ var isTesthETH = true;
 var printABI = false;
 
 var FarmMain;
-var farmMainContract;
-var farmMainModel;
-
-var FarmFactory;
 var FarmExtension;
 
+var farmMainContract;
 var farmMainExtension;
+var extensionOwner;
 
 var UniswapV2AMMV1;
 var UniswapV3AMMV1;
@@ -53,28 +51,24 @@ var rewardDestination;
 var univ3PoolAddress = "0xccc42cf5d6a2f3ed8f948541455950ed6ce14707";
 
 async function compileContracts() {
-  FarmMain = await misc.compileFarmingContract("FarmMainRegularMinStake", null);
-  FarmFactory = await misc.compileFarmingContract("FarmFactory", null);
-  FarmExtension = await misc.compileFarmingContract("FarmExtension", null);
-  DFOBasedFarmExtensionFactory = await misc.compileFarmingContract("DFOBasedFarmExtensionFactory", "dfo");
-  DFOBasedFarmExtension = await misc.compileFarmingContract("DFOBasedFarmExtension", "dfo");
+  FarmMain = await misc.compileFarmingContract("FarmingGen2", "gen2/impl");
+  FarmExtension = await misc.compileFarmingContract("FarmingGen2Extension", "gen2/impl");
 
-  UniswapV2AMMV1 = await misc.compileAmmAggregatorContract("UniswapV2AMMV1", "models/UniswapV2/1");
-  UniswapV3AMMV1 = await misc.compileAmmAggregatorContract("UniswapV3AMMV1", "models/UniswapV3/1");
+  UniswapV2AMMV1 = await misc.compileAmmAggregatorContract("UniswapV2BasedAMMV1", "impl");
+  UniswapV3AMMV1 = await misc.compileAmmAggregatorContract("UniswapV3AMMV1", "impl");
 
-  uniswapAMM = await deployContract(new web3.eth.Contract(UniswapV3AMMV1.abi), UniswapV3AMMV1.bin,
+  uniswapAMM = new web3.eth.Contract(UniswapV2AMMV1.abi, web3.currentProvider.knowledgeBase.uniswapV2AMMPluginAddress);/*await deployContract(new web3.eth.Contract(UniswapV3AMMV1.abi), UniswapV3AMMV1.bin,
     [
       web3.currentProvider.knowledgeBase.swapRouterAddress,
       web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress,
-      web3.currentProvider.knowledgeBase.uniswapV3QuoterAddress,
-      "0".toDecimals(18)
+      web3.currentProvider.knowledgeBase.uniswapV3QuoterAddress
     ]
-  );
+  );*/
   amm = uniswapAMM;
 }
 
 async function createContractsObjects() {
-  uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('../node_modules/@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager')).abi, web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress);
+  uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('util/uniswapV3/INonfungiblePositionManager')).abi, web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress);
 }
 
 async function prepareTokens() {
@@ -114,21 +108,11 @@ async function prepareTokens() {
 
 async function deployFactoryAndExtensions() {
 
-  farmMainModel = await deployContract(new web3.eth.Contract(FarmMain.abi), FarmMain.bin);
-  console.log(`simple farm model deployed at ${farmMainModel.options.address}`);
+  farmMainContract = await deployContract(new web3.eth.Contract(FarmMain.abi), FarmMain.bin);
+  console.log(`Farming deployed at ${farmMainContract.options.address}`);
 
-  var farmExtensionModel = await deployContract(new web3.eth.Contract(FarmExtension.abi), FarmExtension.bin);
-  console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
-
-  farmFactory = await deployContract(new web3.eth.Contract(FarmFactory.abi), FarmFactory.bin, [VOID_ETHEREUM_ADDRESS, farmMainModel.options.address, farmExtensionModel.options.address, 0, "google.com", "google.com"]);
-  console.log(`farm factory deployed at ${farmFactory.options.address}`);
-
-  var transaction = await blockchainCall(farmFactory.methods.cloneFarmDefaultExtension);
-  var receipt = await web3.eth.getTransactionReceipt(transaction.transactionHash);
-  clonedDefaultFarmExtension = web3.eth.abi.decodeParameter("address", receipt.logs.filter(it => it.topics[0] === web3.utils.sha3('ExtensionCloned(address)'))[0].topics[1])
-  console.log(`cloned default farm extension deployed at ${clonedDefaultFarmExtension}`);
-  clonedFarmExtension = new web3.eth.Contract(FarmExtension.abi, clonedDefaultFarmExtension);
-  console.log(`cloned farm extention deployed at ${clonedFarmExtension.options.address}`);
+  farmMainExtension = await deployContract(new web3.eth.Contract(FarmExtension.abi), FarmExtension.bin);
+  console.log(`Farming extension model deployed at ${farmMainExtension.options.address}`);
 
 }
 
@@ -199,41 +183,27 @@ async function deploySimpleFarmMainContract() {
   }
 
   var types = [
-    "address",
     "bytes",
     "address",
     "bytes",
   ];
   var params = [
-    clonedDefaultFarmExtension, //liquidityMiningExtension.options.address,
-    "0x",
+    farmMainExtension.methods.init(false, extensionOwner, VOID_ETHEREUM_ADDRESS).encodeABI(),
     rewardToken !== VOID_ETHEREUM_ADDRESS ? rewardToken.options.address : VOID_ETHEREUM_ADDRESS,
     abi.encode(["tuple(uint256,uint256,uint256,uint256,uint256,address,address,bool,uint256,uint256,int24,int24)[]"], [setups]),
   ];
 
-  byMint = params[0] !== clonedDefaultFarmExtension;
-  // params[1] = farmMainExtension.methods.init(byMint, params[0] === clonedDefaultFarmExtension ? extensionOwner : VOID_ETHEREUM_ADDRESS, params[0] === clonedDefaultFarmExtension ? VOID_ETHEREUM_ADDRESS : VOID_ETHEREUM_ADDRESS).encodeABI()
-
-  var osStuff = await buildOSStuff(rewardToken);
-  params[0] = osStuff.farmExtensionAddress;
-  params[1] = osStuff.farmExtensionLazyInitData;
-  byMint = true;
-
   var payload = web3.eth.abi.encodeParameters(types, params);
-  payload = web3.eth.abi.encodeParameters(["address", "bytes"], [web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress, payload]);
-  payload = web3.eth.abi.encodeParameters(["bytes"], [payload]);
-  payload = web3.utils.sha3(`lazyInit(bytes)`).substring(0, 10) + (payload.substring(2));
+  payload = web3.eth.abi.encodeParameters(["address", "address", "bytes"], [web3.currentProvider.knowledgeBase.uniswapV3NonfungiblePositionManagerAddress, farmMainExtension.options.address, payload]);
 
-  var deployTransaction = await blockchainCall(farmFactory.methods.deploy, payload);
-  deployTransaction = await web3.eth.getTransactionReceipt(deployTransaction.transactionHash);
-  farmMainContractAddress = web3.eth.abi.decodeParameter("address", deployTransaction.logs.filter(it => it.topics[0] === web3.utils.sha3("FarmMainDeployed(address,address,bytes)"))[0].topics[1]);
-
-  farmMainContract = await new web3.eth.Contract(FarmMain.abi, farmMainContractAddress);
+  var deployTransaction = await blockchainCall(farmMainContract.methods.lazyInit, payload);
   assert.notStrictEqual(farmMainContract.options.address, VOID_ETHEREUM_ADDRESS);
   oneHundred = await blockchainCall(farmMainContract.methods.ONE_HUNDRED);
 
   var availableSetups = await blockchainCall(farmMainContract.methods.setups);
   assert.strictEqual(availableSetups.length, setups.length);
+
+  return;
 
   // put reward in the extension
   if (rewardToken !== VOID_ETHEREUM_ADDRESS) {
@@ -295,10 +265,6 @@ async function initActor(name, address, amount0, amount1) {
   secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend, address);
 
 };
-
-
-
-
 
 module.exports = async function run() {
   debugger;

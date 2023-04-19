@@ -25,7 +25,7 @@
     "nervProxyAddress" : "0x9D203E1fca3F708b344c8E13d562d4Dd9A92782b",
     "itemProxyAddress" : "0x7cB2Aa86fC0F3dA708783168BFd25B80F045d183",
     "covenantsProxyAddress" : "0xeFAa6370A2ebdC47B12DBfB5a07F91A3182B5684",
-    "uniswapAmmAddress": "0xFC1665BD717dB247CDFB3a08b1d496D1588a6340",
+    "uniswapV2AMMPluginAddress": "0xFC1665BD717dB247CDFB3a08b1d496D1588a6340",
     "mnemonicTest" : "feed menu diet maple smart slim enjoy neglect unaware cup dutch palm",
     "prestoAddress" : "0x3660c73E030C497cccbE8aaabdc7431fAEB6E495",
     "dynamicUriResolverAddress" : "0x3ff777884412c7CE8A1DA679B4B0CD54f720ab2e",

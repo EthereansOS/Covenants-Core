@@ -18,12 +18,11 @@ contract UniswapV3AMMV1 is AMM {
     address public immutable swapRouterAddress;
     address public immutable nonfungiblePositionManagerAddress;
     address public immutable quoterAddress;
-    address public immutable wethAddress;
 
-    constructor(address _swapRouterAddress, address _nonfungiblePositionManagerAddress, address _quoterAddress) AMM("UniswapV3", 1, wethAddress = INonfungiblePositionManager(nonfungiblePositionManagerAddress = _nonfungiblePositionManagerAddress).WETH9(), 2, true) {
-        factoryAddress = INonfungiblePositionManager(nonfungiblePositionManagerAddress).factory();
-        swapRouterAddress = swapRouterAddress;
-        quoterAddress = quoterAddress;
+    constructor(address _swapRouterAddress, address _nonfungiblePositionManagerAddress, address _quoterAddress) AMM("UniswapV3", 1, INonfungiblePositionManager(_nonfungiblePositionManagerAddress).WETH9(), 2, true) {
+        factoryAddress = INonfungiblePositionManager(nonfungiblePositionManagerAddress = _nonfungiblePositionManagerAddress).factory();
+        swapRouterAddress = _swapRouterAddress;
+        quoterAddress = _quoterAddress;
     }
 
     function byLiquidityPool(address liquidityPoolAddress) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
@@ -36,7 +35,7 @@ contract UniswapV3AMMV1 is AMM {
             return(0, new uint256[](0), new address[](0));
         }
 
-        liquidityPoolAmount = pool.liquidity();
+        liquidityPoolAmount = 0;
 
         tokensAmounts = new uint256[](2);
         (uint256 amountA, uint256 amountB) = (0, 0);
@@ -146,17 +145,10 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _calculateAmountOutMinimum(bytes memory data) private returns(uint256) {
-        if(_workingSlippageFree == 0) {
-            _workingSlippageFree = slippageFee;
-            return 0;
-        }
-        (bool result, bytes memory resultData) = quoterAddress.call(data);
-        return _calculateAndResetSlippage(result ? abi.decode(resultData, (uint256)) : 0);
+        return 0;
     }
 
     function _calculateAndResetSlippage(uint256 amount) private returns(uint256 slippageAmount) {
-        slippageAmount = _workingSlippageFree == 0 || amount == 0 ? 0 : (amount - ((amount * ((_workingSlippageFree * 1e18) / ONE_HUNDRED)) / 1e18));
-        slippageAmount = slippageAmount > amount ? 0 : slippageAmount;
-        _workingSlippageFree = slippageFee;
+        return 0;
     }
 }
