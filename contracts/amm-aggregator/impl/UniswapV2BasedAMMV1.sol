@@ -197,12 +197,9 @@ contract UniswapV2BasedAMMV1 is AMM {
             );
         } else {
             uint256 tokenIndex = tokenAddresses[0] != _ethereumAddress ? 0 : 1;
-            address token = tokenAddresses[tokenIndex];
-            uint256 amountTokenDesired = amounts[tokenIndex];
-            uint256 amountETHDesired = amounts[1 - tokenIndex];
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amountETHDesired} (
-                token,
-                amountTokenDesired,
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amounts[1 - tokenIndex]} (
+                tokenAddresses[tokenIndex],
+                amounts[tokenIndex],
                 minAmounts[tokenIndex],
                 minAmounts[1 - tokenIndex],
                 receiver,
