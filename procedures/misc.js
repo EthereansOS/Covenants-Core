@@ -27,7 +27,13 @@ function deployUniswapV2Factory() {
     return uniswapV2Factory;
 }
 
-function deployUniswapV3Pool(univ3PoolAddress) {
+async function deployWethTokenWithUniswapV2(uniswapRouter) {
+    var wethToken = new web3.eth.Contract(web3.currentProvider.knowledgeBase.IERC20ABI, await blockchainCall(uniswapRouter.methods.WETH));
+    assert.notStrictEqual(wethToken, undefined);
+    return wethToken;
+}
+
+function deployWethToken(univ3PoolAddress) {
     var uniswapV3Pool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.UniswapV3PoolABI, univ3PoolAddress);
     assert.notStrictEqual(uniswapV3Pool, undefined);
     return uniswapV3Pool;
@@ -43,6 +49,12 @@ function deployEthItemOrchestrator() {
     var ethItemOrchestrator = new web3.eth.Contract(web3.currentProvider.knowledgeBase.ethItemOrchestratorABI, web3.currentProvider.knowledgeBase.ethItemOrchestratorAddress);
     assert.notStrictEqual(ethItemOrchestrator, undefined);
     return ethItemOrchestrator;
+}
+
+function deployUniswapV3Pool(univ3PoolAddress) {
+    var uniswapV3Pool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.UniswapV3PoolABI, univ3PoolAddress);
+    assert.notStrictEqual(uniswapV3Pool, undefined);
+    return uniswapV3Pool;
 }
 
 function printContractABI(contract) {
@@ -70,39 +82,11 @@ async function compileAmmAggregatorContract(filename, subfolders) {
     return contract;
 }
 
-async function buyForETH(token, amount, receiver, ammPlugin) {
-    var value = toDecimals(amount.toString(), '18');
-    if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
-        return await sendBlockchainTransaction(
-            web3.currentProvider,
-            accounts[0],
-            web3.currentProvider.knowledgeBase.wethTokenAddress,
-            web3.utils.sha3("deposit()").substring(0, 10),
-            value
-        );
-    }
-    // if (ammPlugin || amm) {
-    //     ammPlugin = ammPlugin || amm;
-    //     var ethereumAddress = (await ammPlugin.methods.data().call())[0];
-    //     var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
-    //         ethereumAddress,
-    //         token.options.address
-    //     ]).call())[2];
-    //     if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
-    //         return;
-    //     }
-    //     await blockchainCall(ammPlugin.methods.swapLiquidity, {
-    //         amount: value,
-    //         enterInETH: true,
-    //         exitInETH: false,
-    //         liquidityPoolAddresses: [liquidityPoolAddress],
-    //         path: [token.options.address],
-    //         inputToken: ethereumAddress,
-    //         receiver: receiver || VOID_ETHEREUM_ADDRESS
-    //     }, { value: value });
-    // }
-
+async function compileAmmAggregatorContractImpl(filename) {
+    const contract = await compile("amm-aggregator/impl/" + filename);
+    return contract;
 }
+
 
 function numberToString(num, locale) {
     if (num === undefined || num === null) {
@@ -138,10 +122,12 @@ function numberToString(num, locale) {
 }
 
 
+
+
 module.exports = {
     TIME_SLOTS_IN_SECONDS,
-    buyForETH,
     compileAmmAggregatorContract,
+    compileAmmAggregatorContractImpl,
     compileFixedInflationContract,
     compileFarmingContract,
     deployEthItemOrchestrator,
@@ -149,6 +135,7 @@ module.exports = {
     deployUniswapV2Factory,
     deployUniswapV2Router,
     deployUniswapV3Pool,
+    deployWethTokenWithUniswapV2,
     numberToString,
     printContractABI,
 };
