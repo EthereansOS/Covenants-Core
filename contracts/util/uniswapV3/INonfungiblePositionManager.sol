@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-interface INonfungiblePositionManager {
-    function WETH9() external view returns(address);
-    function multicall(bytes[] calldata data) external payable returns (bytes[] memory results);
-    function unwrapWETH9(uint256 amountMinimum, address recipient) external payable;
-    function refundETH() external payable;
-    function sweepToken(
-        address token,
-        uint256 amountMinimum,
-        address recipient
-    ) external payable;
+import "./IMulticall.sol";
+import "./IPeripheryImmutableState.sol";
+import "./IPeripheryPayments.sol";
+
+interface INonfungiblePositionManager is IMulticall, IPeripheryImmutableState, IPeripheryPayments {
+
     function safeTransferFrom(
         address from,
         address to,

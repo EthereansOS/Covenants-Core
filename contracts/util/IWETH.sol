@@ -3,8 +3,8 @@ pragma solidity ^0.8.0;
 
 import "./IERC20.sol";
 
-interface WETH is IERC20 {
+interface IWETH is IERC20 {
     function deposit() external payable;
 
-    function withdraw(uint wad) external;
+    function withdraw(uint256) external;
 }
