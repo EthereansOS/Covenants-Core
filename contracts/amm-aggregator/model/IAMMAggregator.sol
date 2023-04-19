@@ -15,11 +15,11 @@ interface IAMMAggregator is IAMM {
 
     function add(address[] memory ammsToAdd) external;
 
-    function findByLiquidityPool(address liquidityPoolAddress) external view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokensAddresses, address amm);
+    function findByLiquidityPool(uint256 liquidityPoolId) external view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokensAddresses, address amm);
 
-    function info(address liquidityPoolAddress) external view returns(string memory name, uint256 version, address amm);
+    function info(uint256 liquidityPoolId) external view returns(string memory name, uint256 version, address amm);
 
-    function data(address liquidityPoolAddress) external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, address amm);
+    function data(uint256 liquidityPoolId) external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, address amm);
 
     event AMM(address indexed amm, string name, uint256 version);
 }
