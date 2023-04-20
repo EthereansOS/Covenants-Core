@@ -2,14 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "./IRoutines.sol";
+import "@ethereansos/swissknife/contracts/generic/model/ILazyInitCapableElement.sol";
 
-interface IRoutinesExtension {
-
-    function init(address host) external;
-
-    function setHost(address host) external;
-
-    function data() external view returns(address RoutinesContract, address host);
+interface IRoutinesExtension is ILazyInitCapableElement {
 
     function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) external;
 

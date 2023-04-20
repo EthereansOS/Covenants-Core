@@ -1,6 +1,8 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "@ethereansos/swissknife/contracts/generic/model/ILazyInitCapableElement.sol";
+
 struct RoutinesEntry {
     string name;
     uint256 eventInterval;
@@ -15,16 +17,17 @@ struct RoutinesOperation {
     bool inputTokenAmountIsByMint;
 
     address ammPlugin;
-    address[] liquidityPoolAddresses;
+    uint256[] liquidityPoolIds;
     address[] swapPath;
     bool enterInETH;
     bool exitInETH;
+    bytes additionalData;
 
     address[] receivers;
     uint256[] receiversPercentages;
 }
 
-interface IRoutines {
+interface IRoutines is ILazyInitCapableElement {
     function entry() external view returns(RoutinesEntry memory, RoutinesOperation[] memory);
 
     function setEntry(RoutinesEntry calldata entryData, RoutinesOperation[] memory operations) external;

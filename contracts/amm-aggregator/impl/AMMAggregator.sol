@@ -88,7 +88,7 @@ contract AMMAggregator is IAMMAggregator {
         return IAMM(amm).byTokenAmount(liquidityPoolId, tokenAddress, tokenAmount);
     }
 
-    function createLiquidityPoolAndAddLiquidity(address[] calldata, uint256[] calldata, bool, address, uint256[] calldata) external override payable returns(uint256, uint256[] memory, uint256, address[] memory) {
+    function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData calldata) external payable returns(uint256, uint256[] memory, uint256, address[] memory) {
         revert("Impossibru");
     }
 
@@ -112,12 +112,12 @@ contract AMMAggregator is IAMMAggregator {
         return IAMM(amm).removeLiquidityBatch(liquidityPoolData);
     }
 
-    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256[] memory values) {
+    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolIds[0]);
         return IAMM(amm).getSwapOutput(value, valueIsLiquidityPool, liquidityPoolIds, path);
     }
 
-    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256[] memory values) {
+    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolIds[0]);
         return IAMM(amm).getSwapInput(value, valueIsLiquidityPool, liquidityPoolIds, path);
     }

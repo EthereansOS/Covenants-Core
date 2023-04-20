@@ -2,9 +2,16 @@
 pragma solidity ^0.8.0;
 
 import "./AMM.sol";
-import "../../util/IWETH.sol";
 
-interface BPool is IERC20 {
+import { IERC20Full } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
+
+interface IWETH is IERC20Full {
+    function deposit() external payable;
+
+    function withdraw(uint256) external;
+}
+
+interface BPool is IERC20Full {
 
     function isPublicSwap()
         external view
@@ -160,7 +167,11 @@ contract BalancerAMMV1 is AMM {
     constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
     }
 
-    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
+        return address(0);
+    }
+
+    function _getSwapOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
         return address(0);
     }
 
@@ -170,7 +181,7 @@ contract BalancerAMMV1 is AMM {
 
         BPool pool = BPool(liquidityPoolAddress);
 
-        liquidityPoolAmount = IERC20(liquidityPoolAddress).totalSupply();
+        liquidityPoolAmount = IWETH(liquidityPoolAddress).totalSupply();
 
         tokenAddresses = pool.getFinalTokens();
 
@@ -200,9 +211,9 @@ contract BalancerAMMV1 is AMM {
         return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
     }
 
-    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256) {
         address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
-        values = new uint256[](path.length);
+        uint256[] memory values = new uint256[](path.length);
         values[0] = value;
         for(uint256 i = 1 ; i < values.length; i++) {
             address tokenIn = path[i - 1] == address(0) ? _ethereumAddress : path[i - 1];
@@ -210,19 +221,20 @@ contract BalancerAMMV1 is AMM {
             address liquidityPoolAddress = liquidityPoolAddresses[i - 1];
             BPool bPool = BPool(liquidityPoolAddress);
             values[i] = bPool.calcOutGivenIn(
-                IERC20(tokenIn).balanceOf(liquidityPoolAddress),
+                IWETH(tokenIn).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenIn),
-                IERC20(tokenOut).balanceOf(liquidityPoolAddress),
+                IWETH(tokenOut).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenOut),
                 values[i - 1],
                 bPool.getSwapFee()
             );
         }
+        return values[values.length - 1];
     }
 
-    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256[] memory values) {
+    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256) {
         address[] memory liquidityPoolAddresses = _toAddresses(liquidityPoolIds);
-        values = new uint256[](path.length);
+        uint256[] memory values = new uint256[](path.length);
         values[values.length - 1] = value;
         for(uint256 i = values.length - 2 ; i >= 0; i--) {
             address tokenIn = path[i] == address(0) ? _ethereumAddress : path[i];
@@ -230,21 +242,22 @@ contract BalancerAMMV1 is AMM {
             address liquidityPoolAddress = liquidityPoolAddresses[i];
             BPool bPool = BPool(liquidityPoolAddress);
             values[i] = bPool.calcInGivenOut(
-                IERC20(tokenIn).balanceOf(liquidityPoolAddress),
+                IWETH(tokenIn).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenIn),
-                IERC20(tokenOut).balanceOf(liquidityPoolAddress),
+                IWETH(tokenOut).balanceOf(liquidityPoolAddress),
                 bPool.getNormalizedWeight(tokenOut),
                 values[i + 1],
                 bPool.getSwapFee()
             );
         }
+        return values[0];
     }
 
-    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool) internal virtual view override returns(address) {
+    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
         return address(0);
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory, uint256[] memory, bool, address, address, uint256[] memory) internal virtual override returns(uint256, uint256[] memory, uint256, address[] memory) {
+    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory) internal virtual override returns(uint256, uint256[] memory, uint256, address[] memory) {
         revert("Balancer");
     }
 
@@ -266,10 +279,10 @@ contract BalancerAMMV1 is AMM {
         for(uint256 i = 0; i < data.tokensAmounts.length; i++) {
             bool eth = data.involvingETH && data.liquidityPoolTokens[i] == _ethereumAddress;
             if(!eth) {
-                _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IERC20(data.liquidityPoolTokens[i]).balanceOf(address(this)));
+                _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IWETH(data.liquidityPoolTokens[i]).balanceOf(address(this)));
             } else {
                 if(!_multi) {
-                    IWETH(_ethereumAddress).withdraw(tokensAmounts[i] = IERC20(_ethereumAddress).balanceOf(address(this)));
+                    IWETH(_ethereumAddress).withdraw(tokensAmounts[i] = IWETH(_ethereumAddress).balanceOf(address(this)));
                     (bool result,) = data.receiver.call{value: tokensAmounts[i]}("");
                     require(result, "ETH transfer failed");
                 }

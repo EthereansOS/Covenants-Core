@@ -1,14 +1,26 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+struct LiquidityPoolCreationData {
+    address[] tokenAddresses;
+    uint256[] amounts;
+    bool involvingETH;
+    bytes additionalData;
+    uint256[] minAmounts;
+    address receiver;
+    uint256 deadline;
+}
+
 struct LiquidityPoolData {
     uint256 liquidityPoolId;
     uint256 amount;
     address tokenAddress;
     bool amountIsLiquidityPool;
     bool involvingETH;
-    address receiver;
+    bytes additionalData;
     uint256[] minAmounts;
+    address receiver;
+    uint256 deadline;
 }
 
 struct SwapData {
@@ -18,8 +30,10 @@ struct SwapData {
     address[] path;
     address inputToken;
     uint256 amount;
-    address receiver;
+    bytes additionalData;
     uint256 minAmount;
+    address receiver;
+    uint256 deadline;
 }
 
 interface IAMM {
@@ -42,7 +56,7 @@ interface IAMM {
 
     function byTokenAmount(uint256 liquidityPoolId, address tokenAddress, uint256 tokenAmount) external view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens);
 
-    function createLiquidityPoolAndAddLiquidity(address[] calldata tokenAddresses, uint256[] calldata amounts, bool involvingETH, address receiver, uint256[] calldata minAmounts) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
+    function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData calldata liquidityPoolCreationData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
 
     function addLiquidity(LiquidityPoolData calldata liquidityPoolData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
     function addLiquidityBatch(LiquidityPoolData[] calldata liquidityPoolData) external payable returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory liquidityPoolTokenAmounts, uint256[] memory liquidityPoolIds, address[][] memory liquidityPoolTokens);
@@ -50,8 +64,8 @@ interface IAMM {
     function removeLiquidity(LiquidityPoolData calldata liquidityPoolData) external returns(uint256 removedLiquidityPoolAmount, uint256[] memory removedLiquidityPoolTokenAmounts, address[] memory liquidityPoolTokens);
     function removeLiquidityBatch(LiquidityPoolData[] calldata liquidityPoolData) external returns(uint256[] memory removedLiquidityPoolAmounts, uint256[][] memory removedLiquidityPoolTokenAmounts, address[][] memory liquidityPoolTokens);
 
-    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external returns(uint256[] memory values);
-    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external returns(uint256[] memory values);
+    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external returns(uint256);
+    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external returns(uint256);
 
     function swapLiquidity(SwapData calldata swapData) external payable returns(uint256 receivedValue);
     function swapLiquidityBatch(SwapData[] calldata swapData) external payable returns(uint256[] memory receivedValues);

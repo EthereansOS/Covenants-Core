@@ -2,50 +2,32 @@
 pragma solidity ^0.8.0;
 
 import "../model/IRoutinesExtension.sol";
-import "../../util/IERC20.sol";
-import "../../util/IERC20Mintable.sol";
-import "../../util/IERC20Burnable.sol";
+import "@ethereansos/swissknife/contracts/generic/impl/LazyInitCapableElement.sol";
+import { IERC20Full } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
-contract RoutinesExtension is IRoutinesExtension {
-
-    address private _host;
-
-    address private _RoutinesContract;
+contract RoutinesExtension is IRoutinesExtension, LazyInitCapableElement {
 
     bool public override active;
 
-    modifier RoutinesOnly() {
-        require(_RoutinesContract == msg.sender, "Unauthorized");
-        _;
-    }
-
-    modifier hostOnly() {
-        require(_host == msg.sender, "Unauthorized");
-        _;
-    }
+    constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
     receive() external payable {
     }
 
-    function init(address host) override public virtual {
-        require(_host == address(0), "Already init");
-        require((_host = host) != address(0), "blank host");
-        _RoutinesContract = msg.sender;
+    function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory) {
+        require(host != address(0), "host");
+        return "";
     }
 
-    function setHost(address host) public virtual override hostOnly {
-        _host = host;
+    function _supportsInterface(bytes4 selector) internal override view returns(bool) {
+
     }
 
-    function data() view public override returns(address RoutinesContract, address host) {
-        return(_RoutinesContract, _host);
-    }
-
-    function setActive(bool _active) public override virtual hostOnly {
+    function setActive(bool _active) external override virtual authorizedOnly {
         active = _active;
     }
 
-    function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) public override RoutinesOnly {
+    function receiveTokens(address[] memory tokenAddresses, uint256[] memory transferAmounts, uint256[] memory amountsToMint) external override initializerOnly {
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
             if(transferAmounts[i] > 0) {
                 if(tokenAddresses[i] == address(0)) {
@@ -61,40 +43,40 @@ contract RoutinesExtension is IRoutinesExtension {
         }
     }
 
-    function setEntry(RoutinesEntry memory newEntry, RoutinesOperation[] memory newOperations) public override hostOnly {
-        IRoutines(_RoutinesContract).setEntry(newEntry, newOperations);
+    function setEntry(RoutinesEntry memory newEntry, RoutinesOperation[] memory newOperations) external override authorizedOnly {
+        IRoutines(initializer).setEntry(newEntry, newOperations);
     }
 
-    function flushBack(address[] memory tokenAddresses) public override hostOnly {
-        IRoutines(_RoutinesContract).flushBack(tokenAddresses);
+    function flushBack(address[] memory tokenAddresses) external override authorizedOnly {
+        IRoutines(initializer).flushBack(tokenAddresses);
     }
 
-    function deactivationByFailure() public override RoutinesOnly {
+    function deactivationByFailure() external override initializerOnly {
         active = false;
     }
 
-    function burnToken(address erc20TokenAddress, uint256 value) external override RoutinesOnly {
-        _safeTransferFrom(erc20TokenAddress, _RoutinesContract, address(this), value);
+    function burnToken(address erc20TokenAddress, uint256 value) external override initializerOnly {
+        _safeTransferFrom(erc20TokenAddress, initializer, address(this), value);
         _burn(erc20TokenAddress, value);
     }
 
     /** INTERNAL METHODS */
 
     function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual {
-        IERC20Mintable(erc20TokenAddress).mint(recipient, value);
+        IERC20Full(erc20TokenAddress).mint(recipient, value);
     }
 
     function _burn(address erc20TokenAddress, uint256 value) internal virtual {
-        IERC20Burnable(erc20TokenAddress).burn(value);
+        IERC20Full(erc20TokenAddress).burn(value);
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal virtual {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).transfer.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
     function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 

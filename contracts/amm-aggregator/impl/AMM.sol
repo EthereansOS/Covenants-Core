@@ -2,19 +2,20 @@
 pragma solidity ^0.8.0;
 
 import "../model/IAMM.sol";
-import "../../util/IERC20.sol";
+import { IERC20Full } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
 abstract contract AMM is IAMM {
-
     struct ProcessedLiquidityPoolData {
         uint256 liquidityPoolId;
         uint256 liquidityPoolAmount;
         address[] liquidityPoolTokens;
         uint256[] tokensAmounts;
         bool involvingETH;
-        address liquidityPoolOperator;
-        address receiver;
+        bytes additionalData;
         uint256[] minAmounts;
+        address receiver;
+        uint256 deadline;
+        address liquidityPoolOperator;
     }
 
     struct ProcessedSwapData {
@@ -22,11 +23,13 @@ abstract contract AMM is IAMM {
         bool exitInETH;
         uint256[] liquidityPoolIds;
         address[] path;
-        address liquidityPoolOperator;
         address inputToken;
         uint256 amount;
-        address receiver;
+        bytes additionalData;
         uint256 minAmount;
+        address receiver;
+        uint256 deadline;
+        address liquidityPoolOperator;
     }
 
     mapping(address => uint256) internal _tokenIndex;
@@ -60,7 +63,7 @@ abstract contract AMM is IAMM {
     }
 
     function balanceOf(uint256 liquidityPoolId, address owner) public virtual override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
-        (liquidityPoolTokenAmounts, liquidityPoolTokens) = byLiquidityPoolAmount(liquidityPoolId, liquidityPoolAmount = IERC20(_toAddress(liquidityPoolId)).balanceOf(owner));
+        (liquidityPoolTokenAmounts, liquidityPoolTokens) = byLiquidityPoolAmount(liquidityPoolId, liquidityPoolAmount = IERC20Full(_toAddress(liquidityPoolId)).balanceOf(owner));
     }
 
     function byPercentage(uint256 liquidityPoolId, uint256 numerator, uint256 denominator) public virtual override view returns (uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
@@ -106,26 +109,32 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address receiver, uint256[] memory minAmounts) public override virtual payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
-        require(tokenAddresses.length > 1 && tokenAddresses.length == amounts.length && (_maxTokensPerLiquidityPool == 0 || tokenAddresses.length == _maxTokensPerLiquidityPool), "Invalid length");
-        if(_hasUniqueLiquidityPools) {
-            (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = this.byTokens(tokenAddresses);
-            if(liquidityPoolId != 0) {
-                (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = addLiquidity(LiquidityPoolData(
-                    liquidityPoolId,
-                    amounts[0],
-                    tokenAddresses[0],
-                    false,
-                    involvingETH,
-                    receiver,
-                    minAmounts
-                ));
-                return (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens);
+    function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory liquidityPoolCreationData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
+        require(liquidityPoolCreationData.tokenAddresses.length > 1 && liquidityPoolCreationData.tokenAddresses.length == liquidityPoolCreationData.amounts.length && (_maxTokensPerLiquidityPool == 0 || liquidityPoolCreationData.tokenAddresses.length == _maxTokensPerLiquidityPool), "Invalid length");
+        {
+            if(_hasUniqueLiquidityPools) {
+                (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = this.byTokens(liquidityPoolCreationData.tokenAddresses);
             }
         }
-        address liquidityPoolCreator = _getLiquidityPoolCreator(tokenAddresses, amounts, involvingETH);
-        _transferToMeAndCheckAllowance(tokenAddresses, amounts, liquidityPoolCreator, involvingETH);
-        (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = _createLiquidityPoolAndAddLiquidity(tokenAddresses, amounts, involvingETH, liquidityPoolCreator, receiver, minAmounts);
+        if(liquidityPoolId != 0) {
+            (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = addLiquidity(LiquidityPoolData(
+                liquidityPoolId,
+                liquidityPoolCreationData.amounts[0],
+                liquidityPoolCreationData.tokenAddresses[0],
+                false,
+                liquidityPoolCreationData.involvingETH,
+                liquidityPoolCreationData.additionalData,
+                liquidityPoolCreationData.minAmounts,
+                liquidityPoolCreationData.receiver,
+                liquidityPoolCreationData.deadline
+            ));
+            return (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens);
+        }
+        address liquidityPoolCreator = _getLiquidityPoolCreator(liquidityPoolCreationData.tokenAddresses, liquidityPoolCreationData.amounts, liquidityPoolCreationData.involvingETH, liquidityPoolCreationData.additionalData);
+        _transferToMeAndCheckAllowance(liquidityPoolCreationData.tokenAddresses, liquidityPoolCreationData.amounts, liquidityPoolCreator, liquidityPoolCreationData.involvingETH);
+        (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = _createLiquidityPoolAndAddLiquidity(liquidityPoolCreationData);
+        _checkMinAmounts(liquidityPoolTokenAmounts, liquidityPoolCreationData.minAmounts);
+        require(block.timestamp < liquidityPoolCreationData.deadline, "too late");
         emit NewLiquidityPool(liquidityPoolId);
     }
 
@@ -134,6 +143,7 @@ abstract contract AMM is IAMM {
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolData.liquidityPoolTokens, processedLiquidityPoolData.tokensAmounts, processedLiquidityPoolData.liquidityPoolOperator, liquidityPoolData.involvingETH);
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId) = _addLiquidity(processedLiquidityPoolData);
         _checkMinAmounts(liquidityPoolTokenAmounts, processedLiquidityPoolData.minAmounts);
+        require(block.timestamp < processedLiquidityPoolData.deadline, "too late");
         _flushBack(liquidityPoolTokens);
     }
 
@@ -154,6 +164,7 @@ abstract contract AMM is IAMM {
         for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
             (liquidityPoolAmounts[i], liquidityPoolTokenAmounts[i], liquidityPoolIds[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
             _checkMinAmounts(liquidityPoolTokenAmounts[i], processedLiquidityPoolDataArray[i].minAmounts);
+            require(block.timestamp < processedLiquidityPoolDataArray[i].deadline, "too late");
         }
         _flushBackAndClear();
     }
@@ -165,6 +176,7 @@ abstract contract AMM is IAMM {
         _transferToMeAndCheckAllowance(liquidityPoolAddress, processedLiquidityPoolData.liquidityPoolAmount, processedLiquidityPoolData.liquidityPoolOperator);
         (removedLiquidityPoolAmount, removedLiquidityPoolTokenAmounts) = _removeLiquidity(processedLiquidityPoolData);
         _checkMinAmounts(removedLiquidityPoolTokenAmounts, processedLiquidityPoolData.minAmounts);
+        require(block.timestamp < processedLiquidityPoolData.deadline, "too late");
         _flushBack(liquidityPoolAddress);
     }
 
@@ -182,11 +194,12 @@ abstract contract AMM is IAMM {
         for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
             (removedLiquidityPoolAmounts[i], removedLiquidityPoolTokenAmounts[i]) = _removeLiquidity(processedLiquidityPoolDataArray[i]);
             _checkMinAmounts(removedLiquidityPoolTokenAmounts[i], processedLiquidityPoolDataArray[i].minAmounts);
+            require(block.timestamp < processedLiquidityPoolDataArray[i].deadline, "too late");
         }
         _flushBackAndClear();
     }
 
-    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] memory liquidityPoolIds, address[] memory path) view public override virtual returns(uint256[] memory values) {
+    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] memory liquidityPoolIds, address[] memory path) view public override virtual returns(uint256) {
         require(path.length > 1 && liquidityPoolIds.length == (path.length - 1), "data");
         uint256 realValue = value;
         if(valueIsLiquidityPool) {
@@ -201,14 +214,12 @@ abstract contract AMM is IAMM {
             }
         }
         require(realValue > 0, "value");
-        values = _getSwapOutput(value, liquidityPoolIds, path);
-        require(values.length == path.length, "values");
-        values[0] = realValue;
+        return _getSwapOutput(value, liquidityPoolIds, path);
     }
 
-    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal virtual returns(uint256[] memory values);
+    function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal virtual returns(uint256);
 
-    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] memory liquidityPoolIds, address[] memory path) view public override virtual returns(uint256[] memory values) {
+    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] memory liquidityPoolIds, address[] memory path) view public override virtual returns(uint256) {
         require(path.length > 1 && liquidityPoolIds.length == (path.length - 1), "data");
         uint256 realValue = value;
         if(valueIsLiquidityPool) {
@@ -223,18 +234,17 @@ abstract contract AMM is IAMM {
             }
         }
         require(realValue > 0, "value");
-        values = _getSwapInput(value, liquidityPoolIds, path);
-        require(values.length == path.length, "values");
-        values[values.length - 1] = realValue;
+        return _getSwapInput(value, liquidityPoolIds, path);
     }
 
-    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal virtual returns(uint256[] memory values);
+    function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal virtual returns(uint256);
 
     function swapLiquidity(SwapData memory swapData) public override virtual payable returns(uint256 receivedValue) {
         ProcessedSwapData memory processedSwapData = _processSwapData(swapData);
         _transferToMeAndCheckAllowance(processedSwapData.inputToken == _ethereumAddress && processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken, processedSwapData.amount, processedSwapData.liquidityPoolOperator);
         receivedValue = _swapLiquidity(processedSwapData);
         _checkMinAmount(receivedValue, processedSwapData.minAmount);
+        require(block.timestamp < swapData.deadline, "too late");
         _flushBack(processedSwapData.enterInETH ? address(0) : processedSwapData.inputToken);
     }
 
@@ -253,7 +263,9 @@ abstract contract AMM is IAMM {
         _flushBackAndClear();
     }
 
-    function _getLiquidityPoolOperator(uint256 liquidityPoolId, address[] memory liquidityPoolTokens) internal virtual view returns(address);
+    function _getLiquidityPoolOperator(uint256 liquidityPoolId, address[] memory liquidityPoolTokens, bytes memory additionalData) internal virtual view returns(address);
+
+    function _getSwapOperator(uint256 liquidityPoolId, address[] memory liquidityPoolTokens, bytes memory additionalData) internal virtual view returns(address);
 
     function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokens, uint256 liquidityPoolId);
 
@@ -261,9 +273,9 @@ abstract contract AMM is IAMM {
 
     function _swapLiquidity(ProcessedSwapData memory data) internal virtual returns(uint256 outputAmount);
 
-    function _getLiquidityPoolCreator(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH) internal virtual view returns(address);
+    function _getLiquidityPoolCreator(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, bytes memory additionalData) internal virtual view returns(address);
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address operator, address receiver, uint256[] memory minAmounts) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens);
+    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory liquidityPoolCreationData) internal virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens);
 
     function _processLiquidityPoolData(LiquidityPoolData memory liquidityPoolData) internal view returns(ProcessedLiquidityPoolData memory) {
         require(liquidityPoolData.amount > 0, "Zero amount");
@@ -284,15 +296,18 @@ abstract contract AMM is IAMM {
                 }
             }
         }
+
         return ProcessedLiquidityPoolData(
             liquidityPoolData.liquidityPoolId,
             liquidityPoolAmount,
             liquidityPoolTokens,
             tokensAmounts,
             involvingETH,
-            _getLiquidityPoolOperator(liquidityPoolData.liquidityPoolId, liquidityPoolTokens),
+            liquidityPoolData.additionalData,
+            liquidityPoolData.minAmounts,
             liquidityPoolData.receiver == address(0) ? msg.sender : liquidityPoolData.receiver,
-            liquidityPoolData.minAmounts
+            liquidityPoolData.deadline,
+            _getLiquidityPoolOperator(liquidityPoolData.liquidityPoolId, liquidityPoolTokens, liquidityPoolData.additionalData)
         );
     }
 
@@ -305,11 +320,13 @@ abstract contract AMM is IAMM {
             swapData.exitInETH && swapData.path[swapData.path.length - 1] == _ethereumAddress,
             swapData.liquidityPoolIds,
             swapData.path,
-            _getLiquidityPoolOperator(swapData.liquidityPoolIds[0], liquidityPoolTokens),
             swapData.inputToken,
             swapData.amount,
+            swapData.additionalData,
+            swapData.minAmount,
             swapData.receiver == address(0) ? msg.sender : swapData.receiver,
-            swapData.minAmount
+            swapData.deadline,
+            _getSwapOperator(swapData.liquidityPoolIds[0], liquidityPoolTokens, swapData.additionalData)
         );
     }
 
@@ -369,7 +386,7 @@ abstract contract AMM is IAMM {
     }
 
     function _flushBack(address tokenAddress) internal {
-        uint256 amount = tokenAddress == address(0) ? address(this).balance : IERC20(tokenAddress).balanceOf(address(this));
+        uint256 amount = tokenAddress == address(0) ? address(this).balance : IERC20Full(tokenAddress).balanceOf(address(this));
         if(amount == 0) {
             return;
         }
@@ -380,7 +397,7 @@ abstract contract AMM is IAMM {
             }
             return;
         }
-        if(IERC20(tokenAddress).balanceOf(address(this)) >= amount) {
+        if(IERC20Full(tokenAddress).balanceOf(address(this)) >= amount) {
             _safeTransfer(tokenAddress, msg.sender, amount);
         }
     }
@@ -389,24 +406,24 @@ abstract contract AMM is IAMM {
         if(tokenAddress == address(0) || operator == address(0)) {
             return;
         }
-        IERC20 token = IERC20(tokenAddress);
+        IERC20Full token = IERC20Full(tokenAddress);
         if(token.allowance(address(this), operator) <= value) {
             _safeApprove(tokenAddress, operator, token.totalSupply());
         }
     }
 
     function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).approve.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) internal {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).transfer.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
     function _safeTransferFrom(address erc20TokenAddress, address from, address to, uint256 value) internal {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transferFrom.selector, from, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).transferFrom.selector, from, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
@@ -457,5 +474,19 @@ abstract contract AMM is IAMM {
 
     function _calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure returns(uint256) {
         return (amount * numerator) / denominator;
+    }
+
+    function _reverse(address[] memory array) internal pure returns(address[] memory reverted) {
+        reverted = new address[](array.length);
+        for(uint256 i = 0; i < reverted.length; i++) {
+            reverted[reverted.length - 1 - i] = array[i];
+        }
+    }
+
+    function _reverse(uint256[] memory array) internal pure returns(uint256[] memory reverted) {
+        reverted = new uint256[](array.length);
+        for(uint256 i = 0; i < reverted.length; i++) {
+            reverted[reverted.length - 1 - i] = array[i];
+        }
     }
 }

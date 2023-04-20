@@ -2,13 +2,12 @@
 pragma solidity ^0.8.0;
 
 import "./AMM.sol";
-import "../../util/IERC20.sol";
 
 interface IUniswapV2Factory {
     function getPair(address tokenA, address tokenB) external view returns (address pair);
 }
 
-interface IUniswapV2Pair is IERC20 {
+interface IUniswapV2Pair is IERC20Full {
     function token0() external view returns (address);
     function token1() external view returns (address);
     function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast);
@@ -165,48 +164,54 @@ contract UniswapV2BasedAMMV1 is AMM {
         orderedTokens[1] = pair.token1();
     }
 
-    function _getSwapOutput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256[] memory) {
-        return IUniswapV2Router(routerAddress).getAmountsOut(value, path);
+    function _getSwapOutput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256) {
+        uint256[] memory values = IUniswapV2Router(routerAddress).getAmountsOut(value, path);
+        return values[values.length - 1];
     }
 
-    function _getSwapInput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256[] memory) {
-        return IUniswapV2Router(routerAddress).getAmountsIn(value, path);
+    function _getSwapInput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256) {
+        uint256[] memory values = IUniswapV2Router(routerAddress).getAmountsIn(value, _reverse(path));
+        return values[values.length - 1];
     }
 
-    function _getLiquidityPoolOperator(uint256, address[] memory) internal override virtual view returns(address) {
+    function _getLiquidityPoolOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
         return routerAddress;
     }
 
-    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool) internal virtual view override returns(address) {
+    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
         return routerAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, address, address receiver, uint256[] memory minAmounts) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function _getSwapOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
+        return routerAddress;
+    }
+
+    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
-        if(!involvingETH) {
+        if(!liquidityPoolCreationData.involvingETH) {
             (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidity(
-                tokenAddresses[0],
-                tokenAddresses[1],
-                amounts[0],
-                amounts[1],
-                minAmounts[0],
-                minAmounts[1],
-                receiver,
+                liquidityPoolCreationData.tokenAddresses[0],
+                liquidityPoolCreationData.tokenAddresses[1],
+                liquidityPoolCreationData.amounts[0],
+                liquidityPoolCreationData.amounts[1],
+                liquidityPoolCreationData.minAmounts[0],
+                liquidityPoolCreationData.minAmounts[1],
+                liquidityPoolCreationData.receiver,
                 block.timestamp + 10000
             );
         } else {
-            uint256 tokenIndex = tokenAddresses[0] != _ethereumAddress ? 0 : 1;
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amounts[1 - tokenIndex]} (
-                tokenAddresses[tokenIndex],
-                amounts[tokenIndex],
-                minAmounts[tokenIndex],
-                minAmounts[1 - tokenIndex],
-                receiver,
+            uint256 tokenIndex = liquidityPoolCreationData.tokenAddresses[0] != _ethereumAddress ? 0 : 1;
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : liquidityPoolCreationData.amounts[1 - tokenIndex]} (
+                liquidityPoolCreationData.tokenAddresses[tokenIndex],
+                liquidityPoolCreationData.amounts[tokenIndex],
+                liquidityPoolCreationData.minAmounts[tokenIndex],
+                liquidityPoolCreationData.minAmounts[1 - tokenIndex],
+                liquidityPoolCreationData.receiver,
                 block.timestamp + 10000
             );
         }
-        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
+        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
         liquidityPoolId = _toNumber(liquidityPoolAddress);
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
         orderedTokens[0] = pair.token0();

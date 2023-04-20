@@ -10,7 +10,7 @@
     },
     "multiverse": {
         "knowledgeBase": "resources/knowledgeBase",
-        "solidityVersion": "0.8.6"
+        "solidityVersion": "0.8.19"
     },
     "mocha": {
         "timeout": false,
@@ -19,6 +19,7 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git"
+        "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git",
+        "@ethereansos/swissknife": "git+https://github.com/EthereansOS/swissknife.git"
     }
 }

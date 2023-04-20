@@ -2,7 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "../model/IRoutinesExtension.sol";
-import "../../util/IERC20.sol";
+import "@ethereansos/swissknife/contracts/generic/impl/LazyInitCapableElement.sol";
+import { IERC20Full } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 import "../../amm-aggregator/model/IAMMAggregator.sol";
 import "../../util/uniswapV3/IUniswapV3Pool.sol";
 import "../../util/uniswapV3/ISwapRouter.sol";
@@ -10,13 +11,11 @@ import "../../util/uniswapV3/IMulticall.sol";
 import "../../util/uniswapV3/IPeripheryPayments.sol";
 import "../../util/uniswapV3/IPeripheryImmutableState.sol";
 
-contract RoutinesUniV3 is IRoutines {
+contract Routines is IRoutines, LazyInitCapableElement {
 
     event Executed(bool);
 
     uint256 private constant ONE_HUNDRED = 1e18;
-
-    address public initializer;
 
     mapping(address => uint256) private _tokenIndex;
     address[] private _tokensToTransfer;
@@ -24,8 +23,6 @@ contract RoutinesUniV3 is IRoutines {
     uint256[] private _tokenAmounts;
     uint256[] private _tokenMintAmounts;
     uint256[] private _tokenBalanceOfBefore;
-
-    address public host;
 
     RoutinesEntry private _entry;
     RoutinesOperation[] private _operations;
@@ -36,23 +33,29 @@ contract RoutinesUniV3 is IRoutines {
 
     uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
 
-    function lazyInit(bytes memory lazyInitData) external returns(bytes memory extensionInitResult) {
+    constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
-        require(initializer == address(0), "Already initialized");
-        initializer = msg.sender;
+    function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory extensionInitResult) {
+
+        require(host != address(0), "host");
+
         address uniswapV3SwapRouterAddress;
-        address extension;
-        (uniswapV3SwapRouterAddress, _ammAggregatorAddress, extension, lazyInitData) = abi.decode(lazyInitData, (address, address, address, bytes));
-        require((host = extension) != address(0), "extension");
+        (uniswapV3SwapRouterAddress, _ammAggregatorAddress, lazyInitData) = abi.decode(lazyInitData, (address, address, bytes));
 
         _wethTokenAddress = IPeripheryImmutableState(_uniswapV3SwapRouterAddress = uniswapV3SwapRouterAddress).WETH9();
 
-        (bytes memory extensionPayload, RoutinesEntry memory newEntry, RoutinesOperation[] memory newOperations) = abi.decode(lazyInitData, (bytes, RoutinesEntry, RoutinesOperation[]));
+        RoutinesEntry memory newEntry;
+        RoutinesOperation[] memory newOperations;
+        (lazyInitData, newEntry, newOperations) = abi.decode(lazyInitData, (bytes, RoutinesEntry, RoutinesOperation[]));
 
-        if(keccak256(extensionPayload) != keccak256("")) {
-            extensionInitResult = _call(extension, extensionPayload);
+        if(keccak256(lazyInitData) != keccak256("")) {
+            extensionInitResult = ILazyInitCapableElement(host).lazyInit(lazyInitData);
         }
         _set(newEntry, newOperations);
+    }
+
+    function _supportsInterface(bytes4 selector) internal override view returns(bool) {
+
     }
 
     receive() external payable {
@@ -149,7 +152,7 @@ contract RoutinesUniV3 is IRoutines {
         if(tokenAddress == address(0)) {
             return address(this).balance;
         }
-        return IERC20(tokenAddress).balanceOf(address(this));
+        return IERC20Full(tokenAddress).balanceOf(address(this));
     }
 
     function _calculateTokenAmount(address tokenAddress, uint256 tokenAmount, bool tokenAmountIsPercentage) private returns(uint256) {
@@ -157,7 +160,7 @@ contract RoutinesUniV3 is IRoutines {
             return tokenAmount;
         }
         uint256 tokenIndex = _tokenIndex[tokenAddress];
-        _tokenTotalSupply[tokenIndex] = _tokenTotalSupply[tokenIndex] != 0 ? _tokenTotalSupply[tokenIndex] : IERC20(tokenAddress).totalSupply();
+        _tokenTotalSupply[tokenIndex] = _tokenTotalSupply[tokenIndex] != 0 ? _tokenTotalSupply[tokenIndex] : IERC20Full(tokenAddress).totalSupply();
         return (_tokenTotalSupply[tokenIndex] * ((tokenAmount * 1e18) / ONE_HUNDRED)) / 1e18;
     }
 
@@ -203,12 +206,14 @@ contract RoutinesUniV3 is IRoutines {
         SwapData memory swapData = SwapData(
             operation.enterInETH,
             operation.exitInETH,
-            operation.liquidityPoolAddresses,
+            operation.liquidityPoolIds,
             operation.swapPath,
             operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
             amountIn - inputReward,
+            operation.additionalData,
+            minAmount,
             address(this),
-            minAmount
+            block.timestamp + 1000
         );
 
         if(swapData.inputToken != address(0) && !swapData.enterInETH) {
@@ -277,12 +282,12 @@ contract RoutinesUniV3 is IRoutines {
     }
 
     function _safeApprove(address erc20TokenAddress, address to, uint256 value) internal {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).approve.selector, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).approve.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'APPROVE_FAILED');
     }
 
     function _safeTransfer(address erc20TokenAddress, address to, uint256 value) private {
-        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20(erc20TokenAddress).transfer.selector, to, value));
+        bytes memory returnData = _call(erc20TokenAddress, abi.encodeWithSelector(IERC20Full(erc20TokenAddress).transfer.selector, to, value));
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFER_FAILED');
     }
 
@@ -344,9 +349,9 @@ contract RoutinesUniV3 is IRoutines {
     }
 
     function _swapLiquidityUniswapV3(SwapData memory data, uint256 amountOutMinimum) private returns(uint256) {
-        bytes memory path = abi.encodePacked(data.inputToken, IUniswapV3Pool(data.liquidityPoolAddresses[0]).fee(), data.path[0]);
-        for(uint256 i = 1; i < data.liquidityPoolAddresses.length; i++) {
-            path = abi.encodePacked(path, IUniswapV3Pool(data.liquidityPoolAddresses[i]).fee(), data.path[i]);
+        bytes memory path = "";//abi.encodePacked(data.inputToken, IUniswapV3Pool(data.liquidityPoolAddresses[0]).fee(), data.path[0]);
+        for(uint256 i = 1; i < data.liquidityPoolIds.length; i++) {
+            //path = abi.encodePacked(path, IUniswapV3Pool(data.liquidityPoolAddresses[i]).fee(), data.path[i]);
         }
 
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
