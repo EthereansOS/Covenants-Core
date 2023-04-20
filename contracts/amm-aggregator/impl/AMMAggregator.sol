@@ -88,7 +88,7 @@ contract AMMAggregator is IAMMAggregator {
         return IAMM(amm).byTokenAmount(liquidityPoolId, tokenAddress, tokenAmount);
     }
 
-    function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData calldata) external payable returns(uint256, uint256[] memory, uint256, address[] memory) {
+    function addLiquidityEnsuringPool(LiquidityPoolCreationData calldata) external payable returns(uint256, uint256[] memory, uint256, address[] memory) {
         revert("Impossibru");
     }
 

@@ -56,7 +56,7 @@ interface IAMM {
 
     function byTokenAmount(uint256 liquidityPoolId, address tokenAddress, uint256 tokenAmount) external view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens);
 
-    function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData calldata liquidityPoolCreationData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
+    function addLiquidityEnsuringPool(LiquidityPoolCreationData calldata liquidityPoolCreationData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
 
     function addLiquidity(LiquidityPoolData calldata liquidityPoolData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens);
     function addLiquidityBatch(LiquidityPoolData[] calldata liquidityPoolData) external payable returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory liquidityPoolTokenAmounts, uint256[] memory liquidityPoolIds, address[][] memory liquidityPoolTokens);
