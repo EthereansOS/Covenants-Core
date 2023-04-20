@@ -27,6 +27,30 @@ contract UniswapV3AMMV1 is AMM {
         quoterAddress = _quoterAddress;
     }
 
+    function balanceOf(uint256 liquidityPoolId, address) public virtual override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
+        (
+            ,
+            ,
+            address token0,
+            address token1,
+            ,
+            ,
+            ,
+            uint128 liquidity,
+            ,
+            ,
+            uint128 tokensOwed0,
+            uint128 tokensOwed1
+        ) = INonfungiblePositionManager(nonfungiblePositionManagerAddress).positions(liquidityPoolId);
+        liquidityPoolAmount = liquidity;
+        liquidityPoolTokens = new address[](2);
+        liquidityPoolTokens[0] = token0;
+        liquidityPoolTokens[1] = token1;
+        liquidityPoolTokenAmounts = new uint256[](2);
+        liquidityPoolTokenAmounts[0] = tokensOwed0;
+        liquidityPoolTokenAmounts[1] = tokensOwed1;
+    }
+
     function _decodeAdditionalData(bytes memory additionalData) private pure returns(uint24 fee, int24 tickLower, int24 tickUpper) {
         if(additionalData.length != 0) {
             return abi.decode(additionalData, (uint24, int24, int24));
@@ -35,7 +59,7 @@ contract UniswapV3AMMV1 is AMM {
 
     function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory tokenAddresses) {
 
-        (address token0, address token1, uint24 fee, address liquidityPoolAddress) = _getPoolData(liquidityPoolId);
+        (address token0, address token1, , address liquidityPoolAddress) = _getPoolData(liquidityPoolId);
 
         if(token0 != address(0)) {
             IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
