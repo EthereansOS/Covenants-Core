@@ -111,24 +111,22 @@ abstract contract AMM is IAMM {
 
     function tryCreateLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory liquidityPoolCreationData) external payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
         require(liquidityPoolCreationData.tokenAddresses.length > 1 && liquidityPoolCreationData.tokenAddresses.length == liquidityPoolCreationData.amounts.length && (_maxTokensPerLiquidityPool == 0 || liquidityPoolCreationData.tokenAddresses.length == _maxTokensPerLiquidityPool), "Invalid length");
-        {
-            if(_hasUniqueLiquidityPools) {
-                (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = this.byTokens(liquidityPoolCreationData.tokenAddresses);
+        if(_hasUniqueLiquidityPools) {
+            (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = this.byTokens(liquidityPoolCreationData.tokenAddresses, liquidityPoolCreationData.additionalData);
+                if(liquidityPoolId != 0) {
+                (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = addLiquidity(LiquidityPoolData(
+                    liquidityPoolId,
+                    liquidityPoolCreationData.amounts[0],
+                    liquidityPoolCreationData.tokenAddresses[0],
+                    false,
+                    liquidityPoolCreationData.involvingETH,
+                    liquidityPoolCreationData.additionalData,
+                    liquidityPoolCreationData.minAmounts,
+                    liquidityPoolCreationData.receiver,
+                    liquidityPoolCreationData.deadline
+                ));
+                return (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens);
             }
-        }
-        if(liquidityPoolId != 0) {
-            (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = addLiquidity(LiquidityPoolData(
-                liquidityPoolId,
-                liquidityPoolCreationData.amounts[0],
-                liquidityPoolCreationData.tokenAddresses[0],
-                false,
-                liquidityPoolCreationData.involvingETH,
-                liquidityPoolCreationData.additionalData,
-                liquidityPoolCreationData.minAmounts,
-                liquidityPoolCreationData.receiver,
-                liquidityPoolCreationData.deadline
-            ));
-            return (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens);
         }
         address liquidityPoolCreator = _getLiquidityPoolCreator(liquidityPoolCreationData.tokenAddresses, liquidityPoolCreationData.amounts, liquidityPoolCreationData.involvingETH, liquidityPoolCreationData.additionalData);
         _transferToMeAndCheckAllowance(liquidityPoolCreationData.tokenAddresses, liquidityPoolCreationData.amounts, liquidityPoolCreator, liquidityPoolCreationData.involvingETH);
