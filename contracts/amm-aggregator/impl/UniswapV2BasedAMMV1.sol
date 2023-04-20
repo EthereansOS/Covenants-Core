@@ -141,7 +141,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         tokenAddresses[1] = token1;
     }
 
-    function byTokens(address[] memory tokenAddresses) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function byTokens(address[] memory tokenAddresses, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
         address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);

@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import "./AMM.sol";
-import { Uint256Utilities } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 import "../../util/uniswapV3/IUniswapV3Pool.sol";
 import "../../util/uniswapV3/IUniswapV3Factory.sol";
 import "../../util/uniswapV3/INonfungiblePositionManager.sol";
@@ -12,7 +11,6 @@ import "../../util/uniswapV3/IPeripheryPayments.sol";
 import "../../util/uniswapV3/IQuoter.sol";
 
 contract UniswapV3AMMV1 is AMM {
-    using Uint256Utilities for uint256;
 
     uint256 private constant ONE_HUNDRED = 1e18;
 
@@ -22,41 +20,37 @@ contract UniswapV3AMMV1 is AMM {
     address public immutable factoryAddress;
     address public immutable swapRouterAddress;
     address public immutable quoterAddress;
-    uint24 public immutable fee;
 
-    constructor(address _swapRouterAddress, address _nonfungiblePositionManagerAddress, address _quoterAddress, uint24 _fee) AMM(string(abi.encodePacked("UniswapV3-", (uint256(_fee)).toString())), 1, INonfungiblePositionManager(_nonfungiblePositionManagerAddress).WETH9(), 2, true) {
+    constructor(address _swapRouterAddress, address _nonfungiblePositionManagerAddress, address _quoterAddress) AMM("UniswapV3", 1, INonfungiblePositionManager(_nonfungiblePositionManagerAddress).WETH9(), 2, true) {
         factoryAddress = INonfungiblePositionManager(nonfungiblePositionManagerAddress = _nonfungiblePositionManagerAddress).factory();
         swapRouterAddress = _swapRouterAddress;
         quoterAddress = _quoterAddress;
-        fee = _fee;
     }
 
-    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
-
-        address liquidityPoolAddress = _toAddress(liquidityPoolId);
-
-        IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
-        tokenAddresses = new address[](2);
-        address token0 = pool.token0();
-        address token1 = pool.token1();
-
-        if(IUniswapV3Factory(factoryAddress).getPool(token0, token1, fee) != liquidityPoolAddress) {
-            return(0, new uint256[](0), new address[](0));
+    function _decodeAdditionalData(bytes memory additionalData) private pure returns(uint24 fee, int24 tickLower, int24 tickUpper) {
+        if(additionalData.length != 0) {
+            return abi.decode(additionalData, (uint24, int24, int24));
         }
-
-        liquidityPoolAmount = 0;
-
-        tokensAmounts = new uint256[](2);
-        (uint256 amountA, uint256 amountB) = (0, 0);
-        tokensAmounts[0] = amountA;
-        tokensAmounts[1] = amountB;
-
-        tokenAddresses = new address[](2);
-        tokenAddresses[0] = token0;
-        tokenAddresses[1] = token1;
     }
 
-    function byTokens(address[] memory tokenAddresses) public override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory tokens) {
+    function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory tokenAddresses) {
+
+        (address token0, address token1, uint24 fee, address liquidityPoolAddress) = _getPoolData(liquidityPoolId);
+
+        if(token0 != address(0)) {
+            IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
+            liquidityPoolAmount = uint256(pool.maxLiquidityPerTick());
+            liquidityPoolTokenAmounts = new uint256[](2);
+            tokenAddresses = new address[](2);
+            tokenAddresses[0] = token0;
+            tokenAddresses[1] = token1;
+            liquidityPoolTokenAmounts[0] = IERC20Full(tokenAddresses[0]).balanceOf(liquidityPoolAddress);
+            liquidityPoolTokenAmounts[1] = IERC20Full(tokenAddresses[1]).balanceOf(liquidityPoolAddress);
+        }
+    }
+
+    function byTokens(address[] memory tokenAddresses, bytes calldata additionalData) public override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory tokens) {
+        (uint24 fee,,) = _decodeAdditionalData(additionalData);
         address liquidityPoolAddress = IUniswapV3Factory(factoryAddress).getPool(tokenAddresses[0], tokenAddresses[1], fee);
         if(liquidityPoolAddress != address(0)) {
             IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);

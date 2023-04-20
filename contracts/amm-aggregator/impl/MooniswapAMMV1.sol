@@ -61,7 +61,7 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function byTokens(address[] memory tokens) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function byTokens(address[] memory tokens, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
         Mooniswap mooniswap = IMooniFactory(factory).pools(tokens[0], tokens[1]);
 

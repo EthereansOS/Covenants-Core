@@ -71,7 +71,7 @@ contract AMMAggregator is IAMMAggregator {
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolTokens,) = findByLiquidityPool(liquidityPoolId);
     }
 
-    function byTokens(address[] calldata tokens) external override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {}
+    function byTokens(address[] calldata tokens, bytes calldata additionalData) external override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {}
 
     function byPercentage(uint256 liquidityPoolId, uint256 numerator, uint256 denominator) external override view returns (uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolId);

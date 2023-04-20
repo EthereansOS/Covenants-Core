@@ -207,7 +207,7 @@ contract BalancerAMMV1 is AMM {
         }
     }
 
-    function byTokens(address[] memory) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function byTokens(address[] memory, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
         return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
     }
 
