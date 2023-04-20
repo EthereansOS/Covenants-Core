@@ -81,26 +81,22 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _getPoolData(uint256 liquidityPoolId) private view returns(address token0, address token1, uint24 poolFee, address liquidityPoolAddress) {
-        poolFee = uint24(liquidityPoolId);
         liquidityPoolAddress = _asPoolAddress(liquidityPoolId);
         if(liquidityPoolAddress != address(0)) {
             IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
-            token0 = pool.token0();
-            token1 = pool.token1();
-            poolFee = pool.fee();
-            return (token0, token1, poolFee, liquidityPoolAddress);
+            return (pool.token0(), pool.token1(), pool.fee(), liquidityPoolAddress);
         }
 
         try INonfungiblePositionManager(nonfungiblePositionManagerAddress).positions(liquidityPoolId) returns(uint96, address, address token0Out, address token1Out, uint24 feeOut, int24, int24, uint128, uint256, uint256, uint128, uint128) {
             token0 = token0Out;
             token1 = token1Out;
             poolFee = feeOut;
-            if(poolFee != 0) {
-                liquidityPoolAddress = IUniswapV3Factory(factoryAddress).getPool(token0, token1, poolFee);
-            }
-            return (token0, token1, poolFee, liquidityPoolAddress);
         } catch {}
-
+        if(poolFee != 0) {
+            liquidityPoolAddress = IUniswapV3Factory(factoryAddress).getPool(token0, token1, poolFee);
+        } else {
+            poolFee = uint24(liquidityPoolId);
+        }
     }
 
     function _getFees(uint256[] memory liquidityPoolIds) private view returns(uint24[] memory fees) {
