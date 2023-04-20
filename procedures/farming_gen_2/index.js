@@ -90,7 +90,7 @@ async function prepareTokens() {
   var wethTokenAddress = await uniswapV2Router.methods.WETH().call();
   wethToken = new web3.eth.Contract(web3.currentProvider.knowledgeBase.IERC20ABI, wethTokenAddress);
 
-  liquidityPool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2PairABI, await uniswapV2Factory.methods.getPair(mainToken !== VOID_ETHEREUM_ADDRESS ? mainToken.options.address : wethToken.options.address, secondaryToken != VOID_ETHEREUM_ADDRESS ? secondaryToken.options.address : wethToken.options.address).call());
+  liquidityPool = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2PairABI, await blockchainCall(uniswapV2Factory.methods.getPair, mainToken !== VOID_ETHEREUM_ADDRESS ? mainToken.options.address : wethToken.options.address, secondaryToken != VOID_ETHEREUM_ADDRESS ? secondaryToken.options.address : wethToken.options.address));
 
   mainToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(mainToken, ethToSpend);
   secondaryToken !== VOID_ETHEREUM_ADDRESS && await buyForETH(secondaryToken, ethToSpend);
@@ -203,13 +203,13 @@ async function deploySimpleFarmMainContract() {
   var availableSetups = await blockchainCall(farmMainContract.methods.setups);
   assert.strictEqual(availableSetups.length, setups.length);
 
-  return;
-
   // put reward in the extension
   if (rewardToken !== VOID_ETHEREUM_ADDRESS) {
     await buyForETH(rewardToken, 20000);
-    await blockchainCall(await rewardToken.methods.transfer, params[0], toDecimals("15000", await blockchainCall(rewardToken.methods.decimals)));
-    console.log("params[0] balanceOf rewardToken: " + await blockchainCall(rewardToken.methods.balanceOf, params[0]));
+    console.log("params[0]", farmMainExtension._address);
+    await blockchainCall(await rewardToken.methods.transfer, farmMainExtension._address, toDecimals("15000", await blockchainCall(rewardToken.methods.decimals)));
+    console.log("blockchainCall");
+    // console.log("params[0] balanceOf rewardToken: " + await blockchainCall(rewardToken.methods.balanceOf, farmMainExtension._address));
   } else {
     await sendBlockchainTransaction(
       web3.currentProvider,
@@ -222,25 +222,35 @@ async function deploySimpleFarmMainContract() {
 }
 
 async function buyForETH(token, amount, receiver, ammPlugin) {
+  console.log("buyForETH");
   var value = toDecimals(amount.toString(), '18');
+  console.log("value", value);
   if (token.options.address === web3.currentProvider.knowledgeBase.wethTokenAddress) {
-      return await sendBlockchainTransaction(
+      console.log("accounts[0] balanceOf rewardToken before: " + await blockchainCall(rewardToken.methods.balanceOf, accounts[0]));
+      await sendBlockchainTransaction(
           web3.currentProvider,
           accounts[0],
           web3.currentProvider.knowledgeBase.wethTokenAddress,
           web3.utils.sha3("deposit()").substring(0, 10),
           value
       );
+      console.log("accounts[0] balanceOf rewardToken after: " + await blockchainCall(rewardToken.methods.balanceOf, accounts[0]));
+      return;
   }
   ammPlugin = ammPlugin || amm;
+  console.log("ammPlugin", "UniswapV2BasedAMMV1");
   var ethereumAddress = (await ammPlugin.methods.data().call())[0];
+  console.log("ethereumAddress", ethereumAddress);
+  console.log("token.options.address", token.options.address);
   var liquidityPoolAddress = (await ammPlugin.methods.byTokens([
     ethereumAddress,
     token.options.address
   ]).call())[2];
+  console.log("liquidityPoolAddress", liquidityPoolAddress);
   if (liquidityPoolAddress === VOID_ETHEREUM_ADDRESS) {
     return;
   }
+  console.log("blockchainCall(ammPlugin.methods.swapLiquidity");
   await blockchainCall(ammPlugin.methods.swapLiquidity, {
     amount: value,
     enterInETH: true,
@@ -409,10 +419,10 @@ async function shouldActiveSetup() {
   await web3.currentProvider.setNextBlockTime(nextTimestamp);
   await blockchainCall(farmMainContract.methods.activateSetup, 1);
   var availableSetups = await farmMainContract.methods.setups().call();
-  // FIXME _ensureTransfer to be checked: try IFarmExtensionRegular(host).transferTo(amount) {} catch {}
-  // await Promise.all(availableSetups.map(async (setup) => {
-  //   assert.strictEqual(setup.active, true);
-  // }));
+  // FIXME _ensureTransfer to be checked: try IFarmingGen2Extension(host).transferTo(amount) {} catch {}
+  await Promise.all(availableSetups.map(async (setup) => {
+    assert.strictEqual(setup.active, true);
+  }));
 }
 
 async function shouldNotActivateNotExistingSetup() {
@@ -521,13 +531,13 @@ module.exports.test = async function test() {
 
   // Create staking position
   // FIXME renewTimes=0 because setup.active is false
-  // console.group("Should allow " + actors.Alice.name + " to open a new staking position");
-  // {
-  //   await assert.catchCall(createStakingPosition(actors.Alice, 0, 4 * 1e18), "Invalid liquidity");
-  //   await createStakingPosition(actors.Alice, 0);
-  //   console.groupEnd();
-  //   console.log("");
-  // }
+  console.group("Should allow " + actors.Alice.name + " to open a new staking position");
+  {
+    await assert.catchCall(createStakingPosition(actors.Alice, 0, 4 * 1e18), "Invalid liquidity");
+    await createStakingPosition(actors.Alice, 0);
+    console.groupEnd();
+    console.log("");
+  }
 
 
   // console.group("Should allow " + actors.Bob.name + " to open a new staking position");

@@ -30,6 +30,7 @@ function deployUniswapV2Factory() {
 async function deployWethTokenWithUniswapV2(uniswapRouter) {
     var wethToken = new web3.eth.Contract(web3.currentProvider.knowledgeBase.IERC20ABI, await blockchainCall(uniswapRouter.methods.WETH));
     assert.notStrictEqual(wethToken, undefined);
+    assert.notStrictEqual(wethToken, VOID_ETHEREUM_ADDRESS);
     return wethToken;
 }
 
