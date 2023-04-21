@@ -161,7 +161,7 @@ contract FarmingGen1 is IFarmingGen1 {
         positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : block.timestamp, request.setupIndex)));
         require(_positions[positionId].creationEvent == 0, "Invalid open");
         // create the lp data for the amm
-        (LiquidityPoolData memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
+        (LiquidityPoolParams memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
         // calculate the reward
         uint256 reward;
         uint256 lockedRewardPerEvent;
@@ -187,7 +187,7 @@ contract FarmingGen1 is IFarmingGen1 {
         // check if farmoing position is valid
         require(_setupsInfo[chosenSetup.infoIndex].free, "Invalid add liquidity");
         // create the lp data for the amm
-        (LiquidityPoolData memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
+        (LiquidityPoolParams memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
         // rebalance the reward per token
         _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.timestamp - chosenSetup.lastUpdateEvent) * chosenSetup.rewardPerEvent) * 1e18) / chosenSetup.totalSupply;
         farmingPosition.reward = calculateFreeFarmingReward(positionId, false);
@@ -452,10 +452,10 @@ contract FarmingGen1 is IFarmingGen1 {
         minAmounts[1] = amount1Min;
     }
 
-    function _addLiquidity(uint256 setupIndex, FarmingPositionRequest memory request) private returns(LiquidityPoolData memory liquidityPoolData, uint256 tokenAmount) {
+    function _addLiquidity(uint256 setupIndex, FarmingPositionRequest memory request) private returns(LiquidityPoolParams memory liquidityPoolData, uint256 tokenAmount) {
         (IAMM amm, uint256 liquidityPoolAmount, uint256 mainTokenAmount) = _transferToMeAndCheckAllowance(_setups[setupIndex], request);
         // liquidity pool data struct for the AMM
-        liquidityPoolData = LiquidityPoolData(
+        liquidityPoolData = LiquidityPoolParams(
             _setupsInfo[_setups[setupIndex].infoIndex].liquidityPoolTokenAddress,
             request.amountIsLiquidityPool ? liquidityPoolAmount : mainTokenAmount,
             _setupsInfo[_setups[setupIndex].infoIndex].mainTokenAddress,
@@ -519,7 +519,7 @@ contract FarmingGen1 is IFarmingGen1 {
             }
         }
         // create liquidity pool data struct for the AMM
-        LiquidityPoolData memory lpData = LiquidityPoolData(
+        LiquidityPoolParams memory lpData = LiquidityPoolParams(
             setupInfo.liquidityPoolTokenAddress,
             removedLiquidity,
             setupInfo.mainTokenAddress,

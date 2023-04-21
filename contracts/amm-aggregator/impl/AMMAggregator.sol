@@ -88,48 +88,70 @@ contract AMMAggregator is IAMMAggregator {
         return IAMM(amm).byTokenAmount(liquidityPoolId, tokenAddress, tokenAmount);
     }
 
-    function addLiquidityEnsuringPool(LiquidityPoolCreationData calldata) external payable returns(uint256, uint256[] memory, uint256, address[] memory) {
+    function addLiquidityEnsuringPool(LiquidityPoolCreationParams calldata) external payable returns(uint256, uint256[] memory, uint256, address[] memory) {
         revert("Impossibru");
     }
 
-    function addLiquidity(LiquidityPoolData calldata liquidityPoolData) external override payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
-        (,,,address amm) = findByLiquidityPool(liquidityPoolData.liquidityPoolId);
-        return IAMM(amm).addLiquidity(liquidityPoolData);
+    function addLiquidityEnsuringPoolBatch(LiquidityPoolCreationParams[] calldata) external payable returns(uint256[] memory, uint256[][] memory, uint256[] memory, address[][] memory) {
+        revert("Impossibru");
     }
 
-    function addLiquidityBatch(LiquidityPoolData[] calldata liquidityPoolData) external override payable returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory liquidityPoolTokenAmounts, uint256[] memory liquidityPoolIds, address[][] memory liquidityPoolTokens) {
-        (,,,address amm) = findByLiquidityPool(liquidityPoolData[0].liquidityPoolId);
-        return IAMM(amm).addLiquidityBatch(liquidityPoolData);
+    function addLiquidity(LiquidityPoolParams calldata liquidityPoolParams) external override payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams.liquidityPoolId);
+        return IAMM(amm).addLiquidity(liquidityPoolParams);
     }
 
-    function removeLiquidity(LiquidityPoolData calldata liquidityPoolData) external override returns(uint256 removedLiquidityPoolAmount, uint256[] memory removedLiquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
-        (,,,address amm) = findByLiquidityPool(liquidityPoolData.liquidityPoolId);
-        return IAMM(amm).removeLiquidity(liquidityPoolData);
+    function addLiquidityBatch(LiquidityPoolParams[] calldata liquidityPoolParams) external override payable returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory liquidityPoolTokenAmounts, uint256[] memory liquidityPoolIds, address[][] memory liquidityPoolTokens) {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams[0].liquidityPoolId);
+        return IAMM(amm).addLiquidityBatch(liquidityPoolParams);
     }
 
-    function removeLiquidityBatch(LiquidityPoolData[] calldata liquidityPoolData) external override returns(uint256[] memory removedLiquidityPoolAmounts, uint256[][] memory removedLiquidityPoolTokenAmounts, address[][] memory liquidityPoolTokens) {
-        (,,,address amm) = findByLiquidityPool(liquidityPoolData[0].liquidityPoolId);
-        return IAMM(amm).removeLiquidityBatch(liquidityPoolData);
+    function removeLiquidity(LiquidityPoolParams calldata liquidityPoolParams) external override returns(uint256 removedLiquidityPoolAmount, uint256[] memory removedLiquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams.liquidityPoolId);
+        return IAMM(amm).removeLiquidity(liquidityPoolParams);
     }
 
-    function getSwapOutput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256) {
+    function removeLiquidityBatch(LiquidityPoolParams[] calldata liquidityPoolParams) external override returns(uint256[] memory removedLiquidityPoolAmounts, uint256[][] memory removedLiquidityPoolTokenAmounts, address[][] memory liquidityPoolTokens) {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams[0].liquidityPoolId);
+        return IAMM(amm).removeLiquidityBatch(liquidityPoolParams);
+    }
+
+    function getSwapCounterValue(uint256 amount, bool amountIsLiquidityPool, bool amountIsOutput, uint256[] calldata liquidityPoolIds, address[] calldata path) external override view returns(uint256) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolIds[0]);
-        return IAMM(amm).getSwapOutput(value, valueIsLiquidityPool, liquidityPoolIds, path);
+        return IAMM(amm).getSwapCounterValue(amount, amountIsLiquidityPool, amountIsOutput, liquidityPoolIds, path);
     }
 
-    function getSwapInput(uint256 value, bool valueIsLiquidityPool, uint256[] calldata liquidityPoolIds, address[] calldata path) view external override returns(uint256) {
-        (,,,address amm) = findByLiquidityPool(liquidityPoolIds[0]);
-        return IAMM(amm).getSwapInput(value, valueIsLiquidityPool, liquidityPoolIds, path);
+    function swap(SwapParams calldata swapParams) external override payable returns(uint256 receivedValue) {
+        (,,,address amm) = findByLiquidityPool(swapParams.liquidityPoolIds[0]);
+        return IAMM(amm).swap(swapParams);
     }
 
-    function swapLiquidity(SwapData calldata swapData) external override payable returns(uint256 receivedValue) {
-        (,,,address amm) = findByLiquidityPool(swapData.liquidityPoolIds[0]);
-        return IAMM(amm).swapLiquidity(swapData);
+    function swapBatch(SwapParams[] calldata swapParams) external override payable returns(uint256[] memory receivedValues) {
+        (,,,address amm) = findByLiquidityPool(swapParams[0].liquidityPoolIds[0]);
+        return IAMM(amm).swapBatch(swapParams);
     }
 
-    function swapLiquidityBatch(SwapData[] calldata swapData) external override payable returns(uint256[] memory receivedValues) {
-        (,,,address amm) = findByLiquidityPool(swapData[0].liquidityPoolIds[0]);
-        return IAMM(amm).swapLiquidityBatch(swapData);
+    function checkByTokensAdditionalData(address[] calldata, bytes calldata) external override pure {
+        revert("Impossibru");
+    }
+
+    function checkAddLiquidityEnsuringPoolAdditionalData(LiquidityPoolCreationParams[] calldata) external override pure {
+        revert("Impossibru");
+    }
+
+    function checkAddLiquidityAdditionalData(LiquidityPoolParams[] calldata liquidityPoolParams) external override view {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams[0].liquidityPoolId);
+        return IAMM(amm).checkAddLiquidityAdditionalData(liquidityPoolParams);
+    }
+
+    function checkRemoveLiquidityAdditionalData(LiquidityPoolParams[] calldata liquidityPoolParams) external override view {
+        (,,,address amm) = findByLiquidityPool(liquidityPoolParams[0].liquidityPoolId);
+        return IAMM(amm).checkRemoveLiquidityAdditionalData(liquidityPoolParams);
+    }
+
+    function checkSwapAdditionalData(SwapParams[] calldata swapParams) external override view {
+        (,,,address amm) = findByLiquidityPool(swapParams[0].liquidityPoolIds[0]);
+        return IAMM(amm).checkSwapAdditionalData(swapParams);
     }
 
     function _add(address[] memory ammsToAdd) private {

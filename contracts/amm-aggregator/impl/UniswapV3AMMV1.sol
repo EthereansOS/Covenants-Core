@@ -166,26 +166,26 @@ contract UniswapV3AMMV1 is AMM {
         return swapRouterAddress;
     }
 
-    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationData memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+    function _addLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
     }
 
-    function _removeLiquidity(ProcessedLiquidityPoolData memory processedLiquidityPoolData) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+    function _removeLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
     }
 
-    function _swapLiquidity(ProcessedSwapData memory processedSwapData) internal override virtual returns(uint256 outputAmount) {
+    function _swapLiquidity(ProcessedSwapParams memory processedSwapParams) internal override virtual returns(uint256 outputAmount) {
         ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
-            path : _toPath(processedSwapData.liquidityPoolIds, processedSwapData.inputToken, processedSwapData.path, false),
-            recipient : processedSwapData.exitInETH ? address(0) : processedSwapData.receiver,
-            deadline : processedSwapData.deadline,
-            amountIn : processedSwapData.amount,
-            amountOutMinimum : processedSwapData.minAmount
+            path : _toPath(processedSwapParams.liquidityPoolIds, processedSwapParams.inputToken, processedSwapParams.path, false),
+            recipient : processedSwapParams.exitInETH ? address(0) : processedSwapParams.receiver,
+            deadline : processedSwapParams.deadline,
+            amountIn : processedSwapParams.amount,
+            amountOutMinimum : processedSwapParams.minAmount
         });
 
-        if(processedSwapData.enterInETH || processedSwapData.exitInETH) {
-            return _swapLiquidityMulticall(processedSwapData.enterInETH, processedSwapData.exitInETH, processedSwapData.amount, processedSwapData.receiver, abi.encodeWithSelector(ISwapRouter(swapRouterAddress).exactInput.selector, exactInputParams));
+        if(processedSwapParams.enterInETH || processedSwapParams.exitInETH) {
+            return _swapLiquidityMulticall(processedSwapParams.enterInETH, processedSwapParams.exitInETH, processedSwapParams.amount, processedSwapParams.receiver, abi.encodeWithSelector(ISwapRouter(swapRouterAddress).exactInput.selector, exactInputParams));
         }
         return ISwapRouter(swapRouterAddress).exactInput(exactInputParams);
     }

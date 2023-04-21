@@ -203,7 +203,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
         address outputToken = operation.swapPath[operation.swapPath.length - 1];
 
-        SwapData memory swapData = SwapData(
+        SwapParams memory swapData = SwapParams(
             operation.enterInETH,
             operation.exitInETH,
             operation.liquidityPoolIds,
@@ -220,7 +220,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
             _safeApprove(swapData.inputToken, operation.ammPlugin, swapData.amount);
         }
 
-        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swapLiquidity{value : swapData.enterInETH ? amountIn : 0}(swapData);
+        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? amountIn : 0}(swapData);
 
         require(outputAmount >= minAmount, "slippage");
 
@@ -348,7 +348,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
         }
     }
 
-    function _swapLiquidityUniswapV3(SwapData memory data, uint256 amountOutMinimum) private returns(uint256) {
+    function _swapLiquidityUniswapV3(SwapParams memory data, uint256 amountOutMinimum) private returns(uint256) {
         bytes memory path = "";//abi.encodePacked(data.inputToken, IUniswapV3Pool(data.liquidityPoolAddresses[0]).fee(), data.path[0]);
         for(uint256 i = 1; i < data.liquidityPoolIds.length; i++) {
             //path = abi.encodePacked(path, IUniswapV3Pool(data.liquidityPoolAddresses[i]).fee(), data.path[i]);

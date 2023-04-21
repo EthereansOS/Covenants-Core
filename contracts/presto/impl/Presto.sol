@@ -139,7 +139,7 @@ contract Presto is IPresto {
     }
 
     function _addLiquidity(PrestoOperation memory operation) private returns (uint256 outputAmount) {
-        LiquidityPoolData memory liquidityPoolData = LiquidityPoolData(
+        LiquidityPoolParams memory liquidityPoolData = LiquidityPoolParams(
             operation.inputTokenAddress,
             operation.inputTokenAmount,
             address(0),
@@ -169,7 +169,7 @@ contract Presto is IPresto {
 
         address outputToken = operation.swapPath[operation.swapPath.length - 1];
 
-        SwapData memory swapData = SwapData(
+        SwapParams memory swapData = SwapParams(
             operation.enterInETH,
             operation.exitInETH,
             operation.liquidityPoolAddresses,
@@ -184,7 +184,7 @@ contract Presto is IPresto {
             _safeApprove(swapData.inputToken, operation.ammPlugin, swapData.amount);
         }
 
-        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swapLiquidity{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
+        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
 
         _checkMinAmount(outputAmount, minAmount);
 
@@ -265,7 +265,7 @@ contract Presto is IPresto {
         }
     }
 
-    function _swapLiquidityUniswapV3(SwapData memory data, uint256 amountOutMinimum) private returns(uint256) {
+    function _swapLiquidityUniswapV3(SwapParams memory data, uint256 amountOutMinimum) private returns(uint256) {
         bytes memory path = abi.encodePacked(data.inputToken, IUniswapV3Pool(data.liquidityPoolAddresses[0]).fee(), data.path[0]);
         for(uint256 i = 1; i < data.liquidityPoolAddresses.length; i++) {
             path = abi.encodePacked(path, IUniswapV3Pool(data.liquidityPoolAddresses[i]).fee(), data.path[i]);
