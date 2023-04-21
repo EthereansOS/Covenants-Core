@@ -53,6 +53,7 @@ contract MooniswapAMMV1 is AMM {
     function _checkAddLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
     function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
     function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
+
     function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
         address liquidityPoolAddress = _toAddress(liquidityPoolId);
@@ -171,7 +172,7 @@ contract MooniswapAMMV1 is AMM {
         }
     }
 
-    function _swapLiquidity(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
+    function _swap(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
         address[] memory liquidityPoolAddresses = _toAddresses(data.liquidityPoolIds);
         outputAmount = data.amount;
         for(uint256 i = 0; i < liquidityPoolAddresses.length; i++) {

@@ -295,7 +295,7 @@ contract BalancerAMMV1 is AMM {
         }
     }
 
-    function _swapLiquidity(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
+    function _swap(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
         address[] memory liquidityPoolAddresses = _toAddresses(data.liquidityPoolIds);
         if(data.enterInETH) {
             IWETH(_ethereumAddress).deposit{value : data.amount}();

@@ -2,9 +2,11 @@
 pragma solidity ^0.8.0;
 
 import "../model/IAMM.sol";
-import { IERC20Full } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
+import { IERC20Full, Bytes32Utilities } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
 abstract contract AMM is IAMM {
+    using Bytes32Utilities for bytes32;
+
     struct ProcessedLiquidityPoolParams {
         uint256 liquidityPoolId;
         uint256 liquidityPoolAmount;
@@ -32,19 +34,26 @@ abstract contract AMM is IAMM {
         address liquidityPoolOperator;
     }
 
-    mapping(address => uint256) internal _tokenIndex;
-    address[] internal _tokensToTransfer;
-    address[] internal _operators;
-    uint256[] internal _tokenAmounts;
+    struct InternalStorage {
+        mapping(address => uint256) tokenIndex;
+        address[] tokensToTransfer;
+        address[] operators;
+        uint256[] tokenAmounts;
+    }
 
-    string internal _name;
+    InternalStorage private _internalStorage;
+
+    address internal immutable _this = address(this);
+    bytes32 internal immutable _name;
     uint256 internal immutable _version;
     address internal immutable _ethereumAddress;
     uint256 internal immutable _maxTokensPerLiquidityPool;
     bool internal immutable _hasUniqueLiquidityPools;
 
     constructor(string memory name, uint256 version, address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools) {
-        _name = name;
+        bytes memory n = abi.encodePacked(name);
+        require(n.length <= 32, "name");
+        _name = bytes32(n);
         _version = version;
         _ethereumAddress = ethereumAddress;
         _maxTokensPerLiquidityPool = maxTokensPerLiquidityPool;
@@ -55,7 +64,7 @@ abstract contract AMM is IAMM {
     }
 
     function info() public view override virtual returns(string memory name, uint256 version) {
-        return (_name, _version);
+        return (_name.asString(), _version);
     }
 
     function data() public view override virtual returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools) {
@@ -230,7 +239,7 @@ abstract contract AMM is IAMM {
     function swap(SwapParams memory swapParams) public override virtual payable returns(uint256 receivedValue) {
         ProcessedSwapParams memory processedSwapParams = _processSwapParams(swapParams);
         _transferToMeAndCheckAllowance(processedSwapParams.inputToken == _ethereumAddress && processedSwapParams.enterInETH ? address(0) : processedSwapParams.inputToken, processedSwapParams.amount, processedSwapParams.liquidityPoolOperator);
-        receivedValue = _swapLiquidity(processedSwapParams);
+        receivedValue = _swap(processedSwapParams);
         _checkMinAmount(receivedValue, processedSwapParams.minAmount);
         require(block.timestamp < swapParams.deadline, "too late");
         _flushBack(processedSwapParams.enterInETH ? address(0) : processedSwapParams.inputToken);
@@ -245,7 +254,7 @@ abstract contract AMM is IAMM {
         }
         _transferToMeAndCheckAllowance();
         for(uint256 i = 0; i < swapParams.length; i++) {
-            receivedValues[i] = _swapLiquidity(processedSwapDatas[i]);
+            receivedValues[i] = _swap(processedSwapDatas[i]);
             _checkMinAmount(receivedValues[i], processedSwapDatas[i].minAmount);
         }
         _flushBackAndClear();
@@ -271,7 +280,7 @@ abstract contract AMM is IAMM {
 
     function _removeLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal virtual returns(uint256, uint256[] memory);
 
-    function _swapLiquidity(ProcessedSwapParams memory processedSwapParams) internal virtual returns(uint256 outputAmount);
+    function _swap(ProcessedSwapParams memory processedSwapParams) internal virtual returns(uint256 outputAmount);
 
     function _getLiquidityPoolCreator(address[] memory tokenAddresses, uint256[] memory amounts, bool involvingETH, bytes memory additionalData) internal virtual view returns(address);
 
@@ -283,6 +292,10 @@ abstract contract AMM is IAMM {
     function _checkAddLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParams) internal virtual view;
     function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParams) internal virtual view;
     function _checkSwapAdditionalData(ProcessedSwapParams[] memory processedSwapParams) internal virtual view;
+
+    function _delegateMode() internal view returns(bool) {
+        return _this != address(this);
+    }
 
     function _processLiquidityPoolParams(LiquidityPoolParams memory liquidityPoolParams) internal view returns(ProcessedLiquidityPoolParams memory) {
         require(liquidityPoolParams.amount > 0, "Zero amount");
@@ -351,47 +364,53 @@ abstract contract AMM is IAMM {
         }
     }
 
-    function _collect(address tokenAddress, uint256 tokenAmount, address operator, bool involvingETH) internal {
-        address realTokenAddress = involvingETH && tokenAddress == _ethereumAddress ? address(0) : tokenAddress;
-        uint256 position = _tokenIndex[realTokenAddress];
-        if(_tokensToTransfer.length == 0 || _tokensToTransfer[position] != realTokenAddress) {
-            _tokenIndex[realTokenAddress] = (position = _tokensToTransfer.length);
-            _tokensToTransfer.push(realTokenAddress);
-            _operators.push(operator);
-            _tokenAmounts.push(0);
+    function _collect(address tokenAddress, uint256 tokenAmount, address operator, bool involvingETH) private {
+        if(_delegateMode()) {
+            return;
         }
-        _tokenAmounts[position] = _tokenAmounts[position] + tokenAmount;
+        address realTokenAddress = involvingETH && tokenAddress == _ethereumAddress ? address(0) : tokenAddress;
+        uint256 position = _internalStorage.tokenIndex[realTokenAddress];
+        if(_internalStorage.tokensToTransfer.length == 0 || _internalStorage.tokensToTransfer[position] != realTokenAddress) {
+            _internalStorage.tokenIndex[realTokenAddress] = (position = _internalStorage.tokensToTransfer.length);
+            _internalStorage.tokensToTransfer.push(realTokenAddress);
+            _internalStorage.operators.push(operator);
+            _internalStorage.tokenAmounts.push(0);
+        }
+        _internalStorage.tokenAmounts[position] = _internalStorage.tokenAmounts[position] + tokenAmount;
     }
 
-    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator, bool involvingETH) internal {
+    function _transferToMeAndCheckAllowance(address[] memory tokens, uint256[] memory amounts, address operator, bool involvingETH) private {
         for(uint256 i = 0; i < tokens.length; i++) {
             _transferToMeAndCheckAllowance(involvingETH && tokens[i] == _ethereumAddress ? address(0) : tokens[i] , amounts[i], operator);
         }
     }
 
-    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 amount, address operator) internal {
+    function _transferToMeAndCheckAllowance(address tokenAddress, uint256 amount, address operator) private {
         _transferToMe(tokenAddress, amount);
         _checkAllowance(tokenAddress, amount, operator);
     }
 
-    function _transferToMeAndCheckAllowance() internal {
-        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
-            _transferToMeAndCheckAllowance(_tokensToTransfer[i], _tokenAmounts[i], _operators[i]);
+    function _transferToMeAndCheckAllowance() private {
+        if(_delegateMode()) {
+            return;
+        }
+        for(uint256 i = 0; i < _internalStorage.tokensToTransfer.length; i++) {
+            _transferToMeAndCheckAllowance(_internalStorage.tokensToTransfer[i], _internalStorage.tokenAmounts[i], _internalStorage.operators[i]);
         }
     }
 
-    function _flushBackAndClear() internal {
-        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
-            delete _tokenIndex[_tokensToTransfer[i]];
-            _flushBack(_tokensToTransfer[i]);
+    function _flushBackAndClear() private {
+        if(_delegateMode()) {
+            return;
+        }
+        for(uint256 i = 0; i < _internalStorage.tokensToTransfer.length; i++) {
+            _flushBack(_internalStorage.tokensToTransfer[i]);
         }
         _flushBack(address(0));
-        delete _tokensToTransfer;
-        delete _operators;
-        delete _tokenAmounts;
+        delete _internalStorage;
     }
 
-    function _transferToMe(address tokenAddress, uint256 amount) internal virtual {
+    function _transferToMe(address tokenAddress, uint256 amount) private {
         if(tokenAddress == address(0)) {
             require(msg.value == amount, "Incorrect eth amount");
             return;
@@ -399,14 +418,14 @@ abstract contract AMM is IAMM {
         _safeTransferFrom(tokenAddress, msg.sender, address(this), amount);
     }
 
-    function _flushBack(address[] memory tokenAddresses) internal {
+    function _flushBack(address[] memory tokenAddresses) private {
         for(uint256 i = 0; i < tokenAddresses.length; i++) {
             _flushBack(tokenAddresses[i]);
         }
         _flushBack(address(0));
     }
 
-    function _flushBack(address tokenAddress) internal {
+    function _flushBack(address tokenAddress) private {
         uint256 amount = tokenAddress == address(0) ? address(this).balance : IERC20Full(tokenAddress).balanceOf(address(this));
         if(amount == 0) {
             return;
@@ -427,10 +446,7 @@ abstract contract AMM is IAMM {
         if(tokenAddress == address(0) || operator == address(0)) {
             return;
         }
-        IERC20Full token = IERC20Full(tokenAddress);
-        if(token.allowance(address(this), operator) <= amount) {
-            _safeApprove(tokenAddress, operator, token.totalSupply());
-        }
+        _safeApprove(tokenAddress, operator, IERC20Full(tokenAddress).allowance(address(this), operator) + amount);
     }
 
     function _safeApprove(address erc20TokenAddress, address to, uint256 amount) internal {
@@ -448,7 +464,7 @@ abstract contract AMM is IAMM {
         require(returnData.length == 0 || abi.decode(returnData, (bool)), 'TRANSFERFROM_FAILED');
     }
 
-    function _call(address location, bytes memory payload) internal returns(bytes memory returnData) {
+    function _call(address location, bytes memory payload) private returns(bytes memory returnData) {
         assembly {
             let result := call(gas(), location, 0, add(payload, 0x20), mload(payload), 0, 0)
             let size := returndatasize()

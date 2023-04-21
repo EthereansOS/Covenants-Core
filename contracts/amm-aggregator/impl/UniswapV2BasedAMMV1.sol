@@ -271,7 +271,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         tokensAmounts[1] = amount1;
     }
 
-    function _swapLiquidity(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
+    function _swap(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
         address[] memory path = new address[](data.path.length + 1);
         path[0] = data.enterInETH ? _ethereumAddress : data.inputToken;
         for(uint256 i = 0; i < data.path.length; i++) {
