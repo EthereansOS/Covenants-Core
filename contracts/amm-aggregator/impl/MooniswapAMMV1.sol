@@ -48,6 +48,11 @@ contract MooniswapAMMV1 is AMM {
         return address(0);
     }
 
+    function checkByTokensAdditionalData(address[] calldata tokens, bytes calldata additionalData) external override view {}
+    function checkAddLiquidityEnsuringPoolAdditionalData(LiquidityPoolCreationParams[] calldata liquidityPoolCreationParams) external override view {}
+    function _checkAddLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
     function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
         address liquidityPoolAddress = _toAddress(liquidityPoolId);

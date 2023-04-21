@@ -175,6 +175,12 @@ contract BalancerAMMV1 is AMM {
         return address(0);
     }
 
+    function checkByTokensAdditionalData(address[] calldata tokens, bytes calldata additionalData) external override view {}
+    function checkAddLiquidityEnsuringPoolAdditionalData(LiquidityPoolCreationParams[] calldata liquidityPoolCreationParams) external override view {}
+    function _checkAddLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
+
     function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
 
         address liquidityPoolAddress = _toAddress(liquidityPoolId);
@@ -192,7 +198,7 @@ contract BalancerAMMV1 is AMM {
     }
 
     function _calculatePercentage(uint256 amount, uint256 numerator, uint256 denominator) internal virtual pure override returns(uint256) {
-        return bmul(bdiv(numerator, denominator), amount);
+        return _bmul(_bdiv(numerator, denominator), amount);
     }
 
     function byLiquidityPoolAmount(uint256 liquidityPoolId, uint256 liquidityPoolAmount) view public virtual override returns(uint256[] memory tokensAmounts, address[] memory liquidityPoolTokens) {
@@ -203,12 +209,11 @@ contract BalancerAMMV1 is AMM {
         (denominator, tokensAmounts, liquidityPoolTokens) = byLiquidityPool(liquidityPoolId);
 
         for(uint256 i = 0; i < tokensAmounts.length; i++) {
-            tokensAmounts[i] = bmul(bdiv(numerator, denominator), tokensAmounts[i]);
+            tokensAmounts[i] = _bmul(_bdiv(numerator, denominator), tokensAmounts[i]);
         }
     }
 
-    function byTokens(address[] memory, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
-        return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
+    function byTokens(address[] memory, bytes calldata) public override view returns(uint256, uint256[] memory, uint256, address[] memory) {
     }
 
     function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256) {
@@ -312,7 +317,7 @@ contract BalancerAMMV1 is AMM {
     }
 
     function addLiquidity(LiquidityPoolParams memory data) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
-        ProcessedLiquidityPoolParams memory processedLiquidityPoolParams = _processLiquidityPoolData(data);
+        ProcessedLiquidityPoolParams memory processedLiquidityPoolParams = _processLiquidityPoolParams(data);
         _transferToMeAndCheckAllowance(liquidityPoolTokens = processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.tokensAmounts, processedLiquidityPoolParams.liquidityPoolOperator, data.involvingETH);
         (liquidityPoolAmount, tokensAmounts, liquidityPoolId) = _addLiquidity(processedLiquidityPoolParams);
         if(!_multi) {
@@ -360,7 +365,7 @@ contract BalancerAMMV1 is AMM {
         _multi = false;
     }
 
-    function bmul(uint a, uint b)
+    function _bmul(uint a, uint b)
         internal pure
         returns (uint)
     {
@@ -372,13 +377,13 @@ contract BalancerAMMV1 is AMM {
         return c2;
     }
 
-    function bdiv(uint a, uint b)
+    function _bdiv(uint a, uint b)
         internal pure
         returns (uint)
     {
         require(b != 0, "ERR_DIV_ZERO");
         uint c0 = a * BONE;
-        require(a == 0 || c0 / a == BONE, "ERR_DIV_INTERNAL"); // bmul overflow
+        require(a == 0 || c0 / a == BONE, "ERR_DIV_INTERNAL"); // _bmul overflow
         uint c1 = c0 + (b / 2);
         require(c1 >= c0, "ERR_DIV_INTERNAL"); //  badd require
         uint c2 = c1 / b;

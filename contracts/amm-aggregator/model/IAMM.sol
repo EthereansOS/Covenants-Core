@@ -30,8 +30,6 @@ struct SwapParams {
     address[] path;
     address inputToken;
     uint256 amount;
-    bool amountIsLiquidityPool;
-    bool amountIsOutput;
     bytes additionalData;
     uint256 minAmount;
     address receiver;

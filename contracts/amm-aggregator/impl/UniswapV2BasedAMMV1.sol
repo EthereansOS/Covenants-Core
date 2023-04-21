@@ -186,6 +186,12 @@ contract UniswapV2BasedAMMV1 is AMM {
         return routerAddress;
     }
 
+    function checkByTokensAdditionalData(address[] calldata tokens, bytes calldata additionalData) external override view {}
+    function checkAddLiquidityEnsuringPoolAdditionalData(LiquidityPoolCreationParams[] calldata liquidityPoolCreationParams) external override view {}
+    function _checkAddLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
+    function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
+
     function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
