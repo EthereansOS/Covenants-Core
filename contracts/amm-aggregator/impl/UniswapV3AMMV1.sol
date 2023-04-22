@@ -165,7 +165,7 @@ contract UniswapV3AMMV1 is AMM {
         return nonfungiblePositionManagerAddress;
     }
 
-    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
+    function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
         return nonfungiblePositionManagerAddress;
     }
 

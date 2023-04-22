@@ -178,7 +178,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         return routerAddress;
     }
 
-    function _getLiquidityPoolCreator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
+    function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
         return routerAddress;
     }
 
