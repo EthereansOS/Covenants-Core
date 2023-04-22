@@ -160,9 +160,7 @@ interface BPool is IERC20Full {
 
 contract BalancerAMMV1 is AMM {
 
-    uint public constant BONE = 10**18;
-
-    bool private _multi;
+    uint256 private constant BONE = 10**18;
 
     constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
     }

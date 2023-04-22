@@ -204,7 +204,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 liquidityPoolCreationData.minAmounts[0],
                 liquidityPoolCreationData.minAmounts[1],
                 liquidityPoolCreationData.receiver,
-                block.timestamp + 10000
+                liquidityPoolCreationData.deadline
             );
         } else {
             uint256 tokenIndex = liquidityPoolCreationData.tokenAddresses[0] != _ethereumAddress ? 0 : 1;
@@ -214,7 +214,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 liquidityPoolCreationData.minAmounts[tokenIndex],
                 liquidityPoolCreationData.minAmounts[1 - tokenIndex],
                 liquidityPoolCreationData.receiver,
-                block.timestamp + 10000
+                liquidityPoolCreationData.deadline
             );
         }
         address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
@@ -235,7 +235,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 processedLiquidityPoolParams.minAmounts[0],
                 processedLiquidityPoolParams.minAmounts[1],
                 processedLiquidityPoolParams.receiver,
-                block.timestamp + 10000
+                processedLiquidityPoolParams.deadline
             );
         } else {
             uint256 tokenIndex = processedLiquidityPoolParams.liquidityPoolTokens[0] != _ethereumAddress ? 0 : 1;
@@ -248,7 +248,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 processedLiquidityPoolParams.minAmounts[tokenIndex],
                 processedLiquidityPoolParams.minAmounts[1 - tokenIndex],
                 processedLiquidityPoolParams.receiver,
-                block.timestamp + 10000
+                processedLiquidityPoolParams.deadline
             );
         }
         address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1]);
@@ -263,9 +263,10 @@ contract UniswapV2BasedAMMV1 is AMM {
         uint256 amount0;
         uint256 amount1;
         if(!processedLiquidityPoolParams.involvingETH) {
-            (amount0, amount1) = IUniswapV2Router(routerAddress).removeLiquidity(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1], processedLiquidityPoolParams.liquidityPoolAmount, 1, 1, processedLiquidityPoolParams.receiver, block.timestamp + 1000);
+            (amount0, amount1) = IUniswapV2Router(routerAddress).removeLiquidity(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[0], processedLiquidityPoolParams.minAmounts[1], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
         } else {
-            (amount0, amount1) = IUniswapV2Router(routerAddress).removeLiquidityETH(processedLiquidityPoolParams.liquidityPoolTokens[0] != _ethereumAddress ? processedLiquidityPoolParams.liquidityPoolTokens[0] : processedLiquidityPoolParams.liquidityPoolTokens[1], processedLiquidityPoolParams.liquidityPoolAmount, 1, 1, processedLiquidityPoolParams.receiver, block.timestamp + 1000);
+            uint256 tokenIndex = processedLiquidityPoolParams.liquidityPoolTokens[0] != _ethereumAddress ? 0 : 1;
+            (amount0, amount1) = IUniswapV2Router(routerAddress).removeLiquidityETH(processedLiquidityPoolParams.liquidityPoolTokens[tokenIndex], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[tokenIndex], processedLiquidityPoolParams.minAmounts[1 - tokenIndex], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
         }
         tokensAmounts[0] = amount0;
         tokensAmounts[1] = amount1;
@@ -281,13 +282,13 @@ contract UniswapV2BasedAMMV1 is AMM {
             path[path.length - 1] = _ethereumAddress;
         }
         if(!data.enterInETH && !data.exitInETH) {
-            return IUniswapV2Router(routerAddress).swapExactTokensForTokens(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(routerAddress).swapExactTokensForTokens(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         if(data.enterInETH) {
-            return IUniswapV2Router(routerAddress).swapExactETHForTokens{value : data.amount}(1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(routerAddress).swapExactETHForTokens{value : data.amount}(data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         if(data.exitInETH) {
-            return IUniswapV2Router(routerAddress).swapExactTokensForETH(data.amount, 1, path, data.receiver, block.timestamp + 1000)[path.length - 1];
+            return IUniswapV2Router(routerAddress).swapExactTokensForETH(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         return 0;
     }

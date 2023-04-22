@@ -33,6 +33,7 @@ interface Mooniswap {
 }
 
 contract MooniswapAMMV1 is AMM {
+    using TransferUtilities for address;
 
     address public immutable factory;
 
@@ -121,19 +122,21 @@ contract MooniswapAMMV1 is AMM {
         tokensAmounts[0] = liquidityPoolCreationData.amounts[orderedTokens[0] == liquidityPoolCreationData.tokenAddresses[0] ? 0 : 1];
         tokensAmounts[1] = liquidityPoolCreationData.amounts[orderedTokens[1] == liquidityPoolCreationData.tokenAddresses[1] ? 1 : 0];
 
+        address ethereumAddress = _ethereumAddress;
+
         for(uint256 i = 0; i < orderedTokens.length; i++) {
-            if(orderedTokens[i] != _ethereumAddress) {
-                _safeApprove(orderedTokens[i], liquidityPoolAddress, tokensAmounts[i]);
+            if(orderedTokens[i] != ethereumAddress) {
+                orderedTokens[i].safeApprove(liquidityPoolAddress, tokensAmounts[i]);
             }
         }
 
-        if(orderedTokens[0] != _ethereumAddress && orderedTokens[1] != _ethereumAddress) {
-            mooniswap.deposit(tokensAmounts, liquidityPoolCreationData.minAmounts);
-        } else {
-            mooniswap.deposit{value : orderedTokens[0] == _ethereumAddress ? tokensAmounts[0] : tokensAmounts[1]}(tokensAmounts, liquidityPoolCreationData.minAmounts);
-        }
+        mooniswap.deposit{value : orderedTokens[0] == ethereumAddress ? tokensAmounts[0] : orderedTokens[1] == ethereumAddress ? tokensAmounts[1] : 0}(tokensAmounts, liquidityPoolCreationData.minAmounts);
 
-        _safeTransfer(liquidityPoolAddress, liquidityPoolCreationData.receiver, liquidityPoolAmount = IERC20Full(liquidityPoolAddress).balanceOf(address(this)));
+        liquidityPoolAmount = liquidityPoolAddress.balanceOf(address(this));
+
+        if(liquidityPoolCreationData.receiver != address(this)) {
+            liquidityPoolAddress.safeTransfer(liquidityPoolCreationData.receiver, liquidityPoolAmount);
+        }
     }
 
     function _addLiquidity(ProcessedLiquidityPoolParams memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
@@ -143,54 +146,55 @@ contract MooniswapAMMV1 is AMM {
         liquidityPoolAmount = data.liquidityPoolAmount;
         tokensAmounts = data.tokensAmounts;
 
+        address ethereumAddress = _ethereumAddress;
         for(uint256 i = 0; i < data.liquidityPoolTokens.length; i++) {
-            if(data.liquidityPoolTokens[i] != _ethereumAddress) {
-                _safeApprove(data.liquidityPoolTokens[i], liquidityPoolAddress, data.tokensAmounts[i]);
+            if(data.liquidityPoolTokens[i] != ethereumAddress) {
+                data.liquidityPoolTokens[i].safeApprove(liquidityPoolAddress, data.tokensAmounts[i]);
             }
         }
 
-        if(data.liquidityPoolTokens[0] != _ethereumAddress && data.liquidityPoolTokens[1] != _ethereumAddress) {
-            mooniswap.deposit(data.tokensAmounts, data.minAmounts);
-        } else {
-            mooniswap.deposit{value : data.liquidityPoolTokens[0] == _ethereumAddress ? data.tokensAmounts[0] : data.tokensAmounts[1]}(data.tokensAmounts, data.minAmounts);
+        liquidityPoolAmount = liquidityPoolAddress.balanceOf(address(this));
+
+        mooniswap.deposit{value : data.liquidityPoolTokens[0] == ethereumAddress ? tokensAmounts[0] : data.liquidityPoolTokens[1] == ethereumAddress ? tokensAmounts[1] : 0}(data.tokensAmounts, data.minAmounts);
+
+        liquidityPoolAmount = liquidityPoolAddress.balanceOf(address(this)) - liquidityPoolAmount;
+
+        if(data.receiver != address(this)) {
+            liquidityPoolAddress.safeTransfer(data.receiver, liquidityPoolAmount);
         }
-        _safeTransfer(liquidityPoolAddress, data.receiver, liquidityPoolAmount = IERC20Full(liquidityPoolAddress).balanceOf(address(this)));
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolParams memory data) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
 
+        uint256[] memory balancesBefore = _balanceOf(data.liquidityPoolTokens);
+
         Mooniswap(_toAddress(data.liquidityPoolId)).withdraw(liquidityPoolAmount = data.liquidityPoolAmount, data.minAmounts);
 
-        tokensAmounts = new uint256[](data.tokensAmounts.length);
-        for(uint256 i = 0; i < data.tokensAmounts.length; i++) {
-            if(data.liquidityPoolTokens[i] != _ethereumAddress) {
-                _safeTransfer(data.liquidityPoolTokens[i], data.receiver, data.tokensAmounts[i] = IERC20Full(data.liquidityPoolTokens[i]).balanceOf(address(this)));
-            } else {
-                (bool result,) = data.receiver.call{value:tokensAmounts[i] = address(this).balance}("");
-                require(result, "ETH transfer failed");
+        tokensAmounts = _balanceOf(data.liquidityPoolTokens);
+
+        for(uint256 i = 0; i < tokensAmounts.length; i++) {
+            tokensAmounts[i] -= balancesBefore[i];
+            if(data.receiver == address(this)) {
+                continue;
             }
+            data.liquidityPoolTokens[i].safeTransfer(data.receiver, data.tokensAmounts[i]);
         }
     }
 
     function _swap(ProcessedSwapParams memory data) internal override virtual returns(uint256 outputAmount) {
         address[] memory liquidityPoolAddresses = _toAddresses(data.liquidityPoolIds);
         outputAmount = data.amount;
+        address ethereumAddress = _ethereumAddress;
         for(uint256 i = 0; i < liquidityPoolAddresses.length; i++) {
             address inputToken = i == 0 ? data.inputToken : data.path[i - 1];
-            if(inputToken != _ethereumAddress) {
-                _safeApprove(inputToken, liquidityPoolAddresses[i], outputAmount);
+            bool isETH = inputToken == ethereumAddress;
+            if(!isETH) {
+                inputToken.safeApprove(liquidityPoolAddresses[i], outputAmount);
             }
-            if(inputToken == _ethereumAddress) {
-                outputAmount = Mooniswap(liquidityPoolAddresses[i]).swap{value : outputAmount}(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
-            } else {
-                outputAmount = Mooniswap(liquidityPoolAddresses[i]).swap(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
-            }
+            outputAmount = Mooniswap(liquidityPoolAddresses[i]).swap{value : isETH ? outputAmount : 0}(inputToken, data.path[i], outputAmount, data.minAmount, address(0));
         }
-        if(data.path[data.path.length - 1] == _ethereumAddress) {
-            (bool result,) = data.receiver.call{value:outputAmount}("");
-            require(result, "ETH transfer failed");
-        } else {
-            _safeTransfer(data.path[data.path.length - 1], data.receiver, outputAmount);
+        if(data.receiver != address(this)) {
+            data.path[data.path.length - 1].safeTransfer(data.receiver, outputAmount);
         }
     }
 }
