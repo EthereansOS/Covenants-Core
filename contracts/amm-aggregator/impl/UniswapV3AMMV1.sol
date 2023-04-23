@@ -201,13 +201,97 @@ contract UniswapV3AMMV1 is AMM {
     function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
     function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
 
-    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function _retrieveLiquidityPoolIdAndApprove(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal virtual override {
+        _tryTransferNFT(processedLiquidityPoolParams.liquidityPoolId);
     }
 
-    function _addLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+    function _retrieveLiquidityPoolIdsAndApprove(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParamsArray) internal virtual override {
+        if(_delegateMode()) {
+            return;
+        }
+        for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
+            _tryTransferNFT(processedLiquidityPoolParamsArray[i].liquidityPoolId);
+        }
     }
 
-    function _removeLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+    function _tryTransferNFT(uint256 liquidityPoolId) private {
+        if(_delegateMode()) {
+            return;
+        }
+        address liquidityPoolAddress = _asPoolAddress(liquidityPoolId);
+        if(liquidityPoolAddress != address(uint160(liquidityPoolId))) {
+            INonfungiblePositionManager(nonfungiblePositionManagerAddress).transferFrom(msg.sender, address(this), liquidityPoolId);
+        }
+    }
+
+    function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory params) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+        (uint24 fee, int24 tickLower, int24 tickUpper) = _decodeAdditionalData(params.additionalData);
+        orderedTokens = params.tokenAddresses;
+        tokensAmounts = new uint256[](2);
+        uint256 ethValue = 0;
+        address ethereumAddress = _ethereumAddress;
+        if(params.involvingETH) {
+            for(uint256 i = 0; i < orderedTokens.length; i++) {
+                if(orderedTokens[i] == ethereumAddress) {
+                    ethValue = params.amounts[i];
+                    break;
+                }
+            }
+        }
+        (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = _mint(orderedTokens[0], orderedTokens[1], fee, tickLower, tickUpper, params.amounts[0], params.amounts[1], params.minAmounts[0], params.minAmounts[1], params.receiver, params.deadline, ethValue);
+    }
+
+    function _addLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+
+        address liquidityPoolAddress = _asPoolAddress(params.liquidityPoolId);
+
+        tokensAmounts = new uint256[](2);
+        uint256 ethValue = 0;
+        address ethereumAddress = _ethereumAddress;
+        if(params.involvingETH) {
+            for(uint256 i = 0; i < params.liquidityPoolTokens.length; i++) {
+                if(params.liquidityPoolTokens[i] == ethereumAddress) {
+                    ethValue = params.tokensAmounts[i];
+                    break;
+                }
+            }
+        }
+
+        if(liquidityPoolAddress == address(uint160(params.liquidityPoolId))) {
+            (uint24 fee, int24 tickLower, int24 tickUpper) = _decodeAdditionalData(params.additionalData);
+            (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = _mint(params.liquidityPoolTokens[0], params.liquidityPoolTokens[1], fee, tickLower, tickUpper, params.tokensAmounts[0], params.tokensAmounts[1], params.minAmounts[0], params.minAmounts[1], params.receiver, params.deadline, ethValue);
+        } else {
+            (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = _increaseLiquidity(params.liquidityPoolId, params.tokensAmounts[0], params.tokensAmounts[1], params.minAmounts[0], params.minAmounts[1], params.deadline, ethValue);
+            if(params.receiver != address(this)) {
+                INonfungiblePositionManager(nonfungiblePositionManagerAddress).safeTransferFrom(address(this), params.receiver, liquidityPoolId, "");
+            }
+        }
+    }
+
+    function _removeLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(nonfungiblePositionManagerAddress);
+        tokensAmounts = new uint256[](2);
+        bool involvingETH = params.involvingETH;
+        bytes[] memory data = new bytes[](involvingETH ? 4 : 2);
+        data[0] = abi.encodeWithSelector(nonfungiblePositionManager.decreaseLiquidity.selector, INonfungiblePositionManager.DecreaseLiquidityParams(
+            params.liquidityPoolId,
+            uint128(liquidityPoolAmount = params.liquidityPoolAmount),
+            params.minAmounts[0],
+            params.minAmounts[1],
+            params.deadline
+        ));
+
+        data[1] = abi.encodeWithSelector(nonfungiblePositionManager.collect.selector, INonfungiblePositionManager.CollectParams({
+            tokenId: params.liquidityPoolId,
+            recipient: involvingETH ? address(0) : params.receiver,
+            amount0Max: 0xffffffffffffffffffffffffffffffff,
+            amount1Max: 0xffffffffffffffffffffffffffffffff
+        }));
+        if(involvingETH) {
+            data[2] = abi.encodeWithSelector(nonfungiblePositionManager.unwrapWETH9.selector, 0, params.receiver);
+            data[3] = abi.encodeWithSelector(nonfungiblePositionManager.sweepToken.selector, params.liquidityPoolTokens[params.liquidityPoolTokens[0] == _ethereumAddress ? 1 : 0], 0, params.receiver);
+        }
+        (tokensAmounts[0], tokensAmounts[1]) = abi.decode(IMulticall(address(nonfungiblePositionManager)).multicall(data)[1], (uint256, uint256));
     }
 
     function _mint(address token0, address token1, uint24 fee, int24 tickLower, int24 tickUpper, uint256 amount0Desired, uint256 amount1Desired, uint256 amount0Min, uint256 amount1Min, address recipient, uint256 deadline, uint256 ethValue) private returns(uint256 tokenId, uint256 liquidity, uint256 amount0, uint256 amount1) {

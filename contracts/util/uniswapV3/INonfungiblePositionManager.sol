@@ -6,7 +6,9 @@ import "./IPeripheryImmutableState.sol";
 import "./IPeripheryPayments.sol";
 
 interface INonfungiblePositionManager is IMulticall, IPeripheryImmutableState, IPeripheryPayments {
-
+    function setApprovalForAll(address operator, bool _approved) external;
+    function isApprovedForAll(address owner, address operator) external view returns (bool);
+    function transferFrom(address from, address to, uint256 tokenId) external;
     function safeTransferFrom(
         address from,
         address to,
