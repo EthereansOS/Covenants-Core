@@ -331,7 +331,7 @@ abstract contract AMM is IAMM {
             involvingETH,
             liquidityPoolParams.additionalData,
             liquidityPoolParams.minAmounts,
-            liquidityPoolParams.receiver == address(0) ? msg.sender : liquidityPoolParams.receiver,
+            _receiver(liquidityPoolParams.receiver),
             liquidityPoolParams.deadline,
             _getLiquidityPoolOperator(liquidityPoolParams.liquidityPoolId, liquidityPoolTokens, liquidityPoolParams.additionalData)
         );
@@ -357,10 +357,14 @@ abstract contract AMM is IAMM {
             swapParams.amount,
             swapParams.additionalData,
             swapParams.minAmount,
-            swapParams.receiver == address(0) ? msg.sender : swapParams.receiver,
+            _receiver(swapParams.receiver),
             swapParams.deadline,
             _getSwapOperator(swapParams.liquidityPoolIds[0], liquidityPoolTokens, swapParams.additionalData)
         );
+    }
+
+    function _receiver(address receiver) internal view returns(address) {
+        return receiver != address(0) ? receiver : _delegateMode() ? address(this) : msg.sender;
     }
 
     function _processSwapParams(SwapParams[] memory swapParams) internal view returns(ProcessedSwapParams[] memory processedSwapParams) {
