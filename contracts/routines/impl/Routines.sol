@@ -28,8 +28,6 @@ contract Routines is IRoutines, LazyInitCapableElement {
     RoutinesOperation[] private _operations;
 
     address private _ammAggregatorAddress;
-    address private _uniswapV3SwapRouterAddress;
-    address private _wethTokenAddress;
 
     constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
@@ -37,10 +35,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
         require(host != address(0), "host");
 
-        address uniswapV3SwapRouterAddress;
-        (uniswapV3SwapRouterAddress, _ammAggregatorAddress, lazyInitData) = abi.decode(lazyInitData, (address, address, bytes));
-
-        _wethTokenAddress = IPeripheryImmutableState(_uniswapV3SwapRouterAddress = uniswapV3SwapRouterAddress).WETH9();
+        (_ammAggregatorAddress, lazyInitData) = abi.decode(lazyInitData, (address, bytes));
 
         RoutinesEntry memory newEntry;
         RoutinesOperation[] memory newOperations;
@@ -190,10 +185,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
         uint256 inputReward = earnByInput ? _calculateRewardPercentage(amountIn, callerRewardPercentage) : 0;
 
-        address ethereumAddress = _wethTokenAddress;
-        if(operation.ammPlugin != _uniswapV3SwapRouterAddress) {
-            (ethereumAddress,,) = IAMM(operation.ammPlugin).data();
-        }
+        (address ethereumAddress,,) = IAMM(operation.ammPlugin).data();
 
         if(operation.exitInETH) {
             operation.swapPath[operation.swapPath.length - 1] = ethereumAddress;
@@ -218,7 +210,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
             _safeApprove(swapData.inputToken, operation.ammPlugin, swapData.amount);
         }
 
-        outputAmount = operation.ammPlugin == _uniswapV3SwapRouterAddress ? _swapLiquidityUniswapV3(swapData, minAmount) : IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? amountIn : 0}(swapData);
+        outputAmount = IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? amountIn : 0}(swapData);
 
         require(outputAmount >= minAmount, "slippage");
 
@@ -312,11 +304,10 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
     function _setOperations(RoutinesOperation[] memory operations) private {
         delete _operations;
-        address uniswapV3SwapRouterAddress = _uniswapV3SwapRouterAddress;
         address[] memory amms = IAMMAggregator(_ammAggregatorAddress).amms();
         for(uint256 i = 0; i < operations.length; i++) {
             RoutinesOperation memory operation = operations[i];
-            _checkAMM(operation.ammPlugin, uniswapV3SwapRouterAddress, amms);
+            _checkAMM(operation.ammPlugin, amms);
             require(operation.receivers.length > 0, "No receivers");
             require(operation.receiversPercentages.length == (operation.receivers.length - 1), "Last receiver percentage is calculated automatically");
             uint256 percentage = 0;
@@ -328,57 +319,8 @@ contract Routines is IRoutines, LazyInitCapableElement {
         }
     }
 
-    function _clone(address original) private returns (address copy) {
-        assembly {
-            mstore(
-                0,
-                or(
-                    0x5880730000000000000000000000000000000000000000803b80938091923cF3,
-                    mul(original, 0x1000000000000000000)
-                )
-            )
-            copy := create(0, 0, 32)
-            switch extcodesize(copy)
-                case 0 {
-                    invalid()
-                }
-        }
-    }
-
-    function _swapLiquidityUniswapV3(SwapParams memory data, uint256 amountOutMinimum) private returns(uint256) {
-        bytes memory path = "";//abi.encodePacked(data.inputToken, IUniswapV3Pool(data.liquidityPoolAddresses[0]).fee(), data.path[0]);
-        for(uint256 i = 1; i < data.liquidityPoolIds.length; i++) {
-            //path = abi.encodePacked(path, IUniswapV3Pool(data.liquidityPoolAddresses[i]).fee(), data.path[i]);
-        }
-
-        ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
-            path : path,
-            recipient : data.exitInETH ? address(0) : data.receiver,
-            deadline : block.timestamp + 10000,
-            amountIn : data.amount,
-            amountOutMinimum : amountOutMinimum
-        });
-
-        if(data.enterInETH || data.exitInETH) {
-            return _swapLiquidityMulticall(data.enterInETH, data.exitInETH, data.amount, data.receiver, abi.encodeWithSelector(ISwapRouter(_uniswapV3SwapRouterAddress).exactInput.selector, exactInputParams));
-        }
-        return ISwapRouter(_uniswapV3SwapRouterAddress).exactInput(exactInputParams);
-    }
-
-    function _swapLiquidityMulticall(bool enterInETH, bool exitInETH, uint256 value, address recipient, bytes memory data) private returns (uint256) {
-        bytes[] memory multicall = new bytes[](enterInETH && exitInETH ? 3 : 2);
-        multicall[0] = data;
-        if(enterInETH && exitInETH) {
-            multicall[1] = abi.encodeWithSelector(IPeripheryPayments(_uniswapV3SwapRouterAddress).refundETH.selector);
-            multicall[2] = abi.encodeWithSelector(IPeripheryPayments(_uniswapV3SwapRouterAddress).unwrapWETH9.selector, 0, recipient);
-        } else {
-            multicall[1] = enterInETH ? abi.encodeWithSelector(IPeripheryPayments(_uniswapV3SwapRouterAddress).refundETH.selector) : abi.encodeWithSelector(IPeripheryPayments(_uniswapV3SwapRouterAddress).unwrapWETH9.selector, 0, recipient);
-        }
-        return abi.decode(IMulticall(_uniswapV3SwapRouterAddress).multicall{value : enterInETH ? value : 0}(multicall)[0], (uint256));
-    }
-
-    function _checkAMM(address ammPlugin, address uniswapV3SwapRouterAddress, address[] memory amms) private pure {
-        if(ammPlugin == address(0) || ammPlugin == uniswapV3SwapRouterAddress) {
+    function _checkAMM(address ammPlugin, address[] memory amms) private pure {
+        if(ammPlugin == address(0)) {
             return;
         }
         for(uint256 i = 0; i < amms.length; i++) {
