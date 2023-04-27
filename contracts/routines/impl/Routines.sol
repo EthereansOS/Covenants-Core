@@ -31,8 +31,6 @@ contract Routines is IRoutines, LazyInitCapableElement {
     address private _uniswapV3SwapRouterAddress;
     address private _wethTokenAddress;
 
-    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
-
     constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
     function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory extensionInitResult) {
@@ -80,7 +78,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
     }
 
     function nextEvent() public view returns(uint256) {
-        return _entry.lastEvent == 0 ? block.timestamp : (_entry.lastEvent + _entry.eventInterval * TIME_SLOTS_IN_SECONDS);
+        return _entry.lastEvent == 0 ? block.timestamp : (_entry.lastEvent + _entry.eventInterval);
     }
 
     function flushBack(address[] memory tokenAddresses) external override extensionOnly {
@@ -306,7 +304,6 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
     function _set(RoutinesEntry memory routinesEntry, RoutinesOperation[] memory operations) private {
         require(keccak256(bytes(routinesEntry.name)) != keccak256(""), "Name");
-        routinesEntry.eventInterval = routinesEntry.eventInterval / TIME_SLOTS_IN_SECONDS;
         require(routinesEntry.eventInterval > 0, "Interval");
         require(routinesEntry.callerRewardPercentage < ONE_HUNDRED, "Percentage");
         _entry = routinesEntry;
