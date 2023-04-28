@@ -7,15 +7,19 @@ struct PrestoOperation {
     uint256 inputTokenAmount;
 
     address ammPlugin;
-    address[] liquidityPoolAddresses;
+    uint256[] liquidityPoolIds;
     address[] swapPath;
-    bool enterInETH;
-    bool exitInETH;
+    bool enterInOrInvolvingETH;
+    bool amountIsLiquidityPoolOrExitInETH;
+
+    bytes additionalData;
 
     uint256[] tokenMins;
 
     address[] receivers;
     uint256[] receiversPercentages;
+
+    uint256 deadline;
 }
 
 interface IPresto {
