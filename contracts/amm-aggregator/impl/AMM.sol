@@ -367,7 +367,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
     function _retrieveLiquidityPoolIdsAndApprove(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParamsArray) internal virtual {
         uint256 liquidityPoolTokenType = _liquidityPoolTokenType;
         if(liquidityPoolTokenType != 20) {
-            NFTLibrary.retrieveLiquidityPoolIdsAndApprove(processedLiquidityPoolParamsArray, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
+            return NFTLibrary.retrieveLiquidityPoolIdsAndApprove(processedLiquidityPoolParamsArray, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
         }
         for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
             _collect(_toAddress(processedLiquidityPoolParamsArray[i].liquidityPoolId), processedLiquidityPoolParamsArray[i].liquidityPoolAmount, processedLiquidityPoolParamsArray[i].liquidityPoolOperator, false);
