@@ -185,7 +185,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
 
         uint256 inputReward = earnByInput ? _calculateRewardPercentage(amountIn, callerRewardPercentage) : 0;
 
-        (address ethereumAddress,,) = IAMM(operation.ammPlugin).data();
+        (address ethereumAddress,,,,) = IAMM(operation.ammPlugin).data();
 
         if(operation.exitInETH) {
             operation.swapPath[operation.swapPath.length - 1] = ethereumAddress;
