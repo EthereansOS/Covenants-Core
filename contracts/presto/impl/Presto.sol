@@ -5,6 +5,13 @@ import "../model/IPresto.sol";
 import "../../amm-aggregator/model/IAMMAggregator.sol";
 import { IERC20Full, TransferUtilities } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
+
+struct AddLiquidityData {
+    address ethereumAddress;
+    address[] tokenAddresses;
+    uint256[] amounts;
+}
+
 contract Presto is IPresto {
     using TransferUtilities for address;
 
@@ -12,6 +19,8 @@ contract Presto is IPresto {
 
     address[] private _tokensToTransfer;
     mapping(address => uint256) private _tokenAmounts;
+
+    mapping(uint256 => AddLiquidityData) private _addLiquidityData;
 
     address private immutable _ammAggregator;
 
@@ -29,10 +38,10 @@ contract Presto is IPresto {
             PrestoOperation memory operation = operations[i];
             require(block.timestamp < operation.deadline, "too late");
             if(operation.ammPlugin == address(0)) {
-                outputAmounts[i] = operation.inputTokenAmount;
-                _transferTo(operation.inputTokenAddress, operation.inputTokenAmount, operation.receivers, operation.receiversPercentages);
-            } else if(operation.swapPath.length == 0) {
-                outputAmounts[i] = _addLiquidity(operation);
+                outputAmounts[i] = operation.amount;
+                _transferTo(address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), operation.amount, operation.receivers, operation.receiversPercentages);
+            } else if(operation.liquidityPoolIds.length == 0) {
+                outputAmounts[i] = _addLiquidity(operation, i);
             } else {
                 outputAmounts[i] = _swap(operation);
             }
@@ -57,9 +66,10 @@ contract Presto is IPresto {
         address[] memory amms = IAMMAggregator(_ammAggregator).amms();
         for(uint256 i = 0; i < operations.length; i++) {
             PrestoOperation memory operation = operations[i];
-            address ethereumAddress = _checkAMMAndRetrieveEthereumAddress(operation, amms);
-            if(operation.ammPlugin != address(0) && operation.swapPath.length == 0) {
-                (uint256[] memory amounts, address[] memory tokensAddresses) = IAMM(operation.ammPlugin).byLiquidityPoolAmount(operation.liquidityPoolIds[0], operation.inputTokenAmount);
+            if(operation.ammPlugin != address(0) && operation.liquidityPoolIds.length == 0) {
+                (address ethereumAddress, uint256 liquidityPoolTokenType) = _checkAMMAndRetrieveData(operation, amms);
+                require(liquidityPoolTokenType == 20, "ERC20");
+                (uint256[] memory amounts, address[] memory tokensAddresses) = IAMM(operation.ammPlugin).byLiquidityPoolAmount(operation.liquidityPoolIdOrInputTokenAddress, operation.amount);
                 bool hasEth = false;
                 for(uint256 z = 0; z < tokensAddresses.length; z++) {
                     if(tokensAddresses[z] == ethereumAddress) {
@@ -68,21 +78,22 @@ contract Presto is IPresto {
                     _collectTokenData(operation.enterInETH && tokensAddresses[z] == ethereumAddress ? address(0) : tokensAddresses[z], amounts[z]);
                 }
                 require(!operation.enterInETH || hasEth, "Wrong use of enterInETH in addLiquidity");
+                _addLiquidityData[i] = AddLiquidityData(ethereumAddress, tokensAddresses, amounts);
             } else {
-                _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : operation.inputTokenAddress, operation.inputTokenAmount);
+                _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), operation.amount);
             }
         }
     }
 
-    function _checkAMMAndRetrieveEthereumAddress(PrestoOperation memory operation, address[] memory amms) private view returns(address) {
+    function _checkAMMAndRetrieveData(PrestoOperation memory operation, address[] memory amms) private view returns(address ethereumAddress, uint256 liquidityPoolTokenType) {
         if(operation.ammPlugin == address(0)) {
-            return address(0);
+            return (address(0), 0);
         }
         address ammPlugin = operation.ammPlugin;
         for(uint256 i = 0; i < amms.length; i++) {
             if(amms[i] == ammPlugin) {
-                (address ethereumAddress,,) = IAMM(ammPlugin).data();
-                return ethereumAddress;
+                (ethereumAddress,,, liquidityPoolTokenType,) = IAMM(ammPlugin).data();
+                return (ethereumAddress, liquidityPoolTokenType);
             }
         }
         revert("Unknown AMM");
@@ -113,24 +124,24 @@ contract Presto is IPresto {
         delete _tokensToTransfer;
     }
 
-    struct LiquidityPoolParams {
-    uint256 liquidityPoolId;
-    uint256 amount;
-    address tokenAddress;
-    bool amountIsLiquidityPool;
-    bool involvingETH;
-    bytes additionalData;
-    uint256[] minAmounts;
-    address receiver;
-    uint256 deadline;
-}
-
-    function _addLiquidity(PrestoOperation memory operation) private returns (uint256 outputAmount) {
+    function _addLiquidity(PrestoOperation memory operation, uint256 position) private returns (uint256 outputAmount) {
+        AddLiquidityData memory addLiquidityData = _addLiquidityData[position];
+        delete _addLiquidityData[position];
+        uint256 value = 0;
+        if(operation.enterInETH) {
+            address[] memory tokenAddresses = addLiquidityData.tokenAddresses;
+            for(uint256 i = 0; i < tokenAddresses.length; i++) {
+                if(tokenAddresses[i] == addLiquidityData.ethereumAddress) {
+                    value = addLiquidityData.amounts[i];
+                    break;
+                }
+            }
+        }
         LiquidityPoolParams memory liquidityPoolData = LiquidityPoolParams(
-            operation.liquidityPoolIds[0],
-            operation.inputTokenAmount,
-            address(0),
-            true,
+            operation.liquidityPoolIdOrInputTokenAddress,
+            addLiquidityData.amounts[0],
+            addLiquidityData.tokenAddresses[0],
+            false,
             operation.enterInETH,
             operation.additionalData,
             operation.tokenMins,
@@ -138,16 +149,16 @@ contract Presto is IPresto {
             operation.deadline
         );
         uint256[] memory tokenAmounts;
-        (outputAmount,tokenAmounts,) = IAMM(operation.ammPlugin).addLiquidity{value : operation.enterInETH ? operation.inputTokenAmount : 0}(liquidityPoolData);
+        (outputAmount, tokenAmounts,,) = IAMM(operation.ammPlugin).addLiquidity{value : value}(liquidityPoolData);
         _checkMinAmounts(tokenAmounts, operation.tokenMins);
-        _transferTo(operation.inputTokenAddress, outputAmount, operation.receivers, operation.receiversPercentages);
+        _transferTo(address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), outputAmount, operation.receivers, operation.receiversPercentages);
     }
 
     function _swap(PrestoOperation memory operation) private returns(uint256 outputAmount) {
 
         uint256 minAmount = operation.tokenMins.length > 0 ? operation.tokenMins[0] : 0;
 
-        (address ethereumAddress,,) = IAMM(operation.ammPlugin).data();
+        (address ethereumAddress,,,,) = IAMM(operation.ammPlugin).data();
 
         if(operation.exitInETH) {
             operation.swapPath[operation.swapPath.length - 1] = ethereumAddress;
@@ -158,19 +169,21 @@ contract Presto is IPresto {
         SwapParams memory swapData = SwapParams(
             operation.enterInETH,
             operation.exitInETH,
-            operation.liquidityPoolAddresses,
+            operation.liquidityPoolIds,
             operation.swapPath,
-            operation.enterInETH ? ethereumAddress : operation.inputTokenAddress,
-            operation.inputTokenAmount,
+            operation.enterInETH ? ethereumAddress : address(uint160(operation.liquidityPoolIdOrInputTokenAddress)),
+            operation.amount,
+            operation.additionalData,
+            operation.tokenMins[0],
             address(this),
-            operation.tokenMins[0]
+            operation.deadline
         );
 
         if(swapData.inputToken != address(0) && !swapData.enterInETH) {
             swapData.inputToken.safeApprove(operation.ammPlugin, swapData.amount);
         }
 
-        outputAmount = IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? operation.inputTokenAmount : 0}(swapData);
+        outputAmount = IAMM(operation.ammPlugin).swap{value : swapData.enterInETH ? operation.amount : 0}(swapData);
 
         _checkMinAmount(outputAmount, minAmount);
 
@@ -212,7 +225,7 @@ contract Presto is IPresto {
             } catch {
                 (bool result,) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20Full(address(0)).transfer.selector, address(0), value));
                 if(!result) {
-                    erc20TokenAddress.safeTransfer(erc20TokenAddress, 0x000000000000000000000000000000000000dEaD, value);
+                    erc20TokenAddress.safeTransfer(0x000000000000000000000000000000000000dEaD, value);
                 }
             }
         }

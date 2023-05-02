@@ -3,14 +3,14 @@ pragma solidity ^0.8.0;
 
 struct PrestoOperation {
 
-    address inputTokenAddress;
-    uint256 inputTokenAmount;
+    uint256 liquidityPoolIdOrInputTokenAddress;
+    uint256 amount;
 
     address ammPlugin;
     uint256[] liquidityPoolIds;
     address[] swapPath;
-    bool involvingETHOrEnterInETH;
-    bool amountIsLiquidityPoolOrExitInETH;
+    bool enterInETH;
+    bool exitInETH;
 
     bytes additionalData;
 
