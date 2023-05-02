@@ -6,6 +6,54 @@ import { IERC20Full, Bytes32Utilities, TransferUtilities, Uint256Utilities, Addr
 import "../../util/IERC721.sol";
 import "../../util/IERC1155.sol";
 
+library NFTLibrary {
+
+    function retrieveLiquidityPoolIdAndApprove(AMM.ProcessedLiquidityPoolParams memory processedLiquidityPoolParams, uint256 liquidityPoolTokenType, address liquidityPoolCollectionAddress) public {
+        if(liquidityPoolTokenType == 1155) {
+            IERC1155(liquidityPoolCollectionAddress).safeTransferFrom(msg.sender, address(this), processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.liquidityPoolAmount, "");
+            if(processedLiquidityPoolParams.liquidityPoolOperator != address(0)) {
+                IERC1155(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParams.liquidityPoolOperator, true);
+            }
+        } else {
+            _transfer721(msg.sender, address(this), liquidityPoolCollectionAddress, processedLiquidityPoolParams.liquidityPoolId, liquidityPoolTokenType);
+            if(processedLiquidityPoolParams.liquidityPoolOperator != address(0)) {
+                IERC721(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParams.liquidityPoolOperator, true);
+            }
+        }
+    }
+
+    function retrieveLiquidityPoolIdsAndApprove(AMM.ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParamsArray, uint256 liquidityPoolTokenType, address liquidityPoolCollectionAddress) external {
+        for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
+            retrieveLiquidityPoolIdAndApprove(processedLiquidityPoolParamsArray[i], liquidityPoolTokenType, liquidityPoolCollectionAddress);
+        }
+    }
+
+    function flushBack(uint256 liquidityPoolId, uint256 liquidityPoolTokenType, address liquidityPoolCollectionAddress) external {
+        if(liquidityPoolTokenType == 1155) {
+            uint256 balance = IERC1155(liquidityPoolCollectionAddress).balanceOf(address(this), liquidityPoolId);
+            if(balance > 0) {
+                IERC1155(liquidityPoolCollectionAddress).safeTransferFrom(address(this), msg.sender, liquidityPoolId, balance, "");
+            }
+        } else {
+            if(IERC721(liquidityPoolCollectionAddress).ownerOf(liquidityPoolId) == address(this)) {
+                _transfer721(address(this), msg.sender, liquidityPoolCollectionAddress, liquidityPoolId, liquidityPoolTokenType);
+            }
+        }
+    }
+
+    function _transfer721(address from, address to, address tokenAddress, uint256 tokenId, uint256 tokenType) private {
+        if(tokenType == 721) {
+            IERC721(tokenAddress).transferFrom(from, to, tokenId);
+            return;
+        }
+        if(tokenType == 722) {
+            IERC721(tokenAddress).safeTransferFrom(from, to, tokenId);
+            return;
+        }
+        IERC721(tokenAddress).safeTransferFrom(from, to, tokenId, "");
+    }
+}
+
 abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
     using Bytes32Utilities for bytes32;
     using TransferUtilities for address;
@@ -75,7 +123,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         uint256,
         bytes calldata
     ) external view override returns (bytes4) {
-        require(operator == address(this), "unauthorized");
+        require(operator == address(this));
         return this.onERC721Received.selector;
     }
 
@@ -86,7 +134,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         uint256,
         bytes calldata
     ) external view override returns (bytes4) {
-        require(operator == address(this), "unauthorized");
+        require(operator == address(this));
         return this.onERC1155Received.selector;
     }
 
@@ -97,7 +145,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         uint256[] calldata,
         bytes calldata
     ) external view override returns (bytes4) {
-        require(operator == address(this), "unauthorized");
+        require(operator == address(this));
         return this.onERC1155BatchReceived.selector;
     }
 
@@ -179,7 +227,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         _transferToMeAndApprove(liquidityPoolCreationParams.tokenAddresses, liquidityPoolCreationParams.amounts, liquidityPoolCreator, liquidityPoolCreationParams.involvingETH);
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = _createLiquidityPoolAndAddLiquidity(liquidityPoolCreationParams);
         _checkMinAmounts(liquidityPoolTokenAmounts, liquidityPoolCreationParams.minAmounts);
-        require(block.timestamp < liquidityPoolCreationParams.deadline, "too late");
+        require(block.timestamp < liquidityPoolCreationParams.deadline, "deadline");
         emit NewLiquidityPool(liquidityPoolId);
         _flushBack(liquidityPoolCreationParams.tokenAddresses, liquidityPoolId, liquidityPoolCreationParams.involvingETH, _liquidityPoolTokenType);
     }
@@ -189,7 +237,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         _transferToMeAndApprove(liquidityPoolTokens = processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.tokensAmounts, processedLiquidityPoolParams.liquidityPoolOperator, liquidityPoolParams.involvingETH);
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId) = _addLiquidity(processedLiquidityPoolParams);
         _checkMinAmounts(liquidityPoolTokenAmounts, processedLiquidityPoolParams.minAmounts);
-        require(block.timestamp < processedLiquidityPoolParams.deadline, "too late");
+        require(block.timestamp < processedLiquidityPoolParams.deadline, "deadline");
         processedLiquidityPoolParams.liquidityPoolId = liquidityPoolId;
         _flushBack(processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.involvingETH, _liquidityPoolTokenType);
     }
@@ -211,7 +259,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
             (liquidityPoolAmounts[i], liquidityPoolTokenAmounts[i], liquidityPoolIds[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
             processedLiquidityPoolDataArray[i].liquidityPoolId = liquidityPoolIds[i];
             _checkMinAmounts(liquidityPoolTokenAmounts[i], processedLiquidityPoolDataArray[i].minAmounts);
-            require(block.timestamp < processedLiquidityPoolDataArray[i].deadline, "too late");
+            require(block.timestamp < processedLiquidityPoolDataArray[i].deadline, "deadline");
         }
         _flushBack(processedLiquidityPoolDataArray);
     }
@@ -222,7 +270,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         _retrieveLiquidityPoolIdAndApprove(processedLiquidityPoolParams);
         (removedLiquidityPoolAmount, removedLiquidityPoolTokenAmounts) = _removeLiquidity(processedLiquidityPoolParams);
         _checkMinAmounts(removedLiquidityPoolTokenAmounts, processedLiquidityPoolParams.minAmounts);
-        require(block.timestamp < processedLiquidityPoolParams.deadline, "too late");
+        require(block.timestamp < processedLiquidityPoolParams.deadline, "deadline");
         _flushBack(processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.involvingETH, _liquidityPoolTokenType);
     }
 
@@ -239,7 +287,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
             (removedLiquidityPoolAmounts[i], removedLiquidityPoolTokenAmounts[i]) = _removeLiquidity(processedLiquidityPoolParamsArray[i]);
             _checkMinAmounts(removedLiquidityPoolTokenAmounts[i], processedLiquidityPoolParamsArray[i].minAmounts);
-            require(block.timestamp < processedLiquidityPoolParamsArray[i].deadline, "too late");
+            require(block.timestamp < processedLiquidityPoolParamsArray[i].deadline, "deadline");
         }
         _flushBack(processedLiquidityPoolParamsArray);
     }
@@ -268,7 +316,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         _transferToMeAndApprove(inputTokenAddress.asSingleElementArray(), processedSwapParams.amount.asSingleElementArray(), processedSwapParams.liquidityPoolOperator, false);
         receivedValue = _swap(processedSwapParams);
         _checkMinAmount(receivedValue, processedSwapParams.minAmount);
-        require(block.timestamp < swapParams.deadline, "too late");
+        require(block.timestamp < swapParams.deadline, "deadline");
         _flushBack(processedSwapParams.enterInETH ? address(0) : processedSwapParams.inputToken);
         _flushBack(processedSwapParams.exitInETH ? address(0) : processedSwapParams.path[processedSwapParams.path.length - 1]);
     }
@@ -310,55 +358,21 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
 
     function _retrieveLiquidityPoolIdAndApprove(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal virtual {
         uint256 liquidityPoolTokenType = _liquidityPoolTokenType;
-        address liquidityPoolCollectionAddress = _liquidityPoolCollectionAddress;
-        if(liquidityPoolTokenType == 0 || liquidityPoolTokenType == 20) {
-            _transferToMeAndApprove( _toAddress(processedLiquidityPoolParams.liquidityPoolId).asSingleElementArray(), processedLiquidityPoolParams.liquidityPoolAmount.asSingleElementArray(), processedLiquidityPoolParams.liquidityPoolOperator, false);
-        } else if(liquidityPoolTokenType == 1155) {
-            IERC1155(liquidityPoolCollectionAddress).safeTransferFrom(msg.sender, address(this), processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.liquidityPoolAmount, "");
-            if(processedLiquidityPoolParams.liquidityPoolOperator != address(0)) {
-                IERC1155(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParams.liquidityPoolOperator, true);
-            }
-        } else {
-            _transfer721(msg.sender, address(this), liquidityPoolCollectionAddress, processedLiquidityPoolParams.liquidityPoolId, liquidityPoolTokenType);
-            if(processedLiquidityPoolParams.liquidityPoolOperator != address(0)) {
-                IERC721(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParams.liquidityPoolOperator, true);
-            }
+        if(liquidityPoolTokenType == 20) {
+            return _transferToMeAndApprove( _toAddress(processedLiquidityPoolParams.liquidityPoolId).asSingleElementArray(), processedLiquidityPoolParams.liquidityPoolAmount.asSingleElementArray(), processedLiquidityPoolParams.liquidityPoolOperator, false);
         }
+        NFTLibrary.retrieveLiquidityPoolIdAndApprove(processedLiquidityPoolParams, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
     }
 
     function _retrieveLiquidityPoolIdsAndApprove(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParamsArray) internal virtual {
         uint256 liquidityPoolTokenType = _liquidityPoolTokenType;
-        address liquidityPoolCollectionAddress = _liquidityPoolCollectionAddress;
+        if(liquidityPoolTokenType != 20) {
+            NFTLibrary.retrieveLiquidityPoolIdsAndApprove(processedLiquidityPoolParamsArray, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
+        }
         for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
-            if(liquidityPoolTokenType == 20) {
-                _collect(_toAddress(processedLiquidityPoolParamsArray[i].liquidityPoolId), processedLiquidityPoolParamsArray[i].liquidityPoolAmount, processedLiquidityPoolParamsArray[i].liquidityPoolOperator, false);
-            } else if(liquidityPoolTokenType == 1155) {
-                IERC1155(liquidityPoolCollectionAddress).safeTransferFrom(msg.sender, address(this), processedLiquidityPoolParamsArray[i].liquidityPoolId, processedLiquidityPoolParamsArray[i].liquidityPoolAmount, "");
-                if(processedLiquidityPoolParamsArray[i].liquidityPoolOperator != address(0)) {
-                    IERC1155(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParamsArray[i].liquidityPoolOperator, true);
-                }
-            } else {
-                _transfer721(msg.sender, address(this), liquidityPoolCollectionAddress, processedLiquidityPoolParamsArray[i].liquidityPoolId, liquidityPoolTokenType);
-                if(processedLiquidityPoolParamsArray[i].liquidityPoolOperator != address(0)) {
-                    IERC721(liquidityPoolCollectionAddress).setApprovalForAll(processedLiquidityPoolParamsArray[i].liquidityPoolOperator, true);
-                }
-            }
+            _collect(_toAddress(processedLiquidityPoolParamsArray[i].liquidityPoolId), processedLiquidityPoolParamsArray[i].liquidityPoolAmount, processedLiquidityPoolParamsArray[i].liquidityPoolOperator, false);
         }
-        if(liquidityPoolTokenType == 20) {
-            _transferToMeApproveAndClear();
-        }
-    }
-
-    function _transfer721(address from, address to, address tokenAddress, uint256 tokenId, uint256 tokenType) internal {
-        if(tokenType == 721) {
-            IERC721(tokenAddress).transferFrom(from, to, tokenId);
-            return;
-        }
-        if(tokenType == 722) {
-            IERC721(tokenAddress).safeTransferFrom(from, to, tokenId);
-            return;
-        }
-        IERC721(tokenAddress).safeTransferFrom(from, to, tokenId, "");
+        _transferToMeApproveAndClear();
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal virtual returns(uint256, uint256[] memory);
@@ -376,7 +390,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
     function _checkSwapAdditionalData(ProcessedSwapParams[] memory processedSwapParams) internal virtual view;
 
     function _processLiquidityPoolParams(LiquidityPoolParams memory liquidityPoolParams) internal view returns(ProcessedLiquidityPoolParams memory) {
-        require(liquidityPoolParams.amount > 0, "Zero amount");
+        require(liquidityPoolParams.amount > 0, "amount");
         uint256[] memory tokensAmounts;
         address[] memory liquidityPoolTokens;
         uint256 liquidityPoolAmount;
@@ -417,8 +431,8 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
     }
 
     function _processSwapParams(SwapParams memory swapParams) internal view returns(ProcessedSwapParams memory) {
-        require(swapParams.amount > 0, "Zero amount");
-        require(swapParams.path.length > 0 && swapParams.liquidityPoolIds.length == swapParams.path.length, "Invalid length");
+        require(swapParams.amount > 0, "amount");
+        require(swapParams.path.length > 0 && swapParams.liquidityPoolIds.length == swapParams.path.length, "length");
         ( , ,address[] memory liquidityPoolTokens) = this.byLiquidityPool(swapParams.liquidityPoolIds[0]);
         return ProcessedSwapParams(
             swapParams.enterInETH && swapParams.inputToken == _ethereumAddress,
@@ -452,12 +466,12 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         for(uint256 i = 0; i < tokens.length; i++) {
             address tokenAddress = involvingETH && tokens[i] == ethereumAddress ? address(0) : tokens[i];
             uint256 amount = amounts[i];
-            tokenAddress.safeApprove(operator, amount);
             if(tokenAddress == address(0)) {
                 require(msg.value == amount, "ETH");
                 continue;
             }
             tokenAddress.safeTransferFrom(msg.sender, address(this), amount);
+            tokenAddress.safeApprove(operator, amount);
         }
     }
 
@@ -516,17 +530,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         if(liquidityPoolTokenType == 20) {
             return _flushBack(_toAddress(liquidityPoolId));
         }
-        address liquidityPoolCollectionAddress = _liquidityPoolCollectionAddress;
-        if(liquidityPoolTokenType == 1155) {
-            uint256 balance = IERC1155(liquidityPoolCollectionAddress).balanceOf(address(this), liquidityPoolId);
-            if(balance > 0) {
-                IERC1155(liquidityPoolCollectionAddress).safeTransferFrom(address(this), msg.sender, liquidityPoolId, balance, "");
-            }
-        } else {
-            if(IERC721(liquidityPoolCollectionAddress).ownerOf(liquidityPoolId) == address(this)) {
-                _transfer721(address(this), msg.sender, liquidityPoolCollectionAddress, liquidityPoolId, liquidityPoolTokenType);
-            }
-        }
+        NFTLibrary.flushBack(liquidityPoolId, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
     }
 
     function _checkMinAmounts(uint256[] memory amounts, uint256[] memory minAmounts) internal pure {
@@ -536,7 +540,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
     }
 
     function _checkMinAmount(uint256 amount, uint256 minAmount) internal pure {
-        require(amount >= minAmount, "too little received");
+        require(amount >= minAmount, "min");
     }
 
     function _toAddress(uint256 number) internal pure returns(address) {
