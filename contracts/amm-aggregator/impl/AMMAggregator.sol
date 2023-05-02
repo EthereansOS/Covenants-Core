@@ -89,10 +89,6 @@ contract AMMAggregator is IAMMAggregator {
         revert("Impossibru");
     }
 
-    function addLiquidityEnsuringPoolBatch(LiquidityPoolCreationParams[] calldata) external payable returns(uint256[] memory, uint256[][] memory, uint256[] memory, address[][] memory) {
-        revert("Impossibru");
-    }
-
     function addLiquidity(LiquidityPoolParams calldata liquidityPoolParams) external override payable returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
         (,,,address amm) = findByLiquidityPool(liquidityPoolParams.liquidityPoolId);
         return IAMM(amm).addLiquidity(liquidityPoolParams);

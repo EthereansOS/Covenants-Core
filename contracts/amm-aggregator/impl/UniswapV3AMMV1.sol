@@ -203,7 +203,7 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _addLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
-        return UniswapV3AMMV1Lib.addLiquidity(_liquidityPoolCollectionAddress, _ethereumAddress, params);
+        return UniswapV3AMMV1Lib.addLiquidity(_liquidityPoolCollectionAddress, _ethereumAddress, _asPoolAddress(params.liquidityPoolId), params);
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
@@ -211,38 +211,16 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _swap(ProcessedSwapParams memory processedSwapParams) internal override virtual returns(uint256 outputAmount) {
-        ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
-            path : _toPath(processedSwapParams.liquidityPoolIds, processedSwapParams.inputToken, processedSwapParams.path, false),
-            recipient : processedSwapParams.exitInETH ? address(0) : processedSwapParams.receiver,
-            deadline : processedSwapParams.deadline,
-            amountIn : processedSwapParams.amount,
-            amountOutMinimum : processedSwapParams.minAmount
-        });
-
-        if(processedSwapParams.enterInETH || processedSwapParams.exitInETH) {
-            return UniswapV3AMMV1Lib.swapMulticall(_swapRouterAddress, processedSwapParams.enterInETH, processedSwapParams.exitInETH, processedSwapParams.amount, processedSwapParams.receiver, abi.encodeWithSelector(ISwapRouter(address(0)).exactInput.selector, exactInputParams));
-        }
-        return ISwapRouter(_swapRouterAddress).exactInput(exactInputParams);
+        return UniswapV3AMMV1Lib.swap(_swapRouterAddress, processedSwapParams, _toPath(processedSwapParams.liquidityPoolIds, processedSwapParams.inputToken, processedSwapParams.path, false));
     }
 }
 
 library UniswapV3AMMV1Lib {
 
-    bytes32 private constant POOL_INIT_CODE_HASH = 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
-
     function _decodeAdditionalData(bytes memory additionalData) private pure returns(uint24 fee, int24 tickLower, int24 tickUpper) {
         if(additionalData.length != 0) {
             return abi.decode(additionalData, (uint24, int24, int24));
         }
-    }
-
-    function _asPoolAddress(uint256 liquidityPoolId) private view returns(address liquidityPoolAddress) {
-        liquidityPoolAddress = address(uint160(liquidityPoolId));
-        bytes32 codeHash;
-        assembly {
-            codeHash := extcodehash(liquidityPoolAddress)
-        }
-        liquidityPoolAddress = codeHash == POOL_INIT_CODE_HASH ? liquidityPoolAddress : address(0);
     }
 
     function createLiquidityPoolAndAddLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, LiquidityPoolCreationParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
@@ -275,9 +253,7 @@ library UniswapV3AMMV1Lib {
         (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = mint(_liquidityPoolCollectionAddress, mintParams, ethValue);
     }
 
-    function addLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
-
-        address liquidityPoolAddress = _asPoolAddress(params.liquidityPoolId);
+    function addLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, address liquidityPoolAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
 
         uint256 ethValue = 0;
         address ethereumAddress = _ethereumAddress;
@@ -373,7 +349,22 @@ library UniswapV3AMMV1Lib {
         (tokensAmounts[0], tokensAmounts[1]) = abi.decode(IMulticall(address(nonfungiblePositionManager)).multicall(data)[1], (uint256, uint256));
     }
 
-    function swapMulticall(address swapRouterAddress, bool enterInETH, bool exitInETH, uint256 value, address recipient, bytes memory data) external returns (uint256) {
+    function swap(address _swapRouterAddress, AMM.ProcessedSwapParams memory processedSwapParams, bytes memory path) external returns(uint256 outputAmount) {
+        ISwapRouter.ExactInputParams memory exactInputParams = ISwapRouter.ExactInputParams({
+            path : path,
+            recipient : processedSwapParams.exitInETH ? address(0) : processedSwapParams.receiver,
+            deadline : processedSwapParams.deadline,
+            amountIn : processedSwapParams.amount,
+            amountOutMinimum : processedSwapParams.minAmount
+        });
+
+        if(processedSwapParams.enterInETH || processedSwapParams.exitInETH) {
+            return _swapMulticall(_swapRouterAddress, processedSwapParams.enterInETH, processedSwapParams.exitInETH, processedSwapParams.amount, processedSwapParams.receiver, abi.encodeWithSelector(ISwapRouter(address(0)).exactInput.selector, exactInputParams));
+        }
+        return ISwapRouter(_swapRouterAddress).exactInput(exactInputParams);
+    }
+
+    function _swapMulticall(address swapRouterAddress, bool enterInETH, bool exitInETH, uint256 value, address recipient, bytes memory data) private returns (uint256) {
         bytes[] memory multicall = new bytes[](enterInETH && exitInETH ? 3 : 2);
         multicall[0] = data;
         if(enterInETH && exitInETH) {
