@@ -110,11 +110,11 @@ interface IUniswapV2Router {
 
 contract UniswapV2BasedAMMV1 is AMM {
 
-    address public immutable routerAddress;
-    address public immutable factoryAddress;
+    address private _routerAddress;
+    address private _factoryAddress;
 
-    constructor(string memory name, uint256 version, address _routerAddress) AMM(name, version, IUniswapV2Router(_routerAddress).WETH(), 2, true) {
-        factoryAddress = IUniswapV2Router(routerAddress = _routerAddress).factory();
+    constructor(string memory name, uint256 version, address routerAddress) AMM(name, version, IUniswapV2Router(routerAddress).WETH(), 2, true, 20, address(0)) {
+        _factoryAddress = IUniswapV2Router(_routerAddress = routerAddress).factory();
     }
 
     function byLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokenAddresses) {
@@ -125,7 +125,7 @@ contract UniswapV2BasedAMMV1 is AMM {
 
         address token0 = pair.token0();
         address token1 = pair.token1();
-        if(IUniswapV2Factory(factoryAddress).getPair(token0, token1) != liquidityPoolAddress) {
+        if(IUniswapV2Factory(_factoryAddress).getPair(token0, token1) != liquidityPoolAddress) {
             return(0, new uint256[](0), new address[](0));
         }
 
@@ -143,7 +143,7 @@ contract UniswapV2BasedAMMV1 is AMM {
 
     function byTokens(address[] memory tokenAddresses, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
-        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
+        address liquidityPoolAddress = IUniswapV2Factory(_factoryAddress).getPair(tokenAddresses[0], tokenAddresses[1]);
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
 
         if(address(pair) == address(0)) {
@@ -165,25 +165,25 @@ contract UniswapV2BasedAMMV1 is AMM {
     }
 
     function _getSwapOutput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256) {
-        uint256[] memory values = IUniswapV2Router(routerAddress).getAmountsOut(value, path);
+        uint256[] memory values = IUniswapV2Router(_routerAddress).getAmountsOut(value, path);
         return values[values.length - 1];
     }
 
     function _getSwapInput(uint256 value, uint256[] memory, address[] memory path) view internal override returns(uint256) {
-        uint256[] memory values = IUniswapV2Router(routerAddress).getAmountsIn(value, _reverse(path));
+        uint256[] memory values = IUniswapV2Router(_routerAddress).getAmountsIn(value, _reverse(path));
         return values[values.length - 1];
     }
 
     function _getLiquidityPoolOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
-        return routerAddress;
+        return _routerAddress;
     }
 
     function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
-        return routerAddress;
+        return _routerAddress;
     }
 
     function _getSwapOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
-        return routerAddress;
+        return _routerAddress;
     }
 
     function checkByTokensAdditionalData(address[] calldata tokens, bytes calldata additionalData) external override view {}
@@ -196,7 +196,7 @@ contract UniswapV2BasedAMMV1 is AMM {
         tokensAmounts = new uint256[](2);
         orderedTokens = new address[](2);
         if(!liquidityPoolCreationData.involvingETH) {
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidity(
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_routerAddress).addLiquidity(
                 liquidityPoolCreationData.tokenAddresses[0],
                 liquidityPoolCreationData.tokenAddresses[1],
                 liquidityPoolCreationData.amounts[0],
@@ -208,7 +208,7 @@ contract UniswapV2BasedAMMV1 is AMM {
             );
         } else {
             uint256 tokenIndex = liquidityPoolCreationData.tokenAddresses[0] != _ethereumAddress ? 0 : 1;
-            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : liquidityPoolCreationData.amounts[1 - tokenIndex]} (
+            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex], liquidityPoolAmount) = IUniswapV2Router(_routerAddress).addLiquidityETH {value : liquidityPoolCreationData.amounts[1 - tokenIndex]} (
                 liquidityPoolCreationData.tokenAddresses[tokenIndex],
                 liquidityPoolCreationData.amounts[tokenIndex],
                 liquidityPoolCreationData.minAmounts[tokenIndex],
@@ -217,7 +217,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 liquidityPoolCreationData.deadline
             );
         }
-        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
+        address liquidityPoolAddress = IUniswapV2Factory(_factoryAddress).getPair(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
         liquidityPoolId = _toNumber(liquidityPoolAddress);
         IUniswapV2Pair pair = IUniswapV2Pair(liquidityPoolAddress);
         orderedTokens[0] = pair.token0();
@@ -227,7 +227,7 @@ contract UniswapV2BasedAMMV1 is AMM {
     function _addLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
         tokensAmounts = new uint256[](2);
         if(!processedLiquidityPoolParams.involvingETH) {
-            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidity(
+            (tokensAmounts[0], tokensAmounts[1], liquidityPoolAmount) = IUniswapV2Router(_routerAddress).addLiquidity(
                 processedLiquidityPoolParams.liquidityPoolTokens[0],
                 processedLiquidityPoolParams.liquidityPoolTokens[1],
                 processedLiquidityPoolParams.tokensAmounts[0],
@@ -242,7 +242,7 @@ contract UniswapV2BasedAMMV1 is AMM {
             address token = processedLiquidityPoolParams.liquidityPoolTokens[tokenIndex];
             uint256 amountTokenDesired = processedLiquidityPoolParams.tokensAmounts[tokenIndex];
             uint256 amountETHDesired = processedLiquidityPoolParams.tokensAmounts[1 - tokenIndex];
-            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex], liquidityPoolAmount) = IUniswapV2Router(routerAddress).addLiquidityETH {value : amountETHDesired} (
+            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex], liquidityPoolAmount) = IUniswapV2Router(_routerAddress).addLiquidityETH {value : amountETHDesired} (
                 token,
                 amountTokenDesired,
                 processedLiquidityPoolParams.minAmounts[tokenIndex],
@@ -251,7 +251,7 @@ contract UniswapV2BasedAMMV1 is AMM {
                 processedLiquidityPoolParams.deadline
             );
         }
-        address liquidityPoolAddress = IUniswapV2Factory(factoryAddress).getPair(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1]);
+        address liquidityPoolAddress = IUniswapV2Factory(_factoryAddress).getPair(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1]);
         liquidityPoolId = _toNumber(liquidityPoolAddress);
     }
 
@@ -261,10 +261,10 @@ contract UniswapV2BasedAMMV1 is AMM {
 
         tokensAmounts = new uint256[](2);
         if(!processedLiquidityPoolParams.involvingETH) {
-            (tokensAmounts[0], tokensAmounts[1]) = IUniswapV2Router(routerAddress).removeLiquidity(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[0], processedLiquidityPoolParams.minAmounts[1], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
+            (tokensAmounts[0], tokensAmounts[1]) = IUniswapV2Router(_routerAddress).removeLiquidity(processedLiquidityPoolParams.liquidityPoolTokens[0], processedLiquidityPoolParams.liquidityPoolTokens[1], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[0], processedLiquidityPoolParams.minAmounts[1], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
         } else {
             uint256 tokenIndex = processedLiquidityPoolParams.liquidityPoolTokens[0] != _ethereumAddress ? 0 : 1;
-            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex]) = IUniswapV2Router(routerAddress).removeLiquidityETH(processedLiquidityPoolParams.liquidityPoolTokens[tokenIndex], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[tokenIndex], processedLiquidityPoolParams.minAmounts[1 - tokenIndex], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
+            (tokensAmounts[tokenIndex], tokensAmounts[1 - tokenIndex]) = IUniswapV2Router(_routerAddress).removeLiquidityETH(processedLiquidityPoolParams.liquidityPoolTokens[tokenIndex], processedLiquidityPoolParams.liquidityPoolAmount, processedLiquidityPoolParams.minAmounts[tokenIndex], processedLiquidityPoolParams.minAmounts[1 - tokenIndex], processedLiquidityPoolParams.receiver, processedLiquidityPoolParams.deadline);
         }
     }
 
@@ -278,13 +278,13 @@ contract UniswapV2BasedAMMV1 is AMM {
             path[path.length - 1] = _ethereumAddress;
         }
         if(!data.enterInETH && !data.exitInETH) {
-            return IUniswapV2Router(routerAddress).swapExactTokensForTokens(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
+            return IUniswapV2Router(_routerAddress).swapExactTokensForTokens(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         if(data.enterInETH) {
-            return IUniswapV2Router(routerAddress).swapExactETHForTokens{value : data.amount}(data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
+            return IUniswapV2Router(_routerAddress).swapExactETHForTokens{value : data.amount}(data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         if(data.exitInETH) {
-            return IUniswapV2Router(routerAddress).swapExactTokensForETH(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
+            return IUniswapV2Router(_routerAddress).swapExactTokensForETH(data.amount, data.minAmount, path, data.receiver, data.deadline)[path.length - 1];
         }
         return 0;
     }

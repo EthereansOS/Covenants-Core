@@ -42,7 +42,7 @@ interface IAMM {
 
     function info() external view returns(string memory name, uint256 version);
 
-    function data() external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools);
+    function data() external view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, uint256 liquidityPoolTokenType, address liquidityPoolCollectionAddress);
 
     function balanceOf(uint256 liquidityPoolId, address owner) external view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens);
 

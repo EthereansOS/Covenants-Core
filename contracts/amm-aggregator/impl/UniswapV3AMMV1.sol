@@ -15,15 +15,14 @@ contract UniswapV3AMMV1 is AMM {
 
     bytes32 private constant POOL_INIT_CODE_HASH = 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54;
 
-    address public immutable nonfungiblePositionManagerAddress;
-    address public immutable factoryAddress;
-    address public immutable swapRouterAddress;
-    address public immutable quoterAddress;
+    address private _factoryAddress;
+    address private _swapRouterAddress;
+    address private _quoterAddress;
 
-    constructor(address _swapRouterAddress, address _nonfungiblePositionManagerAddress, address _quoterAddress) AMM("UniswapV3", 1, INonfungiblePositionManager(_nonfungiblePositionManagerAddress).WETH9(), 2, true) {
-        factoryAddress = INonfungiblePositionManager(nonfungiblePositionManagerAddress = _nonfungiblePositionManagerAddress).factory();
-        swapRouterAddress = _swapRouterAddress;
-        quoterAddress = _quoterAddress;
+    constructor(address swapRouterAddress, address liquidityPoolCollectionAddress, address quoterAddress) AMM("UniswapV3", 1, INonfungiblePositionManager(liquidityPoolCollectionAddress).WETH9(), 2, true, 721, liquidityPoolCollectionAddress) {
+        _factoryAddress = INonfungiblePositionManager(liquidityPoolCollectionAddress).factory();
+        _swapRouterAddress = swapRouterAddress;
+        _quoterAddress = quoterAddress;
     }
 
     function balanceOf(uint256 liquidityPoolId, address) public virtual override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
@@ -40,7 +39,7 @@ contract UniswapV3AMMV1 is AMM {
             ,
             uint128 tokensOwed0,
             uint128 tokensOwed1
-        ) = INonfungiblePositionManager(nonfungiblePositionManagerAddress).positions(liquidityPoolId);
+        ) = INonfungiblePositionManager(_liquidityPoolCollectionAddress).positions(liquidityPoolId);
         liquidityPoolAmount = liquidity;
         liquidityPoolTokens = new address[](2);
         liquidityPoolTokens[0] = token0;
@@ -80,7 +79,7 @@ contract UniswapV3AMMV1 is AMM {
 
     function byTokens(address[] memory tokenAddresses, bytes calldata additionalData) public override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, uint256 liquidityPoolId, address[] memory tokens) {
         (uint24 fee,,) = _decodeAdditionalData(additionalData);
-        address liquidityPoolAddress = IUniswapV3Factory(factoryAddress).getPool(tokenAddresses[0], tokenAddresses[1], fee);
+        address liquidityPoolAddress = IUniswapV3Factory(_factoryAddress).getPool(tokenAddresses[0], tokenAddresses[1], fee);
         if(liquidityPoolAddress != address(0)) {
             IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
             liquidityPoolAmount = uint256(pool.maxLiquidityPerTick());
@@ -110,13 +109,13 @@ contract UniswapV3AMMV1 is AMM {
             return (pool.token0(), pool.token1(), pool.fee(), liquidityPoolAddress);
         }
 
-        try INonfungiblePositionManager(nonfungiblePositionManagerAddress).positions(liquidityPoolId) returns(uint96, address, address token0Out, address token1Out, uint24 feeOut, int24, int24, uint128, uint256, uint256, uint128, uint128) {
+        try INonfungiblePositionManager(_liquidityPoolCollectionAddress).positions(liquidityPoolId) returns(uint96, address, address token0Out, address token1Out, uint24 feeOut, int24, int24, uint128, uint256, uint256, uint128, uint128) {
             token0 = token0Out;
             token1 = token1Out;
             poolFee = feeOut;
         } catch {}
         if(poolFee != 0) {
-            liquidityPoolAddress = IUniswapV3Factory(factoryAddress).getPool(token0, token1, poolFee);
+            liquidityPoolAddress = IUniswapV3Factory(_factoryAddress).getPool(token0, token1, poolFee);
         } else {
             poolFee = uint24(liquidityPoolId);
         }
@@ -130,11 +129,11 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _getSwapOutput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256) {
-        return IQuoter(quoterAddress).quoteExactInput(_toPath(liquidityPoolIds, address(0), path, false), value);
+        return IQuoter(_quoterAddress).quoteExactInput(_toPath(liquidityPoolIds, address(0), path, false), value);
     }
 
     function _getSwapInput(uint256 value, uint256[] memory liquidityPoolIds, address[] memory path) view internal override returns(uint256) {
-        return IQuoter(quoterAddress).quoteExactOutput(_toPath(liquidityPoolIds, address(0), path, true), value);
+        return IQuoter(_quoterAddress).quoteExactOutput(_toPath(liquidityPoolIds, address(0), path, true), value);
     }
 
     function _toPath(uint256[] memory liquidityPoolIds, address firstToken, address[] memory pathInput, bool reverse) private view returns(bytes memory path) {
@@ -160,15 +159,15 @@ contract UniswapV3AMMV1 is AMM {
     }
 
     function _getLiquidityPoolOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
-        return nonfungiblePositionManagerAddress;
+        return _liquidityPoolCollectionAddress;
     }
 
     function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
-        return nonfungiblePositionManagerAddress;
+        return _liquidityPoolCollectionAddress;
     }
 
     function _getSwapOperator(uint256, address[] memory, bytes memory) internal override virtual view returns(address) {
-        return swapRouterAddress;
+        return _swapRouterAddress;
     }
 
     function checkByTokensAdditionalData(address[] calldata, bytes calldata additionalData) external override pure {
@@ -199,39 +198,16 @@ contract UniswapV3AMMV1 is AMM {
     function _checkRemoveLiquidityAdditionalData(ProcessedLiquidityPoolParams[] memory) internal override view {}
     function _checkSwapAdditionalData(ProcessedSwapParams[] memory) internal override view {}
 
-    function _retrieveLiquidityPoolIdAndApprove(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal virtual override {
-        _tryTransferNFT(processedLiquidityPoolParams.liquidityPoolId);
-    }
-
-    function _retrieveLiquidityPoolIdsAndApprove(ProcessedLiquidityPoolParams[] memory processedLiquidityPoolParamsArray) internal virtual override {
-        if(_delegateMode()) {
-            return;
-        }
-        for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
-            _tryTransferNFT(processedLiquidityPoolParamsArray[i].liquidityPoolId);
-        }
-    }
-
-    function _tryTransferNFT(uint256 liquidityPoolId) private {
-        if(_delegateMode()) {
-            return;
-        }
-        address liquidityPoolAddress = _asPoolAddress(liquidityPoolId);
-        if(liquidityPoolAddress != address(uint160(liquidityPoolId))) {
-            INonfungiblePositionManager(nonfungiblePositionManagerAddress).transferFrom(msg.sender, address(this), liquidityPoolId);
-        }
-    }
-
     function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory params) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
-        return UniswapV3AMMV1Lib.createLiquidityPoolAndAddLiquidity(nonfungiblePositionManagerAddress, _ethereumAddress, params);
+        return UniswapV3AMMV1Lib.createLiquidityPoolAndAddLiquidity(_liquidityPoolCollectionAddress, _ethereumAddress, params);
     }
 
     function _addLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
-        return UniswapV3AMMV1Lib.addLiquidity(nonfungiblePositionManagerAddress, _ethereumAddress, params);
+        return UniswapV3AMMV1Lib.addLiquidity(_liquidityPoolCollectionAddress, _ethereumAddress, params);
     }
 
     function _removeLiquidity(ProcessedLiquidityPoolParams memory params) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
-        return UniswapV3AMMV1Lib.removeLiquidity(nonfungiblePositionManagerAddress, _ethereumAddress, params);
+        return UniswapV3AMMV1Lib.removeLiquidity(_liquidityPoolCollectionAddress, _ethereumAddress, params);
     }
 
     function _swap(ProcessedSwapParams memory processedSwapParams) internal override virtual returns(uint256 outputAmount) {
@@ -244,9 +220,9 @@ contract UniswapV3AMMV1 is AMM {
         });
 
         if(processedSwapParams.enterInETH || processedSwapParams.exitInETH) {
-            return UniswapV3AMMV1Lib.swapMulticall(swapRouterAddress, processedSwapParams.enterInETH, processedSwapParams.exitInETH, processedSwapParams.amount, processedSwapParams.receiver, abi.encodeWithSelector(ISwapRouter(swapRouterAddress).exactInput.selector, exactInputParams));
+            return UniswapV3AMMV1Lib.swapMulticall(_swapRouterAddress, processedSwapParams.enterInETH, processedSwapParams.exitInETH, processedSwapParams.amount, processedSwapParams.receiver, abi.encodeWithSelector(ISwapRouter(address(0)).exactInput.selector, exactInputParams));
         }
-        return ISwapRouter(swapRouterAddress).exactInput(exactInputParams);
+        return ISwapRouter(_swapRouterAddress).exactInput(exactInputParams);
     }
 }
 
@@ -269,7 +245,7 @@ library UniswapV3AMMV1Lib {
         liquidityPoolAddress = codeHash == POOL_INIT_CODE_HASH ? liquidityPoolAddress : address(0);
     }
 
-    function createLiquidityPoolAndAddLiquidity(address nonfungiblePositionManagerAddress, address _ethereumAddress, LiquidityPoolCreationParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
+    function createLiquidityPoolAndAddLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, LiquidityPoolCreationParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
         orderedTokens = params.tokenAddresses;
         uint256 ethValue = 0;
         address ethereumAddress = _ethereumAddress;
@@ -296,10 +272,10 @@ library UniswapV3AMMV1Lib {
             params.receiver,
             params.deadline
         );
-        (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = mint(nonfungiblePositionManagerAddress, mintParams, ethValue);
+        (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = mint(_liquidityPoolCollectionAddress, mintParams, ethValue);
     }
 
-    function addLiquidity(address nonfungiblePositionManagerAddress, address _ethereumAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
+    function addLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
 
         address liquidityPoolAddress = _asPoolAddress(params.liquidityPoolId);
 
@@ -330,7 +306,7 @@ library UniswapV3AMMV1Lib {
             params.receiver,
             params.deadline
         );
-        (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = mint(nonfungiblePositionManagerAddress, mintParams, ethValue);
+        (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = mint(_liquidityPoolCollectionAddress, mintParams, ethValue);
         } else {
             INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams = INonfungiblePositionManager.IncreaseLiquidityParams(
                 params.liquidityPoolId,
@@ -340,15 +316,15 @@ library UniswapV3AMMV1Lib {
                 params.minAmounts[1],
                 params.deadline
             );
-            (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = increaseLiquidity(nonfungiblePositionManagerAddress, increaseLiquidityParams, ethValue);
+            (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = increaseLiquidity(_liquidityPoolCollectionAddress, increaseLiquidityParams, ethValue);
             if(params.receiver != address(this)) {
-                INonfungiblePositionManager(nonfungiblePositionManagerAddress).safeTransferFrom(address(this), params.receiver, liquidityPoolId, "");
+                INonfungiblePositionManager(_liquidityPoolCollectionAddress).safeTransferFrom(address(this), params.receiver, liquidityPoolId, "");
             }
         }
     }
 
-    function mint(address nonfungiblePositionManagerAddress, INonfungiblePositionManager.MintParams memory mintParams, uint256 ethValue) public returns(uint256 tokenId, uint256 liquidity, uint256 amount0, uint256 amount1) {
-        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(nonfungiblePositionManagerAddress);
+    function mint(address _liquidityPoolCollectionAddress, INonfungiblePositionManager.MintParams memory mintParams, uint256 ethValue) public returns(uint256 tokenId, uint256 liquidity, uint256 amount0, uint256 amount1) {
+        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(_liquidityPoolCollectionAddress);
         if(ethValue == 0) {
             (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(mintParams);
             return (tokenId, liquidity, amount0, amount1);
@@ -359,8 +335,8 @@ library UniswapV3AMMV1Lib {
         (tokenId, liquidity, amount0, amount1) = abi.decode(nonfungiblePositionManager.multicall{value : ethValue}(multicallData)[0], (uint256, uint128, uint256, uint256));
     }
 
-    function increaseLiquidity(address nonfungiblePositionManagerAddress, INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams, uint256 ethValue) public returns(uint256 tokenId, uint256 liquidity, uint256 amount0, uint256 amount1) {
-        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(nonfungiblePositionManagerAddress);
+    function increaseLiquidity(address _liquidityPoolCollectionAddress, INonfungiblePositionManager.IncreaseLiquidityParams memory increaseLiquidityParams, uint256 ethValue) public returns(uint256 tokenId, uint256 liquidity, uint256 amount0, uint256 amount1) {
+        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(_liquidityPoolCollectionAddress);
         if(ethValue == 0) {
             (liquidity, amount0, amount1) = nonfungiblePositionManager.increaseLiquidity(increaseLiquidityParams);
             return (tokenId, liquidity, amount0, amount1);
@@ -371,8 +347,8 @@ library UniswapV3AMMV1Lib {
         (liquidity, amount0, amount1) = abi.decode(nonfungiblePositionManager.multicall{value : ethValue}(multicallData)[0], (uint128, uint256, uint256));
     }
 
-    function removeLiquidity(address nonfungiblePositionManagerAddress, address _ethereumAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
-        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(nonfungiblePositionManagerAddress);
+    function removeLiquidity(address _liquidityPoolCollectionAddress, address _ethereumAddress, AMM.ProcessedLiquidityPoolParams memory params) external returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts) {
+        INonfungiblePositionManager nonfungiblePositionManager = INonfungiblePositionManager(_liquidityPoolCollectionAddress);
         tokensAmounts = new uint256[](2);
         bool involvingETH = params.involvingETH;
         bytes[] memory data = new bytes[](involvingETH ? 4 : 2);

@@ -9,7 +9,7 @@ struct PrestoOperation {
     address ammPlugin;
     uint256[] liquidityPoolIds;
     address[] swapPath;
-    bool enterInOrInvolvingETH;
+    bool involvingETHOrEnterInETH;
     bool amountIsLiquidityPoolOrExitInETH;
 
     bytes additionalData;

@@ -35,10 +35,10 @@ interface Mooniswap {
 contract MooniswapAMMV1 is AMM {
     using TransferUtilities for address;
 
-    address public immutable factory;
+    address private _factoryAddress;
 
-    constructor(address factoryAddress) AMM("Mooniswap", 1, address(0), 2, true) {
-        factory = factoryAddress;
+    constructor(address factoryAddress) AMM("Mooniswap", 1, address(0), 2, true, 20, address(0)) {
+        _factoryAddress = factoryAddress;
     }
 
     function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
@@ -74,7 +74,7 @@ contract MooniswapAMMV1 is AMM {
 
     function byTokens(address[] memory tokens, bytes calldata) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
-        Mooniswap mooniswap = IMooniFactory(factory).pools(tokens[0], tokens[1]);
+        Mooniswap mooniswap = IMooniFactory(_factoryAddress).pools(tokens[0], tokens[1]);
 
         if(address(mooniswap) == address(0)) {
             return (liquidityPoolAmount, tokensAmounts, liquidityPoolId, orderedTokens);
@@ -113,7 +113,7 @@ contract MooniswapAMMV1 is AMM {
 
     function _createLiquidityPoolAndAddLiquidity(LiquidityPoolCreationParams memory liquidityPoolCreationData) internal override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory orderedTokens) {
 
-        Mooniswap mooniswap = IMooniFactory(factory).deploy(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
+        Mooniswap mooniswap = IMooniFactory(_factoryAddress).deploy(liquidityPoolCreationData.tokenAddresses[0], liquidityPoolCreationData.tokenAddresses[1]);
 
         orderedTokens = mooniswap.getTokens();
 

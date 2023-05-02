@@ -8,8 +8,7 @@ contract AMMAggregator is IAMMAggregator {
     address public override host;
     mapping(address => bool) public override isAMM;
 
-    uint256 private _ammsLength;
-    mapping(uint256 => address) private _amms;
+    address[] private _amms;
 
     constructor(address _host, address[] memory ammsToAdd) {
         host = _host;
@@ -25,11 +24,8 @@ contract AMMAggregator is IAMMAggregator {
         host = newHost;
     }
 
-    function amms() external override view returns (address[] memory returnData) {
-        returnData = new address[](_ammsLength);
-        for(uint256 i = 0 ; i < _ammsLength; i++) {
-            returnData[i] = _amms[i];
-        }
+    function amms() external override view returns (address[] memory) {
+        return _amms;
     }
 
     function add(address[] memory ammsToAdd) external override authorizedOnly {
@@ -37,8 +33,9 @@ contract AMMAggregator is IAMMAggregator {
     }
 
     function findByLiquidityPool(uint256 liquidityPoolId) public override view returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, address[] memory tokensAddresses, address amm) {
-        for(uint256 i = 0; i < _ammsLength; i++) {
-            try IAMM(amm = _amms[i]).byLiquidityPool(liquidityPoolId) returns (uint256 _liquidityPoolAmount, uint256[] memory _tokensAmounts, address[] memory _tokensAddresses) {
+        address[] memory __amms = _amms;
+        for(uint256 i = 0; i < __amms.length; i++) {
+            try IAMM(amm = __amms[i]).byLiquidityPool(liquidityPoolId) returns (uint256 _liquidityPoolAmount, uint256[] memory _tokensAmounts, address[] memory _tokensAddresses) {
                 if(_tokensAddresses.length > 0) {
                     return (_liquidityPoolAmount, _tokensAmounts, _tokensAddresses, amm);
                 }
@@ -50,16 +47,16 @@ contract AMMAggregator is IAMMAggregator {
 
     function info() external override view returns(string memory, uint256) {}
 
-    function data() external override view returns(address, uint256, bool) {}
+    function data() external override view returns(address, uint256, bool, uint256, address) {}
 
     function info(uint256 liquidityPoolId) external override view returns(string memory name, uint256 version, address amm) {
         (,,,amm) = findByLiquidityPool(liquidityPoolId);
         (name, version) = IAMM(amm).info();
     }
 
-    function data(uint256 liquidityPoolId) external override view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, address amm) {
+    function data(uint256 liquidityPoolId) external override view returns(address ethereumAddress, uint256 maxTokensPerLiquidityPool, bool hasUniqueLiquidityPools, uint256 liquidityPoolTokenType, address liquidityPoolCollectionAddress, address amm) {
         (,,,amm) = findByLiquidityPool(liquidityPoolId);
-        (ethereumAddress, maxTokensPerLiquidityPool, hasUniqueLiquidityPools) = IAMM(amm).data();
+        (ethereumAddress, maxTokensPerLiquidityPool, hasUniqueLiquidityPools, liquidityPoolTokenType, liquidityPoolCollectionAddress) = IAMM(amm).data();
     }
 
     function balanceOf(uint256 liquidityPoolId, address owner) external override view returns(uint256 liquidityPoolAmount, uint256[] memory liquidityPoolTokenAmounts, address[] memory liquidityPoolTokens) {
@@ -159,9 +156,12 @@ contract AMMAggregator is IAMMAggregator {
             return;
         }
         for(uint256 i = 0 ; i < ammsToAdd.length; i++) {
-            IAMM amm = IAMM(_amms[_ammsLength++] = ammsToAdd[i]);
+            if(ammsToAdd[i] == address(0)) {
+                continue;
+            }
+            _amms.push(ammsToAdd[i]);
             isAMM[ammsToAdd[i]] = true;
-            (string memory name, uint256 version) = amm.info();
+            (string memory name, uint256 version) = IAMM(ammsToAdd[i]).info();
             emit AMM(ammsToAdd[i], name, version);
         }
     }

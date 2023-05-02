@@ -164,7 +164,7 @@ contract BalancerAMMV1 is AMM {
 
     uint256 private constant BONE = 10**18;
 
-    constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false) {
+    constructor(address wethAddressInput) AMM("Balancer", 1, wethAddressInput, 0, false, 20, address(0)) {
     }
 
     function _getLiquidityPoolCreationOperator(address[] memory, uint256[] memory, bool, bytes memory) internal virtual view override returns(address) {
@@ -322,7 +322,7 @@ contract BalancerAMMV1 is AMM {
     }
 
     function addLiquidity(LiquidityPoolParams memory params) payable public virtual override returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
-        return _addLiquidity(params, !_delegateMode());
+        return _addLiquidity(params, true);
     }
 
     function _addLiquidity(LiquidityPoolParams memory params, bool flushBack) private returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId, address[] memory liquidityPoolTokens) {
@@ -369,7 +369,7 @@ contract BalancerAMMV1 is AMM {
         for(uint256 i = 0; i < params.length; i++) {
             (liquidityPoolAmounts[i], tokensAmounts[i], liquidityPoolIds[i], liquidityPoolTokens[i]) = _addLiquidity(params[i], false);
         }
-        _flushBack(liquidityPoolTokens, !_delegateMode());
+        _flushBack(liquidityPoolTokens, true);
     }
 
     function removeLiquidityBatch(LiquidityPoolParams[] memory params) public virtual override returns(uint256[] memory liquidityPoolAmounts, uint256[][] memory tokensAmounts, address[][] memory liquidityPoolTokens) {
