@@ -1,43 +1,32 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "../model/IFarmingGen1Extension.sol";
-import "../../../amm-aggregator/model/IAMM.sol";
-import "../../../util/IERC20.sol";
+import "../model/IFarmingExtension.sol";
+import "@ethereansos/swissknife/contracts/generic/impl/LazyInitCapableElement.sol";
+import "../../amm-aggregator/model/IAMM.sol";
+import { IERC20Full as IERC20 } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
-contract FarmingGen1 is IFarmingGen1 {
+contract Farming is IFarming, LazyInitCapableElement {
 
-    // percentage
-    uint256 public override constant ONE_HUNDRED = 1e18;
-    // event that tracks contracts deployed for the given reward token
-    event RewardToken(address indexed rewardTokenAddress);
-    // new or transferred farming position event
-    event Transfer(uint256 indexed positionId, address indexed from, address indexed to);
-    // event that tracks involved tokens for this contract
-    event SetupToken(address indexed mainToken, address indexed involvedToken);
-    // event that tracks farm tokens
-    event FarmToken(uint256 indexed objectId, address indexed liquidityPoolToken, uint256 setupIndex, uint256 endEvent);
-    // factory address that will create clones of this contract
-    address public initializer;
-    // address of the extension of this contract
-    address public host;
-    // address of the reward token
-    address public override _rewardTokenAddress;
-    // mapping containing all the currently available farming setups info
+    uint256 private constant ONE_HUNDRED = 1e18;
+    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
+
+    address private _ammAggregatorAddress;
+
+    address public override rewardTokenAddress;
+
+    uint256 private _farmingSetupsInfoCount;
     mapping(uint256 => FarmingSetupInfo) private _setupsInfo;
-    // counter for the farming setup info
-    uint256 public _farmingSetupsInfoCount;
-    // mapping containing all the currently available farming setups
+
+    uint256 private _farmingSetupsCount;
     mapping(uint256 => FarmingSetup) private _setups;
-    // counter for the farming setups
-    uint256 public _farmingSetupsCount;
-    // mapping containing all the positions
-    mapping(uint256 => FarmingPosition) private _positions;
+
+    mapping(uint256 => FarmingPosition) private _position;
     // mapping containing the reward per token per setup per event
     mapping(uint256 => uint256) private _rewardPerTokenPerSetup;
-    // mapping containing the reward per token paid per position
+    // mapping containing the reward per token paid per _position
     mapping(uint256 => uint256) private _rewardPerTokenPaid;
-    // mapping containing whether a farming position has been partially reedemed or not
+    // mapping containing whether a farming _position has been partially reedemed or not
     mapping(uint256 => uint256) public _partiallyRedeemed;
     // mapping containing all the number of opened positions for each setups
     mapping(uint256 => uint256) private _setupPositionsCount;
@@ -45,23 +34,18 @@ contract FarmingGen1 is IFarmingGen1 {
     mapping(uint256 => uint256) public _rewardReceived;
     mapping(uint256 => uint256) public _rewardPaid;
 
-    uint256 private constant TIME_SLOTS_IN_SECONDS = 15;
+    constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
-    /** Modifiers. */
-
-    /** @dev byExtension modifier used to check for unauthorized changes. */
     modifier byExtension() {
         require(msg.sender == host, "Unauthorized");
         _;
     }
 
-    /** @dev byPositionOwner modifier used to check for unauthorized accesses. */
     modifier byPositionOwner(uint256 positionId) {
-        require(_positions[positionId].uniqueOwner == msg.sender && _positions[positionId].creationEvent != 0, "Not owned");
+        require(_position[positionId].uniqueOwner == msg.sender && _position[positionId].creationEvent != 0, "Not owned");
         _;
     }
 
-    /** @dev activeSetupOnly modifier used to check for function calls only if the setup is active. */
     modifier activeSetupOnly(uint256 setupIndex) {
         require(_setups[setupIndex].active, "Setup not active");
         require(_setups[setupIndex].startEvent <= block.timestamp && _setups[setupIndex].endEvent > block.timestamp, "Invalid setup");
@@ -72,17 +56,21 @@ contract FarmingGen1 is IFarmingGen1 {
 
     /** Extension methods */
 
-    function lazyInit(bytes memory initPayload) public returns(bytes memory extensionReturnCall) {
-        require(initializer == address(0), "Already initialized");
-        initializer = msg.sender;
-        address extension;
-        (extension, initPayload) = abi.decode(initPayload, (address, bytes));
-        require((host = extension) != address(0), "extension");
-        (bytes memory extensionInitData, address rewardTokenAddress, bytes memory farmingSetupInfosBytes) = abi.decode(initPayload, (bytes, address, bytes));
-        emit RewardToken(_rewardTokenAddress = rewardTokenAddress);
-        if (keccak256(extensionInitData) != keccak256("")) {
-            extensionReturnCall = _call(extension, extensionInitData);
+    function lazyInit(bytes memory lazyInitData) external override returns(bytes memory extensionInitResult) {
+        address _host = host;
+        require(_host != address(0), "host");
+
+        (_ammAggregatorAddress, lazyInitData) = abi.decode(lazyInitData, (address, bytes));
+
+        bytes memory farmingSetupInfosBytes;
+        address _rewardTokenAddress;
+        (lazyInitData, _rewardTokenAddress, farmingSetupInfosBytes) = abi.decode(lazyInitData, (bytes, address, bytes));
+
+        if(keccak256(lazyInitData) != keccak256("")) {
+            extensionInitResult = ILazyInitCapableElement(_host).lazyInit(lazyInitData);
         }
+
+        emit RewardToken(rewardTokenAddress = _rewardTokenAddress);
         if(farmingSetupInfosBytes.length > 0) {
             FarmingSetupInfo[] memory farmingSetupInfos = abi.decode(farmingSetupInfosBytes, (FarmingSetupInfo[]));
             for(uint256 i = 0; i < farmingSetupInfos.length; i++) {
@@ -91,17 +79,24 @@ contract FarmingGen1 is IFarmingGen1 {
         }
     }
 
-    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) public override byExtension {
+    function _supportsInterface(bytes4 selector) internal override view returns(bool) {
+    }
+
+    function position(uint256 positionId) external view returns(FarmingPosition memory) {
+        return _position[positionId];
+    }
+
+    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external override byExtension {
         for (uint256 i = 0; i < farmingSetups.length; i++) {
             _setOrAddFarmingSetupInfo(farmingSetups[i].info, farmingSetups[i].add, farmingSetups[i].disable, farmingSetups[i].index);
         }
     }
 
-    function finalFlush(address[] calldata tokens, uint256[] calldata amounts) public  {
+    function finalFlush(address[] calldata tokens, uint256[] calldata amounts) external  {
         for(uint256 i = 0; i < _farmingSetupsCount; i++) {
             require(_setupPositionsCount[i] == 0 && !_setups[i].active && _setups[i].totalSupply == 0, "Not Empty");
         }
-        (,,, address receiver,) = IFarmingGen1Extension(host).data();
+        (,,, address receiver,) = IFarmingExtension(host).data();
         require(tokens.length == amounts.length, "length");
         for(uint256 i = 0; i < tokens.length; i++) {
             address token = tokens[i];
@@ -116,21 +111,13 @@ contract FarmingGen1 is IFarmingGen1 {
         }
     }
 
-    /** Public methods */
-
-    /** @dev returns the position with the given id.
-      * @param positionId id of the position.
-      * @return farming position with the given id.
-     */
-    function position(uint256 positionId) public override view returns (FarmingPosition memory) {
-        return _positions[positionId];
+    function setup(uint256 setupIndex) external override view returns (FarmingSetup memory, FarmingSetupInfo memory) {
+        if(setupIndex < _farmingSetupsCount) {
+            return (_setups[setupIndex], _setupsInfo[_setups[setupIndex].infoIndex]);
+        }
     }
 
-    function setup(uint256 setupIndex) public override view returns (FarmingSetup memory, FarmingSetupInfo memory) {
-        return (_setups[setupIndex], _setupsInfo[_setups[setupIndex].infoIndex]);
-    }
-
-    function setups() public override view returns (FarmingSetup[] memory) {
+    function setups() external override view returns (FarmingSetup[] memory) {
         FarmingSetup[] memory farmingSetups = new FarmingSetup[](_farmingSetupsCount);
         for (uint256 i = 0; i < _farmingSetupsCount; i++) {
             farmingSetups[i] = _setups[i];
@@ -143,12 +130,12 @@ contract FarmingGen1 is IFarmingGen1 {
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
-    function toggleSetup(uint256 setupInfoIndex) public {
+    function toggleSetup(uint256 setupInfoIndex) external {
         require(_setups[_setupsInfo[setupInfoIndex].lastSetupIndex].active && block.timestamp > _setups[_setupsInfo[setupInfoIndex].lastSetupIndex].endEvent, "Invalid toggle.");
         _toggleSetup(_setupsInfo[setupInfoIndex].lastSetupIndex);
     }
 
-    function openPosition(FarmingPositionRequest memory request) public override payable returns(uint256 positionId) {
+    function openPosition(FarmingPositionRequest memory request) external override payable returns(uint256 positionId) {
         if(!_setups[request.setupIndex].active) {
             activateSetup(_setups[request.setupIndex].infoIndex);
         }
@@ -157,9 +144,9 @@ contract FarmingGen1 is IFarmingGen1 {
         FarmingSetup storage chosenSetup = _setups[request.setupIndex];
         // retrieve the unique owner
         address uniqueOwner = (request.positionOwner != address(0)) ? request.positionOwner : msg.sender;
-        // create the position id
+        // create the _position id
         positionId = uint256(keccak256(abi.encode(uniqueOwner, _setupsInfo[chosenSetup.infoIndex].free ? 0 : block.timestamp, request.setupIndex)));
-        require(_positions[positionId].creationEvent == 0, "Invalid open");
+        require(_position[positionId].creationEvent == 0, "Invalid open");
         // create the lp data for the amm
         (LiquidityPoolParams memory liquidityPoolData, uint256 mainTokenAmount) = _addLiquidity(request.setupIndex, request);
         // calculate the reward
@@ -167,7 +154,7 @@ contract FarmingGen1 is IFarmingGen1 {
         uint256 lockedRewardPerEvent;
         require(_setupsInfo[chosenSetup.infoIndex].free, "free");
         _updateFreeSetup(request.setupIndex, liquidityPoolData.amount, positionId, false);
-        _positions[positionId] = FarmingPosition({
+        _position[positionId] = FarmingPosition({
             uniqueOwner: uniqueOwner,
             setupIndex : request.setupIndex,
             liquidityPoolTokenAmount: liquidityPoolData.amount,
@@ -180,11 +167,11 @@ contract FarmingGen1 is IFarmingGen1 {
         emit Transfer(positionId, address(0), uniqueOwner);
     }
 
-    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) public override payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
-        // retrieve farming position
-        FarmingPosition storage farmingPosition = _positions[positionId];
+    function addLiquidity(uint256 positionId, FarmingPositionRequest memory request) external override payable activeSetupOnly(request.setupIndex) byPositionOwner(positionId) {
+        // retrieve farming _position
+        FarmingPosition storage farmingPosition = _position[positionId];
         FarmingSetup storage chosenSetup = _setups[farmingPosition.setupIndex];
-        // check if farmoing position is valid
+        // check if farmoing _position is valid
         require(_setupsInfo[chosenSetup.infoIndex].free, "Invalid add liquidity");
         // create the lp data for the amm
         (LiquidityPoolParams memory liquidityPoolData,) = _addLiquidity(farmingPosition.setupIndex, request);
@@ -200,39 +187,27 @@ contract FarmingGen1 is IFarmingGen1 {
 
 
     /** @dev this function allows a user to withdraw the reward.
-      * @param positionId farming position id.
+      * @param positionId farming _position id.
      */
     function withdrawReward(uint256 positionId) public byPositionOwner(positionId) {
-        // retrieve farming position
-        FarmingPosition storage farmingPosition = _positions[positionId];
+        // retrieve farming _position
+        FarmingPosition storage farmingPosition = _position[positionId];
         uint256 reward = farmingPosition.reward;
         uint256 currentEvent = block.timestamp;
-        if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
-            // check if reward is available
-            require(farmingPosition.reward > 0, "No reward");
-            // check if it's a partial reward or not
-            // if (_setups[farmingPosition.setupIndex].endEvent > block.timestamp) {
-            // calculate the reward from the farming position creation event to the current event multiplied by the reward per event
-            (reward,) = calculateLockedFarmingReward(0, 0, true, positionId);
-            //}
-            require(reward <= farmingPosition.reward, "Reward is bigger than expected");
-            // remove the partial reward from the liquidity mining position total reward
-            farmingPosition.reward = currentEvent >= _setups[farmingPosition.setupIndex].endEvent ? 0 : farmingPosition.reward - reward;
-            farmingPosition.creationEvent = block.timestamp;
-        } else {
-            // rebalance setup
-            currentEvent = currentEvent > _setups[farmingPosition.setupIndex].endEvent ? _setups[farmingPosition.setupIndex].endEvent : currentEvent;
-            _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentEvent - _setups[farmingPosition.setupIndex].lastUpdateEvent) * _setups[farmingPosition.setupIndex].rewardPerEvent) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
-            reward = calculateFreeFarmingReward(positionId, false);
-            _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
-            farmingPosition.reward = 0;
-            // update the last event update variable
-            _setups[farmingPosition.setupIndex].lastUpdateEvent = currentEvent;
-        }
+
+        // rebalance setup
+        currentEvent = currentEvent > _setups[farmingPosition.setupIndex].endEvent ? _setups[farmingPosition.setupIndex].endEvent : currentEvent;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((currentEvent - _setups[farmingPosition.setupIndex].lastUpdateEvent) * _setups[farmingPosition.setupIndex].rewardPerEvent) * 1e18) / _setups[farmingPosition.setupIndex].totalSupply;
+        reward = calculateFreeFarmingReward(positionId, false);
+        _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
+        farmingPosition.reward = 0;
+        // update the last event update variable
+        _setups[farmingPosition.setupIndex].lastUpdateEvent = currentEvent;
+
         if (reward > 0) {
             // transfer the reward
-            if (_rewardTokenAddress != address(0)) {
-                _safeTransfer(_rewardTokenAddress, farmingPosition.uniqueOwner, reward);
+            if (rewardTokenAddress != address(0)) {
+                _safeTransfer(rewardTokenAddress, farmingPosition.uniqueOwner, reward);
             } else {
                 (bool result,) = farmingPosition.uniqueOwner.call{value:reward}("");
                 require(result, "Invalid ETH transfer.");
@@ -243,13 +218,13 @@ contract FarmingGen1 is IFarmingGen1 {
             if (_setups[farmingPosition.setupIndex].active) {
                 _toggleSetup(farmingPosition.setupIndex);
             }
-            // close the locked position after withdrawing all the reward
+            // close the locked _position after withdrawing all the reward
             if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
                 _setupPositionsCount[farmingPosition.setupIndex] -= 1;
                 if (_setupPositionsCount[farmingPosition.setupIndex] == 0 && !_setups[farmingPosition.setupIndex].active) {
                     delete _setups[farmingPosition.setupIndex];
                 }
-                delete _positions[positionId];
+                delete _position[positionId];
             }
         } else if (!_setupsInfo[_setups[farmingPosition.setupIndex].infoIndex].free) {
             // set the partially redeemed amount
@@ -257,11 +232,11 @@ contract FarmingGen1 is IFarmingGen1 {
         }
     }
 
-    function withdrawLiquidity(uint256 positionId, uint256 objectId, uint256 removedLiquidity, uint256 amount0Min, uint256 amount1Min, bytes memory burnData) public {
-        // retrieve farming position
-        FarmingPosition memory farmingPosition = _positions[positionId];
+    function withdrawLiquidity(uint256 positionId, uint256 objectId, uint256 removedLiquidity, uint256 amount0Min, uint256 amount1Min, bytes memory burnData) external {
+        // retrieve farming _position
+        FarmingPosition memory farmingPosition = _position[positionId];
         uint256 setupIndex = farmingPosition.setupIndex;
-        require((positionId != 0 && objectId == 0) || (objectId != 0 && positionId == 0 && _setups[setupIndex].objectId == objectId), "Invalid position");
+        require((positionId != 0 && objectId == 0) || (objectId != 0 && positionId == 0 && _setups[setupIndex].objectId == objectId), "Invalid _position");
         // current owned liquidity
         require(
             (
@@ -283,33 +258,8 @@ contract FarmingGen1 is IFarmingGen1 {
         }
     }
 
-    function calculateLockedFarmingReward(uint256 setupIndex, uint256 mainTokenAmount, bool isPartial, uint256 positionId) public view returns(uint256 reward, uint256 relativeRewardPerEvent) {
-        if (isPartial) {
-            // retrieve the position
-            FarmingPosition memory farmingPosition = _positions[positionId];
-            // calculate the reward
-            uint256 currentEvent = block.timestamp >= _setups[farmingPosition.setupIndex].endEvent ? _setups[farmingPosition.setupIndex].endEvent : block.timestamp;
-            reward = ((currentEvent - farmingPosition.creationEvent) * farmingPosition.lockedRewardPerEvent);
-        } else {
-            FarmingSetup memory setup = _setups[setupIndex];
-            // check if main token amount is less than the stakeable liquidity
-            require(mainTokenAmount <= _setupsInfo[_setups[setupIndex].infoIndex].maxStakeable - setup.totalSupply, "Invalid liquidity");
-            uint256 remainingEvents = block.timestamp >= setup.endEvent ? 0 : setup.endEvent - block.timestamp;
-            // get amount of remaining events
-            require(remainingEvents > 0, "FarmingSetup ended");
-            // get total reward still available (= 0 if rewardPerEvent = 0)
-            require(setup.rewardPerEvent * remainingEvents > 0, "No rewards");
-            // calculate relativeRewardPerEvent
-            relativeRewardPerEvent = (setup.rewardPerEvent * ((mainTokenAmount * 1e18) / _setupsInfo[_setups[setupIndex].infoIndex].maxStakeable)) / 1e18;
-            // check if rewardPerEvent is greater than 0
-            require(relativeRewardPerEvent > 0, "Invalid rpe");
-            // calculate reward by multiplying relative reward per event and the remaining events
-            reward = relativeRewardPerEvent * remainingEvents;
-        }
-    }
-
-    function calculateFreeFarmingReward(uint256 positionId, bool isExt) public view returns(uint256 reward) {
-        FarmingPosition memory farmingPosition = _positions[positionId];
+    function calculateFreeFarmingReward(uint256 positionId, bool isExt) public override view returns(uint256 reward) {
+        FarmingPosition memory farmingPosition = _position[positionId];
         reward = ((_rewardPerTokenPerSetup[farmingPosition.setupIndex] - _rewardPerTokenPaid[positionId]) * farmingPosition.liquidityPoolTokenAmount) / 1e18;
         if (isExt) {
             uint256 currentEvent = block.timestamp < _setups[farmingPosition.setupIndex].endEvent ? block.timestamp : _setups[farmingPosition.setupIndex].endEvent;
@@ -346,7 +296,7 @@ contract FarmingGen1 is IFarmingGen1 {
             (,,address[] memory tokenAddresses) = IAMM(farmingSetupInfo.ammPlugin).byLiquidityPool(farmingSetupInfo.liquidityPoolTokenAddress);
             farmingSetupInfo.ethereumAddress = address(0);
             if (farmingSetupInfo.involvingETH) {
-                (farmingSetupInfo.ethereumAddress,,) = IAMM(farmingSetupInfo.ammPlugin).data();
+                (farmingSetupInfo.ethereumAddress,,,,) = IAMM(farmingSetupInfo.ammPlugin).data();
             }
             bool mainTokenFound = false;
             bool ethTokenFound = false;
@@ -416,7 +366,7 @@ contract FarmingGen1 is IFarmingGen1 {
         mainTokenAmount = request.amountIsLiquidityPool ? 0 : request.amount;
         address[] memory tokens;
         uint256[] memory tokenAmounts;
-        // if liquidity pool token amount is provided, the position is opened by liquidity pool token amount
+        // if liquidity pool token amount is provided, the _position is opened by liquidity pool token amount
         if(request.amountIsLiquidityPool) {
             _safeTransferFrom(_setupsInfo[setup.infoIndex].liquidityPoolTokenAddress, msg.sender, address(this), liquidityPoolAmount);
             (tokenAmounts, tokens) = amm.byLiquidityPoolAmount(_setupsInfo[setup.infoIndex].liquidityPoolTokenAddress, liquidityPoolAmount);
@@ -474,24 +424,20 @@ contract FarmingGen1 is IFarmingGen1 {
         }
         // retrieve the poolTokenAmount from the amm
         uint256[] memory addedLiquidityAmounts;
-        if(liquidityPoolData.involvingETH) {
-            (liquidityPoolData.amount, addedLiquidityAmounts,) = amm.addLiquidity{value : msg.value}(liquidityPoolData);
-        } else {
-            (liquidityPoolData.amount, addedLiquidityAmounts,) = amm.addLiquidity(liquidityPoolData);
-        }
+        (liquidityPoolData.amount, addedLiquidityAmounts,,) = amm.addLiquidity{value : liquidityPoolData.involvingETH ? msg.value : 0}(liquidityPoolData);
         require(addedLiquidityAmounts[0] >= request.amount0Min, "too little added");
         require(addedLiquidityAmounts[1] >= request.amount1Min, "too little added");
     }
 
-    /** @dev helper function used to remove liquidity from a free position or to burn item farm tokens and retrieve their content.
-      * @param positionId id of the position.
+    /** @dev helper function used to remove liquidity from a free _position or to burn item farm tokens and retrieve their content.
+      * @param positionId id of the _position.
       * @param setupIndex index of the setup related to the item farm tokens.
       * @param isUnlock if we're removing liquidity from an unlock method or not.
      */
     function _removeLiquidity(uint256 positionId, uint256 setupIndex, uint256 removedLiquidity, bool isUnlock, uint256 amount0Min, uint256 amount1Min, bytes memory burnData) private {
         FarmingSetupInfo memory setupInfo = _setupsInfo[_setups[setupIndex].infoIndex];
-        // retrieve the position
-        FarmingPosition storage farmingPosition = _positions[positionId];
+        // retrieve the _position
+        FarmingPosition storage farmingPosition = _position[positionId];
         // remaining liquidity
         uint256 remainingLiquidity;
         // we are removing liquidity using the setup items
@@ -505,13 +451,13 @@ contract FarmingGen1 is IFarmingGen1 {
             if (_setups[farmingPosition.setupIndex].active && _setups[farmingPosition.setupIndex].endEvent <= block.timestamp) {
                 _toggleSetup(farmingPosition.setupIndex);
             }
-            // delete the farming position after the withdraw
+            // delete the farming _position after the withdraw
             if (remainingLiquidity == 0) {
                 _setupPositionsCount[farmingPosition.setupIndex] -= 1;
                 if (_setupPositionsCount[farmingPosition.setupIndex] == 0 && !_setups[farmingPosition.setupIndex].active) {
                     delete _setups[farmingPosition.setupIndex];
                 }
-                delete _positions[positionId];
+                delete _position[positionId];
             } else {
                 // update the creation event and amount
                 require(setupInfo.minStakeable == 0, "Min stake: cannot remove partial liquidity");
@@ -568,7 +514,7 @@ contract FarmingGen1 is IFarmingGen1 {
     /** @dev updates the free setup with the given index.
       * @param setupIndex index of the setup that we're updating.
       * @param amount amount of liquidity that we're adding/removeing.
-      * @param positionId position id.
+      * @param positionId _position id.
       * @param fromExit if it's from an exit or not.
      */
     function _updateFreeSetup(uint256 setupIndex, uint256 amount, uint256 positionId, bool fromExit) private {
@@ -715,11 +661,11 @@ contract FarmingGen1 is IFarmingGen1 {
         if(amount == 0) {
             return;
         }
-        if (_rewardTokenAddress == address(0)) {
-            IFarmingGen1Extension(host).backToYou{value : amount}(amount);
+        if (rewardTokenAddress == address(0)) {
+            IFarmingExtension(host).backToYou{value : amount}(amount);
         } else {
-            _safeApprove(_rewardTokenAddress, host, amount);
-            IFarmingGen1Extension(host).backToYou(amount);
+            _safeApprove(rewardTokenAddress, host, amount);
+            IFarmingExtension(host).backToYou(amount);
         }
     }
 
@@ -727,10 +673,10 @@ contract FarmingGen1 is IFarmingGen1 {
       * @param amount amount to transfer.
      */
     function _ensureTransfer(uint256 amount) private returns(bool) {
-        uint256 initialBalance = _rewardTokenAddress == address(0) ? address(this).balance : IERC20(_rewardTokenAddress).balanceOf(address(this));
+        uint256 initialBalance = rewardTokenAddress == address(0) ? address(this).balance : IERC20(rewardTokenAddress).balanceOf(address(this));
         uint256 expectedBalance = initialBalance + amount;
-        try IFarmingGen1Extension(host).transferTo(amount) {} catch {}
-        uint256 actualBalance = _rewardTokenAddress == address(0) ? address(this).balance : IERC20(_rewardTokenAddress).balanceOf(address(this));
+        try IFarmingExtension(host).transferTo(amount) {} catch {}
+        uint256 actualBalance = rewardTokenAddress == address(0) ? address(this).balance : IERC20(rewardTokenAddress).balanceOf(address(this));
         if(actualBalance == expectedBalance) {
             return true;
         }

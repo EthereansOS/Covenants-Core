@@ -32,8 +32,8 @@ contract Routines is IRoutines, LazyInitCapableElement {
     constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
     function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory extensionInitResult) {
-
-        require(host != address(0), "host");
+        address _host = host;
+        require(_host != address(0), "host");
 
         (_ammAggregatorAddress, lazyInitData) = abi.decode(lazyInitData, (address, bytes));
 
@@ -42,7 +42,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
         (lazyInitData, newEntry, newOperations) = abi.decode(lazyInitData, (bytes, RoutinesEntry, RoutinesOperation[]));
 
         if(keccak256(lazyInitData) != keccak256("")) {
-            extensionInitResult = ILazyInitCapableElement(host).lazyInit(lazyInitData);
+            extensionInitResult = ILazyInitCapableElement(_host).lazyInit(lazyInitData);
         }
         _set(newEntry, newOperations);
     }
