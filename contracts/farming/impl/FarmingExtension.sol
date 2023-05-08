@@ -39,8 +39,8 @@ contract FarmingExtension is IFarmingExtension, LazyInitCapableElement {
         _treasury = treasury;
     }
 
-    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external virtual override authorizedOnly {
-        IFarming(initializer).setFarmingSetups(farmingSetups);
+    function setModels(SetupModelConfiguration[] memory setupModelConfigurationArray) external override authorizedOnly {
+        IFarming(initializer).setModels(setupModelConfigurationArray);
     }
 
     function transferTo(uint256 amount) external virtual override initializerOnly {

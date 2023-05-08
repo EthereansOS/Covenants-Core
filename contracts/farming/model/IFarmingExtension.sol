@@ -7,7 +7,7 @@ interface IFarmingExtension {
     function data() external view returns(address farmMainContract, address _host, address rewardTokenAddress, bool byMint, address treasury);
 
     function setTreasury(address treasury) external;
-    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external;
+    function setModels(SetupModelConfiguration[] memory setupModelConfigurationArray) external;
 
     function transferTo(uint256 amount) external;
     function backToYou(uint256 amount) external payable;

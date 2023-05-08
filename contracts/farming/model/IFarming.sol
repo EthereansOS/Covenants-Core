@@ -1,76 +1,78 @@
 //SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-struct FarmingPositionRequest {
-    uint256 setupIndex; // index of the chosen setup.
-    uint256 amount; // amount of main token or liquidity pool token.
-    bool amountIsLiquidityPool; //true if user wants to directly share the liquidity pool token amount, false to add liquidity to AMM
-    address positionOwner; // position extension or address(0) [msg.sender].
-    uint256 amount0Min;
-    uint256 amount1Min;
+struct PositionRequest {
+    uint256 setupIndexOrPositionId;
+    uint256[] amounts;
+    uint256[] minAmounts;
+    address positionOwner;
 }
 
-struct FarmingSetupConfiguration {
-    bool add; // true if we're adding a new setup, false we're updating it.
+struct SetupModelConfiguration {
+    bool add;
     bool disable;
-    uint256 index; // index of the setup we're updating.
-    FarmingSetupInfo info; // data of the new or updated setup
+    uint256 index;
+    SetupModel model;
 }
 
-struct FarmingSetupInfo {
-    bool free; // if the setup is a free farming setup or a locked one.
-    uint256 eventDuration; // duration of setup
-    uint256 startEvent; // optional start event used for the delayed activation of the first setup
+struct SetupModel {
+    uint256 eventDuration;
+    uint256 startEvent;
     uint256 originalRewardPerEvent;
-    uint256 minStakeable; // minimum amount of staking tokens.
-    uint256 maxStakeable; // maximum amount stakeable in the setup (used only if free is false).
-    uint256 renewTimes; // if the setup is renewable or if it's one time.
-    address ammPlugin; // amm plugin address used for this setup (eg. uniswap amm plugin address).
-    address liquidityPoolTokenAddress; // address of the liquidity pool token
-    address mainTokenAddress; // eg. buidl address.
+    uint256 minStakeable;
+    uint256 renewTimes;
+    address ammPlugin;
+    uint256 liquidityPoolId;
+    address mainTokenAddress;
     address ethereumAddress;
-    bool involvingETH; // if the setup involves ETH or not.
-    uint256 penaltyFee; // fee paid when the user exits a still active locked farming setup (used only if free is false).
-    uint256 setupsCount; // number of setups created by this info.
-    uint256 lastSetupIndex; // index of last setup;
+    bool involvingETH;
+    uint256 penaltyFee;
+    uint256 setupsCount;
+    uint256 lastSetupIndex;
 }
 
-struct FarmingSetup {
-    uint256 infoIndex; // setup info
-    bool active; // if the setup is active or not.
-    uint256 startEvent; // farming setup start event.
-    uint256 endEvent; // farming setup end event.
-    uint256 lastUpdateEvent; // number of the event where an update was triggered.
-    uint256 objectId; // items object id for the liquidity pool token (used only if free is false).
-    uint256 rewardPerEvent; // farming setup reward per single event.
-    uint256 totalSupply; // If free it's the LP amount, if locked is currentlyStaked.
+struct Setup {
+    uint256 modelIndex;
+    bool active;
+    uint256 startEvent;
+    uint256 endEvent;
+    uint256 lastUpdateEvent;
+    uint256 rewardPerEvent;
+    uint256 totalSupply;
 }
 
-struct FarmingPosition {
+struct Position {
     address uniqueOwner; // address representing the owner of the position.
     uint256 setupIndex; // the setup index related to this position.
     uint256 creationEvent; // event when this position was created.
     uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
     uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).
     uint256 reward; // position reward (used only if free is false).
-    uint256 lockedRewardPerEvent; // position locked reward per event (used only if free is false).
 }
 
 interface IFarming {
 
     event RewardToken(address indexed rewardTokenAddress);
-    event Transfer(uint256 indexed positionId, address indexed from, address indexed to);
+    event PositionOpened(uint256 indexed positionId, address indexed uniqueOwner);
     event SetupToken(address indexed mainToken, address indexed involvedToken);
     event FarmToken(uint256 indexed objectId, address indexed liquidityPoolToken, uint256 setupIndex, uint256 endEvent);
 
     function rewardTokenAddress() external view returns(address);
-    function setups() external view returns (FarmingSetup[] memory);
-    function setup(uint256 setupIndex) external view returns (FarmingSetup memory, FarmingSetupInfo memory);
-    function setFarmingSetups(FarmingSetupConfiguration[] memory farmingSetups) external;
+    function models() external view returns (SetupModel[] memory);
+    function setModels(SetupModelConfiguration[] memory setupModelConfigurationArray) external;
 
-    function openPosition(FarmingPositionRequest calldata request) external payable returns(uint256 positionId);
-    function position(uint256 positionId) external view returns(FarmingPosition memory);
-    function addLiquidity(uint256 positionId, FarmingPositionRequest calldata request) external payable;
+    function setups() external view returns (Setup[] memory);
+    function setup(uint256 setupIndex) external view returns (Setup memory, SetupModel memory);
+
+    function rewardPaidPerSetup(uint256 setupIndex) external view returns(uint256);
+    function rewardReceivedPerSetup(uint256 setupIndex) external view returns(uint256);
+
+    function openPosition(PositionRequest calldata request) external payable returns(uint256 positionId);
+    function position(uint256 positionId) external view returns(Position memory);
+    function addLiquidity(PositionRequest calldata request) external payable;
     function withdrawReward(uint256 positionId) external;
-    function calculateFreeFarmingReward(uint256 positionId, bool isExt) external view returns(uint256 reward);
+    function withdrawLiquidity(uint256 positionId, uint256 removedLiquidity, uint256[] calldata minAmounts, bytes memory burnData) external;
+    function calculateReward(uint256 positionId, bool isExt) external view returns(uint256 reward);
+
+    function finalFlush(address[] calldata tokens, uint256[] calldata amounts) external;
 }
