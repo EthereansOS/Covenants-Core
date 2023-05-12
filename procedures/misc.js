@@ -15,6 +15,15 @@ var {
 
 const TIME_SLOTS_IN_SECONDS = 15;
 
+const EVENTS_SIGNATURE = {
+    TRANSFER_WITH_PARAMS : 'Transfer(uint256,address,address)',
+}
+
+const EVENT = {
+    EMITTED : 'EMITTED',
+    NOT_EMITTED : 'NOT_EMITTED',
+}
+
 function deployUniswapV2Router() {
     var uniswapV2Router = new web3.eth.Contract(web3.currentProvider.knowledgeBase.uniswapV2RouterABI, web3.currentProvider.knowledgeBase.uniswapV2RouterAddress);
     assert.notStrictEqual(uniswapV2Router, undefined);
@@ -126,6 +135,8 @@ function numberToString(num, locale) {
 
 
 module.exports = {
+    EVENTS_SIGNATURE,
+    EVENT,
     TIME_SLOTS_IN_SECONDS,
     compileAmmAggregatorContract,
     compileAmmAggregatorContractImpl,

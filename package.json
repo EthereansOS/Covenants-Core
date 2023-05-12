@@ -10,7 +10,7 @@
     },
     "multiverse": {
         "knowledgeBase": "resources/knowledgeBase",
-        "solidityVersion": "0.8.6"
+        "solidityVersion": "0.7.6"
     },
     "mocha": {
         "timeout": false,
