@@ -66,14 +66,22 @@ contract UniswapV3AMMV1 is AMM {
         (address token0, address token1, , address liquidityPoolAddress) = _getPoolData(liquidityPoolId);
 
         if(token0 != address(0)) {
-            IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
-            liquidityPoolAmount = uint256(pool.maxLiquidityPerTick());
-            liquidityPoolTokenAmounts = new uint256[](2);
             tokenAddresses = new address[](2);
             tokenAddresses[0] = token0;
             tokenAddresses[1] = token1;
-            liquidityPoolTokenAmounts[0] = IERC20Full(tokenAddresses[0]).balanceOf(liquidityPoolAddress);
-            liquidityPoolTokenAmounts[1] = IERC20Full(tokenAddresses[1]).balanceOf(liquidityPoolAddress);
+            liquidityPoolTokenAmounts = new uint256[](2);
+            if(liquidityPoolId != uint256(uint160(liquidityPoolAddress))) {
+                uint256 feeGrowthInside0LastX128;
+                uint256 feeGrowthInside1LastX128;
+                (,,,,,,,liquidityPoolAmount, feeGrowthInside0LastX128, feeGrowthInside1LastX128, liquidityPoolTokenAmounts[0], liquidityPoolTokenAmounts[1]) = INonfungiblePositionManager(_liquidityPoolCollectionAddress).positions(liquidityPoolId);
+                liquidityPoolTokenAmounts[0] += (feeGrowthInside0LastX128 / uint128(0xffffffffffffffffffffffffffffffff));
+                liquidityPoolTokenAmounts[1] += (feeGrowthInside1LastX128 / uint128(0xffffffffffffffffffffffffffffffff));
+            } else {
+                IUniswapV3Pool pool = IUniswapV3Pool(liquidityPoolAddress);
+                liquidityPoolAmount = uint256(pool.maxLiquidityPerTick());
+                liquidityPoolTokenAmounts[0] = IERC20Full(tokenAddresses[0]).balanceOf(liquidityPoolAddress);
+                liquidityPoolTokenAmounts[1] = IERC20Full(tokenAddresses[1]).balanceOf(liquidityPoolAddress);
+            }
         }
     }
 
@@ -245,8 +253,8 @@ library UniswapV3AMMV1Lib {
             tickUpper,
             params.amounts[0],
             params.amounts[1],
-            params.minAmounts[0],
-            params.minAmounts[1],
+            params.amountsMin[0],
+            params.amountsMin[1],
             params.receiver,
             params.deadline
         );
@@ -277,8 +285,8 @@ library UniswapV3AMMV1Lib {
             tickUpper,
             params.tokensAmounts[0],
             params.tokensAmounts[1],
-            params.minAmounts[0],
-            params.minAmounts[1],
+            params.amountsMin[0],
+            params.amountsMin[1],
             params.receiver,
             params.deadline
         );
@@ -288,8 +296,8 @@ library UniswapV3AMMV1Lib {
                 params.liquidityPoolId,
                 params.tokensAmounts[0],
                 params.tokensAmounts[1],
-                params.minAmounts[0],
-                params.minAmounts[1],
+                params.amountsMin[0],
+                params.amountsMin[1],
                 params.deadline
             );
             (liquidityPoolId, liquidityPoolAmount, tokensAmounts[0], tokensAmounts[1]) = increaseLiquidity(_liquidityPoolCollectionAddress, increaseLiquidityParams, ethValue);
@@ -331,8 +339,8 @@ library UniswapV3AMMV1Lib {
         data[0] = abi.encodeWithSelector(nonfungiblePositionManager.decreaseLiquidity.selector, INonfungiblePositionManager.DecreaseLiquidityParams(
             params.liquidityPoolId,
             uint128(liquidityPoolAmount = params.liquidityPoolAmount),
-            params.minAmounts[0],
-            params.minAmounts[1],
+            params.amountsMin[0],
+            params.amountsMin[1],
             params.deadline
         ));
 

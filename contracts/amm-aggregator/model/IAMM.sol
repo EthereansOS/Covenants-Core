@@ -6,7 +6,7 @@ struct LiquidityPoolCreationParams {
     uint256[] amounts;
     bool involvingETH;
     bytes additionalData;
-    uint256[] minAmounts;
+    uint256[] amountsMin;
     address receiver;
     uint256 deadline;
 }
@@ -18,7 +18,7 @@ struct LiquidityPoolParams {
     bool amountIsLiquidityPool;
     bool involvingETH;
     bytes additionalData;
-    uint256[] minAmounts;
+    uint256[] amountsMin;
     address receiver;
     uint256 deadline;
 }

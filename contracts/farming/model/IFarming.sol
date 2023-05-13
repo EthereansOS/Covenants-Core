@@ -4,8 +4,9 @@ pragma solidity ^0.8.0;
 struct PositionRequest {
     uint256 setupIndexOrPositionId;
     uint256[] amounts;
-    uint256[] minAmounts;
-    address positionOwner;
+    bytes[] permitSignatures;
+    uint256[] amountsMin;
+    address owner;
 }
 
 struct SetupModelConfiguration {
@@ -16,17 +17,23 @@ struct SetupModelConfiguration {
 }
 
 struct SetupModel {
-    uint256 eventDuration;
+    uint256 duration;
     uint256 startEvent;
     uint256 originalRewardPerEvent;
     uint256 minStakeable;
     uint256 renewTimes;
-    address ammPlugin;
-    uint256 liquidityPoolId;
-    address mainTokenAddress;
+    address amm;
     address ethereumAddress;
+    uint256 liquidityPoolTokenType;
+    address liquidityPoolCollectionAddress;
+    bytes createLiquidityAdditionalData;
+    bytes addLiquidityAdditionalData;
+    bytes removeLiquidityAdditionalData;
+    uint256 liquidityPoolId;
+    bool liquidityPoolIdIsUnique;
+    address mainTokenAddress;
+    address[] tokenAddresses;
     bool involvingETH;
-    uint256 penaltyFee;
     uint256 setupsCount;
     uint256 lastSetupIndex;
 }
@@ -42,18 +49,18 @@ struct Setup {
 }
 
 struct Position {
-    address uniqueOwner; // address representing the owner of the position.
-    uint256 setupIndex; // the setup index related to this position.
-    uint256 creationEvent; // event when this position was created.
-    uint256 liquidityPoolTokenAmount; // amount of liquidity pool token in the position.
-    uint256 mainTokenAmount; // amount of main token in the position (used only if free is false).
-    uint256 reward; // position reward (used only if free is false).
+    address owner;
+    uint256 setupIndex;
+    uint256 creationEvent;
+    uint256 liquidityPoolId;
+    uint256 liquidityPoolAmount;
+    uint256 reward;
 }
 
 interface IFarming {
 
     event RewardToken(address indexed rewardTokenAddress);
-    event PositionOpened(uint256 indexed positionId, address indexed uniqueOwner);
+    event PositionOpened(uint256 indexed positionId, address indexed owner);
     event SetupToken(address indexed mainToken, address indexed involvedToken);
     event FarmToken(uint256 indexed objectId, address indexed liquidityPoolToken, uint256 setupIndex, uint256 endEvent);
 
@@ -71,7 +78,7 @@ interface IFarming {
     function position(uint256 positionId) external view returns(Position memory);
     function addLiquidity(PositionRequest calldata request) external payable;
     function withdrawReward(uint256 positionId) external;
-    function withdrawLiquidity(uint256 positionId, uint256 removedLiquidity, uint256[] calldata minAmounts, bytes memory burnData) external;
+    function removeLiquidity(uint256 positionId, uint256 amount, uint256[] calldata amountsMin, bytes memory burnData) external;
     function calculateReward(uint256 positionId, bool isExt) external view returns(uint256 reward);
 
     function finalFlush(address[] calldata tokens, uint256[] calldata amounts) external;

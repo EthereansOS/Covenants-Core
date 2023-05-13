@@ -67,7 +67,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         uint256[] tokensAmounts;
         bool involvingETH;
         bytes additionalData;
-        uint256[] minAmounts;
+        uint256[] amountsMin;
         address receiver;
         uint256 deadline;
         address liquidityPoolOperator;
@@ -216,7 +216,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
                     false,
                     liquidityPoolCreationParams.involvingETH,
                     liquidityPoolCreationParams.additionalData,
-                    liquidityPoolCreationParams.minAmounts,
+                    liquidityPoolCreationParams.amountsMin,
                     liquidityPoolCreationParams.receiver,
                     liquidityPoolCreationParams.deadline
                 ));
@@ -226,7 +226,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         address liquidityPoolCreator = _getLiquidityPoolCreationOperator(liquidityPoolCreationParams.tokenAddresses, liquidityPoolCreationParams.amounts, liquidityPoolCreationParams.involvingETH, liquidityPoolCreationParams.additionalData);
         _transferToMeAndApprove(liquidityPoolCreationParams.tokenAddresses, liquidityPoolCreationParams.amounts, liquidityPoolCreator, liquidityPoolCreationParams.involvingETH);
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId, liquidityPoolTokens) = _createLiquidityPoolAndAddLiquidity(liquidityPoolCreationParams);
-        _checkMinAmounts(liquidityPoolTokenAmounts, liquidityPoolCreationParams.minAmounts);
+        _checkAmountsMin(liquidityPoolTokenAmounts, liquidityPoolCreationParams.amountsMin);
         require(block.timestamp < liquidityPoolCreationParams.deadline, "deadline");
         emit NewLiquidityPool(liquidityPoolId);
         _flushBack(liquidityPoolCreationParams.tokenAddresses, liquidityPoolId, liquidityPoolCreationParams.involvingETH, _liquidityPoolTokenType);
@@ -236,7 +236,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         ProcessedLiquidityPoolParams memory processedLiquidityPoolParams = _processLiquidityPoolParams(liquidityPoolParams);
         _transferToMeAndApprove(liquidityPoolTokens = processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.tokensAmounts, processedLiquidityPoolParams.liquidityPoolOperator, liquidityPoolParams.involvingETH);
         (liquidityPoolAmount, liquidityPoolTokenAmounts, liquidityPoolId) = _addLiquidity(processedLiquidityPoolParams);
-        _checkMinAmounts(liquidityPoolTokenAmounts, processedLiquidityPoolParams.minAmounts);
+        _checkAmountsMin(liquidityPoolTokenAmounts, processedLiquidityPoolParams.amountsMin);
         require(block.timestamp < processedLiquidityPoolParams.deadline, "deadline");
         processedLiquidityPoolParams.liquidityPoolId = liquidityPoolId;
         _flushBack(processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.involvingETH, _liquidityPoolTokenType);
@@ -258,7 +258,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         for(uint256 i = 0; i < processedLiquidityPoolDataArray.length; i++) {
             (liquidityPoolAmounts[i], liquidityPoolTokenAmounts[i], liquidityPoolIds[i]) = _addLiquidity(processedLiquidityPoolDataArray[i]);
             processedLiquidityPoolDataArray[i].liquidityPoolId = liquidityPoolIds[i];
-            _checkMinAmounts(liquidityPoolTokenAmounts[i], processedLiquidityPoolDataArray[i].minAmounts);
+            _checkAmountsMin(liquidityPoolTokenAmounts[i], processedLiquidityPoolDataArray[i].amountsMin);
             require(block.timestamp < processedLiquidityPoolDataArray[i].deadline, "deadline");
         }
         _flushBack(processedLiquidityPoolDataArray);
@@ -269,7 +269,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         liquidityPoolTokens = processedLiquidityPoolParams.liquidityPoolTokens;
         _retrieveLiquidityPoolIdAndApprove(processedLiquidityPoolParams);
         (removedLiquidityPoolAmount, removedLiquidityPoolTokenAmounts) = _removeLiquidity(processedLiquidityPoolParams);
-        _checkMinAmounts(removedLiquidityPoolTokenAmounts, processedLiquidityPoolParams.minAmounts);
+        _checkAmountsMin(removedLiquidityPoolTokenAmounts, processedLiquidityPoolParams.amountsMin);
         require(block.timestamp < processedLiquidityPoolParams.deadline, "deadline");
         _flushBack(processedLiquidityPoolParams.liquidityPoolTokens, processedLiquidityPoolParams.liquidityPoolId, processedLiquidityPoolParams.involvingETH, _liquidityPoolTokenType);
     }
@@ -286,7 +286,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         _retrieveLiquidityPoolIdsAndApprove(processedLiquidityPoolParamsArray);
         for(uint256 i = 0; i < processedLiquidityPoolParamsArray.length; i++) {
             (removedLiquidityPoolAmounts[i], removedLiquidityPoolTokenAmounts[i]) = _removeLiquidity(processedLiquidityPoolParamsArray[i]);
-            _checkMinAmounts(removedLiquidityPoolTokenAmounts[i], processedLiquidityPoolParamsArray[i].minAmounts);
+            _checkAmountsMin(removedLiquidityPoolTokenAmounts[i], processedLiquidityPoolParamsArray[i].amountsMin);
             require(block.timestamp < processedLiquidityPoolParamsArray[i].deadline, "deadline");
         }
         _flushBack(processedLiquidityPoolParamsArray);
@@ -416,7 +416,7 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
             tokensAmounts,
             involvingETH,
             liquidityPoolParams.additionalData,
-            liquidityPoolParams.minAmounts,
+            liquidityPoolParams.amountsMin,
             _receiver(liquidityPoolParams.receiver),
             liquidityPoolParams.deadline,
             _getLiquidityPoolOperator(liquidityPoolParams.liquidityPoolId, liquidityPoolTokens, liquidityPoolParams.additionalData)
@@ -533,9 +533,9 @@ abstract contract AMM is IAMM, IERC721Receiver, IERC1155Receiver {
         NFTLibrary.flushBack(liquidityPoolId, liquidityPoolTokenType, _liquidityPoolCollectionAddress);
     }
 
-    function _checkMinAmounts(uint256[] memory amounts, uint256[] memory minAmounts) internal pure {
+    function _checkAmountsMin(uint256[] memory amounts, uint256[] memory amountsMin) internal pure {
         for(uint256 i = 0; i < amounts.length; i++) {
-            _checkMinAmount(amounts[i], minAmounts[i]);
+            _checkMinAmount(amounts[i], amountsMin[i]);
         }
     }
 

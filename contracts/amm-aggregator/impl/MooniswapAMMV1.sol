@@ -25,7 +25,7 @@ interface Mooniswap {
 
     function getReturn(address src, address dst, uint256 amount) external view returns(uint256);
 
-    function deposit(uint256[] memory amounts, uint256[] memory minAmounts) external payable returns(uint256 fairSupply);
+    function deposit(uint256[] memory amounts, uint256[] memory amountsMin) external payable returns(uint256 fairSupply);
 
     function withdraw(uint256 amount, uint256[] memory minReturns) external;
 
@@ -121,14 +121,14 @@ contract MooniswapAMMV1 is AMM {
         tokensAmounts[0] = liquidityPoolCreationData.amounts[orderedTokens[0] == liquidityPoolCreationData.tokenAddresses[0] ? 0 : 1];
         tokensAmounts[1] = liquidityPoolCreationData.amounts[orderedTokens[1] == liquidityPoolCreationData.tokenAddresses[1] ? 1 : 0];
 
-        (liquidityPoolAmount, liquidityPoolId) = _addLiquidity(address(mooniswap), orderedTokens, tokensAmounts, liquidityPoolCreationData.minAmounts, liquidityPoolCreationData.receiver, true);
+        (liquidityPoolAmount, liquidityPoolId) = _addLiquidity(address(mooniswap), orderedTokens, tokensAmounts, liquidityPoolCreationData.amountsMin, liquidityPoolCreationData.receiver, true);
     }
 
     function _addLiquidity(ProcessedLiquidityPoolParams memory processedLiquidityPoolParams) internal override virtual returns(uint256 liquidityPoolAmount, uint256[] memory tokensAmounts, uint256 liquidityPoolId) {
-        (liquidityPoolAmount, liquidityPoolId) = _addLiquidity(_toAddress(processedLiquidityPoolParams.liquidityPoolId), processedLiquidityPoolParams.liquidityPoolTokens, tokensAmounts = processedLiquidityPoolParams.tokensAmounts, processedLiquidityPoolParams.minAmounts, processedLiquidityPoolParams.receiver, false);
+        (liquidityPoolAmount, liquidityPoolId) = _addLiquidity(_toAddress(processedLiquidityPoolParams.liquidityPoolId), processedLiquidityPoolParams.liquidityPoolTokens, tokensAmounts = processedLiquidityPoolParams.tokensAmounts, processedLiquidityPoolParams.amountsMin, processedLiquidityPoolParams.receiver, false);
     }
 
-    function _addLiquidity(address liquidityPoolAddress, address[] memory tokens, uint256[] memory tokensAmounts, uint256[] memory minAmounts, address receiver, bool isNew) private returns(uint256 liquidityPoolAmount, uint256 liquidityPoolId) {
+    function _addLiquidity(address liquidityPoolAddress, address[] memory tokens, uint256[] memory tokensAmounts, uint256[] memory amountsMin, address receiver, bool isNew) private returns(uint256 liquidityPoolAmount, uint256 liquidityPoolId) {
 
         liquidityPoolId = _toNumber(liquidityPoolAddress);
 
@@ -143,7 +143,7 @@ contract MooniswapAMMV1 is AMM {
             }
         }
 
-        Mooniswap(liquidityPoolAddress).deposit{value : tokens[0] == ethereumAddress ? tokensAmounts[0] : tokens[1] == ethereumAddress ? tokensAmounts[1] : 0}(tokensAmounts, minAmounts);
+        Mooniswap(liquidityPoolAddress).deposit{value : tokens[0] == ethereumAddress ? tokensAmounts[0] : tokens[1] == ethereumAddress ? tokensAmounts[1] : 0}(tokensAmounts, amountsMin);
 
         liquidityPoolAmount = liquidityPoolAddress.balanceOf(address(this)) - liquidityPoolAmount;
 
@@ -156,7 +156,7 @@ contract MooniswapAMMV1 is AMM {
 
         uint256[] memory balancesBefore = _balanceOf(data.liquidityPoolTokens);
 
-        Mooniswap(_toAddress(data.liquidityPoolId)).withdraw(liquidityPoolAmount = data.liquidityPoolAmount, data.minAmounts);
+        Mooniswap(_toAddress(data.liquidityPoolId)).withdraw(liquidityPoolAmount = data.liquidityPoolAmount, data.amountsMin);
 
         tokensAmounts = _balanceOf(data.liquidityPoolTokens);
 

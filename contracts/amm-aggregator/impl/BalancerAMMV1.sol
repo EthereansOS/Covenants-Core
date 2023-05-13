@@ -118,7 +118,7 @@ interface BPool is IERC20Full {
     function joinPool(uint poolAmountOut, uint[] memory maxAmountsIn)
         external;
 
-    function exitPool(uint poolAmountIn, uint[] memory minAmountsOut)
+    function exitPool(uint poolAmountIn, uint[] memory amountsMinOut)
         external;
 
     function swapExactAmountIn(
