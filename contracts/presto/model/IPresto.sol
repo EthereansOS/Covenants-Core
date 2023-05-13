@@ -14,7 +14,7 @@ struct PrestoOperation {
 
     bytes additionalData;
 
-    uint256[] tokenMins;
+    uint256[] amountsMin;
 
     address[] receivers;
     uint256[] receiversPercentages;

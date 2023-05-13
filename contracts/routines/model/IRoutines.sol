@@ -34,7 +34,7 @@ interface IRoutines is ILazyInitCapableElement {
 
     function nextEvent() external view returns(uint256);
 
-    function execute(bool earnByAmounts, address rewardReceiver, uint256[] calldata minAmounts) external returns(bool executed, uint256[] memory outputAmounts);
+    function execute(bool earnByAmounts, address rewardReceiver, uint256[] calldata amountsMin) external returns(bool executed, uint256[] memory outputAmounts);
 
     function flushBack(address[] calldata tokenAddresses) external;
 }

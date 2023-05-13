@@ -82,13 +82,13 @@ contract Routines is IRoutines, LazyInitCapableElement {
         }
     }
 
-    function execute(bool earnByAmounts, address rewardReceiver, uint256[] memory minAmounts) external override activeExtensionOnly returns(bool executed, uint256[] memory outputAmounts) {
+    function execute(bool earnByAmounts, address rewardReceiver, uint256[] memory amountsMin) external override activeExtensionOnly returns(bool executed, uint256[] memory outputAmounts) {
         require(block.timestamp >= nextEvent(), "Too early to execute");
         require(_operations.length > 0, "No operations");
         emit Executed(executed = _ensureExecute());
         if(executed) {
             _entry.lastEvent = block.timestamp;
-            outputAmounts = _execute(earnByAmounts, rewardReceiver != address(0) ? rewardReceiver : msg.sender, minAmounts);
+            outputAmounts = _execute(earnByAmounts, rewardReceiver != address(0) ? rewardReceiver : msg.sender, amountsMin);
         } else {
             try IRoutinesExtension(host).deactivationByFailure() {
             } catch {
@@ -168,7 +168,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
         delete _tokenBalanceOfBefore;
     }
 
-    function _execute(bool earnByInput, address rewardReceiver, uint256[] memory minAmounts) private returns (uint256[] memory outputAmounts) {
+    function _execute(bool earnByInput, address rewardReceiver, uint256[] memory amountsMin) private returns (uint256[] memory outputAmounts) {
         outputAmounts = new uint256[](_operations.length);
         for(uint256 i = 0 ; i < _operations.length; i++) {
             RoutinesOperation memory operation = _operations[i];
@@ -176,7 +176,7 @@ contract Routines is IRoutines, LazyInitCapableElement {
             if(operation.ammPlugin == address(0)) {
                 outputAmounts[i] = _transferTo(operation.inputTokenAddress, amountIn, rewardReceiver, _entry.callerRewardPercentage, operation);
             } else {
-                outputAmounts[i] = _swap(operation, amountIn, i < minAmounts.length ? minAmounts[i] : 0, rewardReceiver, _entry.callerRewardPercentage, earnByInput);
+                outputAmounts[i] = _swap(operation, amountIn, i < amountsMin.length ? amountsMin[i] : 0, rewardReceiver, _entry.callerRewardPercentage, earnByInput);
             }
         }
     }

@@ -144,19 +144,19 @@ contract Presto is IPresto {
             false,
             operation.enterInETH,
             operation.additionalData,
-            operation.tokenMins,
+            operation.amountsMin,
             address(this),
             operation.deadline
         );
         uint256[] memory tokenAmounts;
         (outputAmount, tokenAmounts,,) = IAMM(operation.ammPlugin).addLiquidity{value : value}(liquidityPoolData);
-        _checkMinAmounts(tokenAmounts, operation.tokenMins);
+        _checkAmountsMin(tokenAmounts, operation.amountsMin);
         _transferTo(address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), outputAmount, operation.receivers, operation.receiversPercentages);
     }
 
     function _swap(PrestoOperation memory operation) private returns(uint256 outputAmount) {
 
-        uint256 minAmount = operation.tokenMins.length > 0 ? operation.tokenMins[0] : 0;
+        uint256 minAmount = operation.amountsMin.length > 0 ? operation.amountsMin[0] : 0;
 
         (address ethereumAddress,,,,) = IAMM(operation.ammPlugin).data();
 
@@ -174,7 +174,7 @@ contract Presto is IPresto {
             operation.enterInETH ? ethereumAddress : address(uint160(operation.liquidityPoolIdOrInputTokenAddress)),
             operation.amount,
             operation.additionalData,
-            operation.tokenMins[0],
+            operation.amountsMin[0],
             address(this),
             operation.deadline
         );
@@ -231,9 +231,9 @@ contract Presto is IPresto {
         }
     }
 
-    function _checkMinAmounts(uint256[] memory amounts, uint256[] memory minAmounts) private pure {
+    function _checkAmountsMin(uint256[] memory amounts, uint256[] memory amountsMin) private pure {
         for(uint256 i = 0; i < amounts.length; i++) {
-            _checkMinAmount(amounts[i], minAmounts[i]);
+            _checkMinAmount(amounts[i], amountsMin[i]);
         }
     }
 
