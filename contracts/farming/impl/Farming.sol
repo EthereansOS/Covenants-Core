@@ -38,7 +38,7 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
 
     constructor(bytes memory lazyInitData) LazyInitCapableElement(lazyInitData) {}
 
-   function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory extensionInitResult) {
+    function _lazyInit(bytes memory lazyInitData) internal override returns(bytes memory extensionInitResult) {
         address _host = host;
         require(_host != address(0), "host");
 
@@ -161,8 +161,8 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
         Setup memory chosenSetup = _setup[request.setupIndexOrPositionId];
         if(!chosenSetup.active) {
             activateSetup(chosenSetup.modelIndex);
+            require(_setup[request.setupIndexOrPositionId].active, "setup");
         }
-
         address owner = request.owner != address(0) ? request.owner : msg.sender;
         positionId = uint256(BehaviorUtilities.randomKey(_indexKey++));
         (uint256 liquidityPoolAmount, uint256 liquidityPoolId) = _addLiquidity(request.setupIndexOrPositionId, request, true);
@@ -182,18 +182,17 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
     function addLiquidity(PositionRequest memory request) external override payable positionOwnerOnly(request.setupIndexOrPositionId) {
         uint256 positionId = request.setupIndexOrPositionId;
         Position storage farmingPosition = _position[positionId];
-        uint256 setupIndex = farmingPosition.setupIndex;
-        require(_setup[setupIndex].active, "Setup not active");
-        require(_setup[setupIndex].startEvent <= block.timestamp && _setup[setupIndex].endEvent > block.timestamp, "Invalid setup");
-        Setup storage chosenSetup = _setup[farmingPosition.setupIndex];
+        Setup storage positionSetup = _setup[farmingPosition.setupIndex];
+        require(positionSetup.active, "Setup not active");
+        require(positionSetup.startEvent <= block.timestamp && positionSetup.endEvent > block.timestamp, "Invalid setup");
 
         (uint256 liquidityPoolAmount,) = _addLiquidity(farmingPosition.setupIndex, request, false);
-        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.timestamp - chosenSetup.lastUpdateEvent) * chosenSetup.rewardPerEvent) * 1e18) / chosenSetup.totalSupply;
+        _rewardPerTokenPerSetup[farmingPosition.setupIndex] += (((block.timestamp - positionSetup.lastUpdateEvent) * positionSetup.rewardPerEvent) * 1e18) / positionSetup.totalSupply;
         farmingPosition.reward = calculateReward(positionId, false);
         _rewardPerTokenPaid[positionId] = _rewardPerTokenPerSetup[farmingPosition.setupIndex];
         farmingPosition.liquidityPoolAmount += liquidityPoolAmount;
-        chosenSetup.lastUpdateEvent = block.timestamp;
-        chosenSetup.totalSupply += liquidityPoolAmount;
+        positionSetup.lastUpdateEvent = block.timestamp;
+        positionSetup.totalSupply += liquidityPoolAmount;
     }
 
     function withdrawReward(uint256 positionId) public positionOwnerOnly(positionId) {
@@ -283,14 +282,12 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
             setupModel.setupsCount = 0;
             setupModel.lastSetupIndex = _setupsCount;
             _setupModel[_setupModelsCount] = setupModel;
-            _setup[_setupsCount] = Setup(_setupModelsCount, false, 0, 0, 0, setupModel.originalRewardPerEvent, 0);
-            _setupModelsCount++;
-            _setupsCount++;
+            _setup[_setupsCount++] = Setup(_setupModelsCount++, false, 0, 0, 0, setupModel.originalRewardPerEvent, 0);
             return;
         }
 
         Setup storage setupInstance = _setup[setupIndex];
-        setupModel = _setupModel[_setup[setupIndex].modelIndex];
+        setupModel = _setupModel[setupInstance.modelIndex];
 
         if(disable) {
             require(setupInstance.active, "Not possible");
@@ -523,10 +520,10 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
     }
 
     function _ensureTransfer(uint256 amount) private returns(bool) {
-        uint256 initialBalance = rewardTokenAddress == address(0) ? address(this).balance : IERC20(rewardTokenAddress).balanceOf(address(this));
+        uint256 initialBalance = rewardTokenAddress.balanceOf(address(this));
         uint256 expectedBalance = initialBalance + amount;
         try IFarmingExtension(host).transferTo(amount) {} catch {}
-        uint256 actualBalance = rewardTokenAddress == address(0) ? address(this).balance : IERC20(rewardTokenAddress).balanceOf(address(this));
+        uint256 actualBalance = rewardTokenAddress.balanceOf(address(this));
         if(actualBalance == expectedBalance) {
             return true;
         }
