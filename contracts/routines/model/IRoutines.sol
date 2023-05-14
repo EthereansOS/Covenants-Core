@@ -28,13 +28,16 @@ struct RoutinesOperation {
 }
 
 interface IRoutines is ILazyInitCapableElement {
+
+    event Executed(bool);
+
     function entry() external view returns(RoutinesEntry memory, RoutinesOperation[] memory);
 
     function setEntry(RoutinesEntry calldata entryData, RoutinesOperation[] memory operations) external;
 
+    function flushBack(address[] calldata tokenAddresses) external;
+
     function nextEvent() external view returns(uint256);
 
     function execute(bool earnByAmounts, address rewardReceiver, uint256[] calldata amountsMin) external returns(bool executed, uint256[] memory outputAmounts);
-
-    function flushBack(address[] calldata tokenAddresses) external;
 }
