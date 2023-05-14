@@ -5,22 +5,21 @@ import "../model/IPresto.sol";
 import "../../amm-aggregator/model/IAMMAggregator.sol";
 import { IERC20Full, TransferUtilities } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 
-
-struct AddLiquidityData {
-    address ethereumAddress;
-    address[] tokenAddresses;
-    uint256[] amounts;
-}
-
 contract Presto is IPresto {
     using TransferUtilities for address;
+
+    struct AddLiquidityData {
+        address ethereumAddress;
+        address[] tokenAddresses;
+        uint256[] amounts;
+    }
 
     uint256 private constant ONE_HUNDRED = 1e18;
 
     address private immutable _ammAggregatorAddress;
 
     address[] private _tokensToTransfer;
-    mapping(address => uint256) private _tokenAmounts;
+    mapping(address => uint256) private _tokenIndex;
 
     mapping(uint256 => AddLiquidityData) private _addLiquidityData;
 
@@ -31,8 +30,8 @@ contract Presto is IPresto {
     receive() external payable {
     }
 
-    function execute(PrestoOperation[] memory operations) external override payable returns(uint256[] memory outputAmounts) {
-        _transferToMe(operations);
+    function execute(PrestoOperation[] memory operations) external override payable returns(uint256[] memory transferredAmounts, uint256[] memory outputAmounts) {
+        (operations, transferredAmounts) = _collectTokens(operations);
         outputAmounts = new uint256[](operations.length);
         for(uint256 i = 0 ; i < operations.length; i++) {
             PrestoOperation memory operation = operations[i];
@@ -49,25 +48,18 @@ contract Presto is IPresto {
         _flushAndClear();
     }
 
-    function _transferToMe(PrestoOperation[] memory operations) private {
-        _collectTokens(operations);
-        for(uint256 i = 0; i < _tokensToTransfer.length; i++) {
-            address tokenAddress = _tokensToTransfer[i];
-            uint256 amount = _tokenAmounts[tokenAddress];
-            if(tokenAddress == address(0)) {
-                require(msg.value == amount, "Incorrect ETH value");
-            } else {
-                tokenAddress.safeTransferFrom(msg.sender, address(this), amount);
-            }
-        }
-    }
-
-    function _collectTokens(PrestoOperation[] memory operations) private {
+    function _collectTokens(PrestoOperation[] memory operationsInput) private returns(PrestoOperation[] memory operations, uint256[] memory transferredAmounts) {
+        uint256 ethAmount = 0;
+        operations = new PrestoOperation[](operationsInput.length);
+        transferredAmounts = new uint256[](operationsInput.length);
         address[] memory amms = IAMMAggregator(_ammAggregatorAddress).amms();
-        for(uint256 i = 0; i < operations.length; i++) {
-            PrestoOperation memory operation = operations[i];
+        for(uint256 i = 0; i < operationsInput.length; i++) {
+            PrestoOperation memory operation = operationsInput[i];
+            (address ethereumAddress, uint256 liquidityPoolTokenType) = (address(0), 0);
+            if(operation.ammPlugin != address(0)) {
+                (ethereumAddress, liquidityPoolTokenType) = _checkAMMAndRetrieveData(operation, amms);
+            }
             if(operation.ammPlugin != address(0) && operation.liquidityPoolIds.length == 0) {
-                (address ethereumAddress, uint256 liquidityPoolTokenType) = _checkAMMAndRetrieveData(operation, amms);
                 require(liquidityPoolTokenType == 20, "ERC20");
                 (uint256[] memory amounts, address[] memory tokensAddresses) = IAMM(operation.ammPlugin).byLiquidityPoolAmount(operation.liquidityPoolIdOrInputTokenAddress, operation.amount);
                 bool hasEth = false;
@@ -75,14 +67,22 @@ contract Presto is IPresto {
                     if(tokensAddresses[z] == ethereumAddress) {
                         hasEth = true;
                     }
-                    _collectTokenData(operation.enterInETH && tokensAddresses[z] == ethereumAddress ? address(0) : tokensAddresses[z], amounts[z]);
+                    uint256 _ethAmount;
+                    (amounts[z], _ethAmount) = _collectTokenData(operation.enterInETH && tokensAddresses[z] == ethereumAddress ? address(0) : tokensAddresses[z], amounts[z]);
+                    ethAmount += _ethAmount;
                 }
+                transferredAmounts[i] = amounts[0];
                 require(!operation.enterInETH || hasEth, "Wrong use of enterInETH in addLiquidity");
                 _addLiquidityData[i] = AddLiquidityData(ethereumAddress, tokensAddresses, amounts);
             } else {
-                _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), operation.amount);
+                uint256 _ethAmount;
+                (transferredAmounts[i], _ethAmount) = _collectTokenData(operation.ammPlugin != address(0) && operation.enterInETH ? address(0) : address(uint160(operation.liquidityPoolIdOrInputTokenAddress)), operation.amount);
+                ethAmount += _ethAmount;
+                operation.amount = transferredAmounts[i];
+                operations[i] = operation;
             }
         }
+        require(msg.value == ethAmount, "ETH");
     }
 
     function _checkAMMAndRetrieveData(PrestoOperation memory operation, address[] memory amms) private view returns(address ethereumAddress, uint256 liquidityPoolTokenType) {
@@ -99,17 +99,18 @@ contract Presto is IPresto {
         revert("Unknown AMM");
     }
 
-    function _collectTokenData(address inputTokenAddress, uint256 inputTokenAmount) private {
-        if(inputTokenAmount == 0) {
-            return;
+    function _collectTokenData(address inputTokenAddress, uint256 inputTokenAmount) private returns (uint256 receivedAmount, uint256 ethAmount) {
+        if(inputTokenAddress == address(0) || inputTokenAmount == 0) {
+            return (inputTokenAmount, inputTokenAddress == address(0) ? inputTokenAmount : 0);
         }
 
-        uint256 oldAmount = _tokenAmounts[inputTokenAddress];
+        uint256 tokenIndex = _tokenIndex[inputTokenAddress];
 
-        if(oldAmount == 0) {
+        if(_tokensToTransfer.length == 0 || _tokensToTransfer[tokenIndex] != inputTokenAddress) {
+            _tokenIndex[inputTokenAddress] = _tokensToTransfer.length;
             _tokensToTransfer.push(inputTokenAddress);
         }
-        _tokenAmounts[inputTokenAddress] = oldAmount + inputTokenAmount;
+        receivedAmount = inputTokenAddress.safeTransferFrom(msg.sender, address(this), inputTokenAmount);
     }
 
     function _flushAndClear() private {
@@ -117,10 +118,9 @@ contract Presto is IPresto {
         for(uint256 i = 0; i < tokensToTransfer.length; i++) {
             address tokenToTransfer = tokensToTransfer[i];
             tokenToTransfer.safeTransfer(msg.sender, tokenToTransfer.balanceOf(address(this)));
-            delete _tokenAmounts[tokenToTransfer];
+            delete _tokenIndex[tokenToTransfer];
         }
         address(0).safeTransfer(msg.sender, address(0).balanceOf(address(this)));
-        delete _tokenAmounts[address(0)];
         delete _tokensToTransfer;
     }
 
@@ -214,20 +214,15 @@ contract Presto is IPresto {
             return;
         }
         if(erc20TokenAddress == address(0)) {
-            (bool result,) = to.call{value:value}("");
-            require(result, "ETH transfer failed");
+            address(0).safeTransfer(to, value);
             return;
         }
         if(to != address(0)) {
             erc20TokenAddress.safeTransfer(to, value);
+            return;
         } else {
-            try IERC20Full(erc20TokenAddress).burn(value) {
-            } catch {
-                (bool result,) = erc20TokenAddress.call(abi.encodeWithSelector(IERC20Full(address(0)).transfer.selector, address(0), value));
-                if(!result) {
-                    erc20TokenAddress.safeTransfer(0x000000000000000000000000000000000000dEaD, value);
-                }
-            }
+            erc20TokenAddress.safeBurn(value);
+            return;
         }
     }
 

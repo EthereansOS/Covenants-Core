@@ -23,5 +23,5 @@ struct PrestoOperation {
 }
 
 interface IPresto {
-    function execute(PrestoOperation[] memory operations) external payable returns(uint256[] memory outputAmounts);
+    function execute(PrestoOperation[] memory operations) external payable returns(uint256[] memory transferredAmounts, uint256[] memory outputAmounts);
 }
