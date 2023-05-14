@@ -9,6 +9,6 @@ interface IFarmingExtension {
     function setTreasury(address treasury) external;
     function setModels(SetupModelConfiguration[] memory setupModelConfigurationArray) external;
 
-    function transferTo(uint256 amount) external;
+    function transferTo(uint256 amount) external returns(uint256 transferred);
     function backToYou(uint256 amount) external payable;
 }

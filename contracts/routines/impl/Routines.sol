@@ -10,6 +10,7 @@ import "../../util/uniswapV3/ISwapRouter.sol";
 import "../../util/uniswapV3/IMulticall.sol";
 import "../../util/uniswapV3/IPeripheryPayments.sol";
 import "../../util/uniswapV3/IPeripheryImmutableState.sol";
+import "../../util/INONGovRules.sol";
 
 contract Routines is IRoutines, LazyInitCapableElement {
 
@@ -232,16 +233,16 @@ contract Routines is IRoutines, LazyInitCapableElement {
         _transferTo(erc20TokenAddress, rewardReceiver, currentPartialAmount);
         availableAmount -= currentPartialAmount;
 
-        IRoutinesFactory RoutinesFactory = IRoutinesFactory(initializer);
-        address factoryOfFactoriesAddress = RoutinesFactory.initializer();
+        INONGovRules routinesRules = INONGovRules(initializer);
+        address routinesRulesInitializerAddress = routinesRules.initializer();
         if(erc20TokenAddress != address(0)) {
-            _safeApprove(erc20TokenAddress, factoryOfFactoriesAddress, availableAmount);
+            _safeApprove(erc20TokenAddress, routinesRulesInitializerAddress, availableAmount);
         }
-        currentPartialAmount = RoutinesFactory.payFee{value : erc20TokenAddress != address(0) ? 0 : availableAmount}(address(this), erc20TokenAddress, availableAmount, "");
+        currentPartialAmount = routinesRules.payFee{value : erc20TokenAddress != address(0) ? 0 : availableAmount}(address(this), erc20TokenAddress, availableAmount, "");
         availableAmount -= currentPartialAmount;
 
         if(erc20TokenAddress != address(0)) {
-            _safeApprove(erc20TokenAddress, factoryOfFactoriesAddress, 0);
+            _safeApprove(erc20TokenAddress, routinesRulesInitializerAddress, 0);
         }
 
         uint256 stillAvailableAmount = availableAmount;
@@ -330,9 +331,4 @@ contract Routines is IRoutines, LazyInitCapableElement {
         }
         revert("Unknown AMM");
     }
-}
-
-interface IRoutinesFactory {
-    function initializer() external view returns (address);
-    function payFee(address sender, address tokenAddress, uint256 value, bytes calldata permitSignature) external payable returns (uint256 feePaid);
 }

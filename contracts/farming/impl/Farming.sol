@@ -7,6 +7,7 @@ import "../../amm-aggregator/model/IAMMAggregator.sol";
 import { IERC20Full as IERC20, TransferUtilities, BehaviorUtilities } from "@ethereansos/swissknife/contracts/lib/GeneralUtilities.sol";
 import "../../util/IERC721.sol";
 import "../../util/IERC1155.sol";
+import "../../util/INONGovRules.sol";
 
 contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155Receiver {
     using TransferUtilities for address;
@@ -77,7 +78,7 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
         address,
         uint256,
         bytes calldata
-    ) external view override returns (bytes4) {
+    ) external pure override returns (bytes4) {
         return this.onERC721Received.selector;
     }
 
@@ -87,7 +88,7 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
         uint256,
         uint256,
         bytes calldata
-    ) external view override returns (bytes4) {
+    ) external pure override returns (bytes4) {
         return this.onERC1155Received.selector;
     }
 
@@ -97,7 +98,7 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
         uint256[] calldata,
         uint256[] calldata,
         bytes calldata
-    ) external view override returns (bytes4) {
+    ) external pure override returns (bytes4) {
         return this.onERC1155BatchReceived.selector;
     }
 
@@ -435,22 +436,22 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
     }
 
     function _payFee(address tokenAddress, uint256 feeAmount) private returns (uint256 feePaid) {
-        IFarmFactory farmFactory = IFarmFactory(initializer);
-        address factoryOfFactories = farmFactory.initializer();
+        INONGovRules farmingRules = INONGovRules(initializer);
+        address farmingRulesInitializerAddress = farmingRules.initializer();
         if(tokenAddress != address(0)) {
-            tokenAddress.safeApprove(factoryOfFactories, feeAmount);
+            tokenAddress.safeApprove(farmingRulesInitializerAddress, feeAmount);
         }
         uint256 before = tokenAddress.balanceOf(address(this));
-        farmFactory.payFee{value : tokenAddress != address(0) ? 0 : feeAmount}(address(this), tokenAddress, feeAmount, "");
+        farmingRules.payFee{value : tokenAddress != address(0) ? 0 : feeAmount}(address(this), tokenAddress, feeAmount, "");
         if(tokenAddress != address(0)) {
-            tokenAddress.safeApprove(factoryOfFactories, 0);
+            tokenAddress.safeApprove(farmingRulesInitializerAddress, 0);
         }
         return before - tokenAddress.balanceOf(address(this));
     }
 
     function _burnFee(bytes memory burnData) private returns (uint256) {
         (, burnData) = abi.decode(burnData, (bool, bytes));
-        return IFarmFactory(initializer).burnOrTransferToken(msg.sender, burnData);
+        return INONGovRules(initializer).burnOrTransferToken(msg.sender, burnData);
     }
 
     function _updateSetup(uint256 setupIndex, uint256 amount, uint256 positionId, bool fromExit) private {
@@ -532,10 +533,4 @@ contract Farming is IFarming, LazyInitCapableElement, IERC721Receiver, IERC1155R
         _giveBack(actualBalance - initialBalance);
         return false;
     }
-}
-
-interface IFarmFactory {
-    function initializer() external view returns (address);
-    function payFee(address sender, address tokenAddress, uint256 value, bytes calldata permitSignature) external payable returns (uint256 feePaid);
-    function burnOrTransferToken(address sender, bytes calldata permitSignature) external payable returns(uint256 amountTransferedOrBurnt);
 }

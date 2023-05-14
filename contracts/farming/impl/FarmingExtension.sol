@@ -43,7 +43,7 @@ contract FarmingExtension is IFarmingExtension, LazyInitCapableElement {
         IFarming(initializer).setModels(setupModelConfigurationArray);
     }
 
-    function transferTo(uint256 amount) external virtual override initializerOnly {
+    function transferTo(uint256 amount) external virtual override initializerOnly returns(uint256 transferred) {
         return _byMint ? _mintAndTransfer(_rewardTokenAddress, initializer, amount) : _rewardTokenAddress.safeTransfer(initializer, amount);
     }
 
@@ -62,8 +62,9 @@ contract FarmingExtension is IFarmingExtension, LazyInitCapableElement {
         }
     }
 
-    function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual {
+    function _mintAndTransfer(address erc20TokenAddress, address recipient, uint256 value) internal virtual returns(uint256 minted) {
         IERC20Full(erc20TokenAddress).mint(recipient, value);
+        return value;
     }
 
     function _burn(address erc20TokenAddress, uint256 value) internal virtual {
