@@ -17,15 +17,15 @@ contract Presto is IPresto {
 
     uint256 private constant ONE_HUNDRED = 1e18;
 
+    address private immutable _ammAggregatorAddress;
+
     address[] private _tokensToTransfer;
     mapping(address => uint256) private _tokenAmounts;
 
     mapping(uint256 => AddLiquidityData) private _addLiquidityData;
 
-    address private immutable _ammAggregator;
-
-    constructor(address ammAggregator) {
-        _ammAggregator = ammAggregator;
+    constructor(address ammAggregatorAddress) {
+        _ammAggregatorAddress = ammAggregatorAddress;
     }
 
     receive() external payable {
@@ -63,7 +63,7 @@ contract Presto is IPresto {
     }
 
     function _collectTokens(PrestoOperation[] memory operations) private {
-        address[] memory amms = IAMMAggregator(_ammAggregator).amms();
+        address[] memory amms = IAMMAggregator(_ammAggregatorAddress).amms();
         for(uint256 i = 0; i < operations.length; i++) {
             PrestoOperation memory operation = operations[i];
             if(operation.ammPlugin != address(0) && operation.liquidityPoolIds.length == 0) {
