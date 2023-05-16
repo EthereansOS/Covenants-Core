@@ -47,7 +47,7 @@ var setupMainToken;
 var tokens = [];
 
 var liquidityPool;
-var ethToSpend = 600;
+var ethToSpend = 1200;
 var farmTokenCollection;
 var rewardDestination;
 var oneHundred;
@@ -61,7 +61,7 @@ async function getFundsToAccount(token) {
     await blockchainCall(
         await token.methods.transfer,
         tokenHolder,
-        toDecimals("15000", await blockchainCall(token.methods.decimals)),
+        toDecimals("30000", await blockchainCall(token.methods.decimals)),
         { from: addr }
     );
 }
@@ -105,46 +105,26 @@ async function initActor(name, address, unwrap, amount, amountIsLiquidityPool) {
         amountIsLiquidityPool,
     };
 
+    var amountToTransfer = amount * 2;
+    var ethToSpendToTransfer = ethToSpend * 2;
+
     await blockchainCall(
         await mainToken.methods.transfer,
         address,
-        toDecimals(amount, await blockchainCall(mainToken.methods.decimals)),
+        toDecimals(amountToTransfer, await blockchainCall(mainToken.methods.decimals)),
         { from: tokenHolder }
     );
     await blockchainCall(
         await secondaryToken.methods.transfer,
         address,
-        toDecimals(amount, await blockchainCall(secondaryToken.methods.decimals)),
+        toDecimals(amountToTransfer, await blockchainCall(secondaryToken.methods.decimals)),
         { from: tokenHolder }
     );
 
     mainToken !== VOID_ETHEREUM_ADDRESS &&
-        (await buyForETH(mainToken, ethToSpend, address));
+        (await buyForETH(mainToken, ethToSpendToTransfer, address));
     secondaryToken !== VOID_ETHEREUM_ADDRESS &&
-        (await buyForETH(secondaryToken, ethToSpend, address));
-
-    if(mainToken !== VOID_ETHEREUM_ADDRESS) {
-        console.log(
-            `${name} balance of mainToken is ` +
-            (await blockchainCall(
-                mainToken.methods.balanceOf,
-                address
-            ))
-        );
-    }
-
-    if(secondaryToken !== VOID_ETHEREUM_ADDRESS) {
-        console.log(
-            `${name} balance of secondaryToken is ` +
-            (await blockchainCall(
-                secondaryToken.methods.balanceOf,
-                address
-            ))
-        );
-    }
-
-
-
+        (await buyForETH(secondaryToken, ethToSpendToTransfer, address));
 }
 
 async function compileContracts() {
@@ -453,7 +433,7 @@ module.exports = async function run() {
 
 // TEST FUNCTIONS
 
-async function shouldActiveSetup() {
+async function shouldActivateSetup() {
     await blockchainCall(farmingGen1Contract.methods.activateSetup, 0, { from: tokenHolder });
     await blockchainCall(farmingGen1Contract.methods.activateSetup, 1, { from: tokenHolder });
     var availableSetups = await farmingGen1Contract.methods.setups().call();
@@ -621,7 +601,7 @@ async function addLiquidity(actor) {
         farmingGen1Contract.methods.addLiquidity,
         actor.positionId,
         stake,
-        { from: tokenHolder, value: (!stake.amountIsLiquidityPool && setupInfo.involvingETH) ? mainToken === VOID_ETHEREUM_ADDRESS ? mainTokenAmount : secondaryTokenAmount : 0 }
+        { from: actor.from, value: (!stake.amountIsLiquidityPool && setupInfo.involvingETH) ? mainToken === VOID_ETHEREUM_ADDRESS ? mainTokenAmount : secondaryTokenAmount : 0 }
     );
     var endingSetup = (await farmingGen1Contract.methods.setups().call())[actor.setupIndex];
     var endingPosition = await blockchainCall(farmingGen1Contract.methods.position, actor.positionId);
@@ -630,32 +610,40 @@ async function addLiquidity(actor) {
     actor.position = endingPosition;
 }
 
-async function withdrawReward(actor, blocks, isPartial) {
+async function withdrawReward(actor, seconds) {
 
-    var balance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(farmingGen1Contract.options.address).call() : await web3.eth.getBalance(farmingGen1Contract.options.address);
+    var balance = rewardToken !== VOID_ETHEREUM_ADDRESS ?
+        await rewardToken.methods.balanceOf(farmingGen1Contract.options.address).call() : await web3.eth.getBalance(farmingGen1Contract.options.address);
     console.log(`farm main balance is ${balance}`);
     var setup = (await farmingGen1Contract.methods.setups().call())[actor.setupIndex];
     var currentBlock = await web3.eth.getBlock(await web3.eth.getBlockNumber());
     var currentTimestamp = currentBlock.timestamp;
-    var nextTimestamp = parseInt(currentTimestamp) + (blocks * misc.TIME_SLOTS_IN_SECONDS) || parseInt(setup.endEvent);
+    var nextTimestamp = parseInt(currentTimestamp) + seconds || parseInt(setup.endEvent);
     await web3.currentProvider.setNextBlockTime(nextTimestamp);
-    var startingBalance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(tokenHolder).call() : await web3.eth.getBalance(tokenHolder);
-    var result = await blockchainCall(farmingGen1Contract.methods.withdrawReward, actor.positionId, { from: tokenHolder });
+
+    var startingBalance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(actor.from).call() : await web3.eth.getBalance(actor.from);
+
+    var result = await blockchainCall(farmingGen1Contract.methods.withdrawReward, actor.positionId, { from: actor.from });
     var fee = await calculateTransactionFee(result);
     console.log(`fee is ${fee}`);
+
     setup = (await farmingGen1Contract.methods.setups().call())[actor.setupIndex];
-    var resultBalance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(tokenHolder).call() : await web3.eth.getBalance(tokenHolder);
+
+    var resultBalance = rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.balanceOf(actor.from).call() : await web3.eth.getBalance(actor.from);
+
     console.log(`exit event is ${setup.lastUpdateEvent}`);
     console.log(`starting balance is ${startingBalance}`);
     console.log(`result balance is ${resultBalance}`);
 
-    // reward = (parseInt(currentTimestamp) + (blocks * misc.TIME_SLOTS_IN_SECONDS) + misc.TIME_SLOTS_IN_SECONDS - parseInt(actor.position.creationEvent)) * parseInt(actor.position.lockedRewardPerEvent);
-    //         console.log(`if - reward is ${reward}`);
+    var diffBalance = parseInt(resultBalance) - parseInt(startingBalance);
+    console.log(`diffBalance balance is ${diffBalance}`);
+    var reward = actor.position.reward;
+    console.log(`reward balance is ${reward}`);
+    assert.strictEqual(
+        formatMoney(fromDecimals(diffBalance, rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.decimals().call() : 18), 4),
+        formatMoney(fromDecimals(reward, rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.decimals().call() : 18), 4)
+    );
 
-    // assert.strictEqual(
-    //     formatMoney(fromDecimals(diffBalance, rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.decimals().call() : 18), 4),
-    //     formatMoney(fromDecimals(reward, rewardToken !== VOID_ETHEREUM_ADDRESS ? await rewardToken.methods.decimals().call() : 18), 4)
-    // );
 }
 
 async function disableSetup(index) {
@@ -720,11 +708,35 @@ async function addNewFreeSetup() {
     assert.strictEqual(parseInt(infoCount), parseInt(startingInfoCount) + 1);
 }
 
+// async function withdrawLiquidity(actor, amount, jump) {
+//     var positionLiquidityPoolTokenAmount = actor.position.liquidityPoolTokenAmount;
+//     if (!amount) amount = positionLiquidityPoolTokenAmount;
+//     var startingFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
+//     if (jump) {
+//         var setup = (await farmMainContract.methods.setups().call())[actor.setupIndex];
+//         await blockchainConnection.jumpToBlock(parseInt(setup.endBlock) + 1);
+//     }
+//     await farmMainContract.methods.withdrawLiquidity(actor.free ? actor.positionId : 0, !actor.free ? actor.objectId : 0, actor.unwrap, amount).send(actor.from);
+//     var endFarmTokenBalance = actor.free ? 0 : await farmTokenCollection.methods.balanceOf(actor.address, actor.objectId).call();
+//     if (amount === actor.position.liquidityPoolTokenAmount || actor.free) {
+//         var position = await farmMainContract.methods.position(actor.positionId).call();
+//         if (actor.free && amount === actor.position.liquidityPoolTokenAmount) {
+//             assert.strictEqual(parseInt(position.creationBlock), 0);
+//         } else if (actor.free) {
+//             assert.strictEqual(utilities.fromDecimals(parseInt(position.liquidityPoolTokenAmount), 18), utilities.fromDecimals(parseInt(positionLiquidityPoolTokenAmount) - parseInt(amount), 18));
+//             actor.position = position;
+//         }
+//         assert.strictEqual(parseInt(endFarmTokenBalance), 0);
+//     } else {
+//         assert.strictEqual(parseInt(endFarmTokenBalance), parseInt(startingFarmTokenBalance) - parseInt(amount));
+//     }
+// }
+
 module.exports.test = async function test() {
     console.log("* MULTIVERSE - test() started *");
 
     console.group("Should activate both the setups");
-    await shouldActiveSetup();
+    await shouldActivateSetup();
     console.groupEnd();
     console.log("");
 
@@ -740,7 +752,6 @@ module.exports.test = async function test() {
         console.log("");
     }
 
-    // TODO RuntimeError: VM Exception while processing transaction: revert Invalid open (1)
     // console.group("Should allow " + actors.Bob.name + " to open a new staking position");
     // {
     //     await createStakingPosition(actors.Bob, 1);
@@ -748,26 +759,77 @@ module.exports.test = async function test() {
     //     console.log("");
     // }
 
-    // console.group("Should allow " + actors.Alice.name + " to add liquidity");
-    // await addLiquidity(actors.Alice);
+    // console.group("Should allow " + actors.Carol.name + " to open a new staking position");
+    // {
+    //     await createStakingPosition(actors.Carol, 1);
+    //     console.groupEnd();
+    //     console.log("");
+    // }
+    // console.group("Should allow " + actors.David.name + " to open a new staking position");
+    // {
+    //     await createStakingPosition(actors.David, 0);
+    //     console.groupEnd();
+    //     console.log("");
+    // }
+    // console.group("Should allow " + actors.Eve.name + " to open a new staking position");
+    // {
+    //     await createStakingPosition(actors.Eve, 0);
+    //     console.groupEnd();
+    //     console.log("");
+    // }
+    // console.group("Should allow " + actors.Frank.name + " to open a new staking position");
+    // {
+    //     await createStakingPosition(actors.Frank, 0);
+    //     console.groupEnd();
+    //     console.log("");
+    // }
+
+    // FIXME asserts fail if other actors open position with same index
+    console.group("Should allow " + actors.Alice.name + " to add liquidity");
+    await addLiquidity(actors.Alice);
+    console.groupEnd();
+    console.log("");
+
+    console.group("Should allow the host to disable the free setup");
+    await disableSetup(1);
+    console.groupEnd();
+    console.log("");
+
+    console.group("Should allow the host to add a new free setup");
+    await addNewFreeSetup();
+    console.groupEnd();
+    console.log("");
+
+    console.group("Should activate the new setup");
+    await blockchainCall(farmingGen1Contract.methods.activateSetup, 2, { from: tokenHolder });
+    var setups = await farmingGen1Contract.methods.setups().call();
+    var setup = setups[2];
+    assert.strictEqual(setup.active, true);
+    console.groupEnd();
+    console.log("");
+
+
+    console.group("Should allow " + actors.Alice.name + " to withdraw");
+    await withdrawReward(actors.Alice, 5 * misc.TIME_SLOTS_IN_SECONDS);
+    console.groupEnd();
+    console.log("");
+
+    // console.group("Should allow " + actors.Bob.name + " to withdraw");
+    // await withdrawReward(actors.Alice, 3 * misc.TIME_SLOTS_IN_SECONDS);
     // console.groupEnd();
     // console.log("");
 
-    // TODO
-    // console.group("Should allow " + actors.Alice.name + " to withdraw");
-    // await withdrawReward(actors.Alice, 5, true);
+    // console.group("Should allow " + actors.Carol.name + " to withdraw");
+    // await withdrawReward(actors.Alice, 5 * misc.TIME_SLOTS_IN_SECONDS);
     // console.groupEnd();
     // console.log("");
 
-    // console.group("Should allow the host to disable the free setup");
-    // await disableSetup(1);
+    // console.group("Should allow " + actors.Alice.name + " to withdraw liquidity");
+    // await withdrawLiquidity(actors.Alice);
+    // await withdrawReward(actors.Alice);
     // console.groupEnd();
     // console.log("");
 
-    // console.group("Should allow the host to add a new free setup");
-    // await addNewFreeSetup();
-    // console.groupEnd();
-    // console.log("");
 
 
     console.log("* MULTIVERSE - test() - finished *");
