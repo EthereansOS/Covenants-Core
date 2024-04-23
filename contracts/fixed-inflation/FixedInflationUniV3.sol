@@ -34,21 +34,23 @@ contract FixedInflationUniV3 is IFixedInflation, BlockRetriever {
     FixedInflationEntry private _entry;
     FixedInflationOperation[] private _operations;
 
-    address private constant UNISWAP_V3_SWAP_ROUTER_ADDRESS = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address private UNISWAP_V3_SWAP_ROUTER_ADDRESS;
     address private ETHEREUM_ADDRESS;
 
     function lazyInit(bytes memory lazyInitData) public returns(bytes memory extensionInitResult) {
 
         require(initializer == address(0), "Already init");
-
-        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS).WETH9();
-
-        (address _host, bytes memory extensionPayload, FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) = abi.decode(lazyInitData, (address, bytes, FixedInflationEntry, FixedInflationOperation[]));
-
-        require(_host != address(0), "Blank host");
         initializer = msg.sender;
 
-        host = _host;
+        address uniswapV3SwapRouterAddress;
+        address extension;
+        (uniswapV3SwapRouterAddress, extension, lazyInitData) = abi.decode(lazyInitData, (address, address, bytes));
+        require((host = extension) != address(0), "extension");
+
+        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS = uniswapV3SwapRouterAddress).WETH9();
+
+        (bytes memory extensionPayload, FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) = abi.decode(lazyInitData, (bytes, FixedInflationEntry, FixedInflationOperation[]));
+
         if(keccak256(extensionPayload) != keccak256("")) {
             extensionInitResult = _call(_host, extensionPayload);
         }
