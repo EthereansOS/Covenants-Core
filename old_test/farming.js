@@ -219,7 +219,7 @@ describe("Farming", () => {
 
         UniswapV2AMMV1 = await compile('amm-aggregator/models/UniswapV2/1/UniswapV2AMMV1');
 
-        uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('../node_modules/@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager')).abi, context.uniswapV3NonfungiblePositionManagerAddress);
+        uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('util/uniswapV3/INonfungiblePositionManager')).abi, context.uniswapV3NonfungiblePositionManagerAddress);
 
         ethItemOrchestrator = new web3.eth.Contract(context.ethItemOrchestratorABI, context.ethItemOrchestratorAddress);
         uniswapV2Router = new web3.eth.Contract(context.uniswapV2RouterABI, context.uniswapV2RouterAddress);
@@ -278,7 +278,7 @@ describe("Farming", () => {
         rewardDestination = dfo.mvdWalletAddress;
         var farmMainModel = await new web3.eth.Contract(FarmMain.abi).deploy({ data: FarmMain.bin }).send(blockchainConnection.getSendingOptions());
         console.log(`simple farm model deployed at ${farmMainModel.options.address}`);
-        // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());  
+        // var pinnedFarmModel = await new web3.eth.Contract(PinnedFarmMain.abi).deploy({data : PinnedFarmMain.bin}).send(blockchainConnection.getSendingOptions());
         var farmExtensionModel = await new web3.eth.Contract(FarmExtension.abi).deploy({ data: FarmExtension.bin }).send(blockchainConnection.getSendingOptions());
         console.log(`farm extension model deployed at ${farmExtensionModel.options.address}`);
 

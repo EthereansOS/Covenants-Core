@@ -4,13 +4,13 @@ pragma abicoder v2;
 
 import "./IUniswapV3AMMV1.sol";
 import "../../../common/AMM.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IQuoter.sol";
+import "../../../../util/uniswapV3/IUniswapV3Pool.sol";
+import "../../../../util/uniswapV3/IUniswapV3Factory.sol";
+import "../../../../util/uniswapV3/INonfungiblePositionManager.sol";
+import "../../../../util/uniswapV3/ISwapRouter.sol";
+import "../../../../util/uniswapV3/IMulticall.sol";
+import "../../../../util/uniswapV3/IPeripheryPayments.sol";
+import "../../../../util/uniswapV3/IQuoter.sol";
 
 contract UniswapV3AMMV1 is IUniswapV3AMMV1, AMM {
 

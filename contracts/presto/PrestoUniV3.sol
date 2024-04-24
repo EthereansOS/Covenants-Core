@@ -7,11 +7,11 @@ import "./util/IERC20.sol";
 import "./util/DFOHub.sol";
 import "./util/IERC20Burnable.sol";
 import "../amm-aggregator/common/IAMM.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
+import "../util/uniswapV3/IUniswapV3Pool.sol";
+import "../util/uniswapV3/ISwapRouter.sol";
+import "../util/uniswapV3/IMulticall.sol";
+import "../util/uniswapV3/IPeripheryPayments.sol";
+import "../util/uniswapV3/IPeripheryImmutableState.sol";
 
 contract PrestoUniV3 is IPrestoUniV3 {
 

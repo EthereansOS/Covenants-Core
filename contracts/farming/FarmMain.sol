@@ -6,10 +6,10 @@ import "./IFarmMain.sol";
 import "./IFarmExtension.sol";
 import "./IFarmFactory.sol";
 import "./util/IERC20.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
+import "../util/uniswapV3/IUniswapV3Pool.sol";
+import "../util/uniswapV3/TickMath.sol";
+import "../util/uniswapV3/INonfungiblePositionManager.sol";
+import "../util/uniswapV3/IMulticall.sol";
 import "@ethereansos/swissknife/contracts/environment/ethereum/BlockRetriever.sol";
 
 contract FarmMain is IFarmMain, BlockRetriever {

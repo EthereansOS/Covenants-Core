@@ -943,8 +943,8 @@ describe("FixedInflation UniV3", () => {
     async function calculateMinAmounts(operations, multiplier) {
         var outputAmounts = operations.map(() => '0');
         var minAmounts = operations.map(() => '0');
-        var Quoter = await compile('../node_modules/@uniswap/v3-periphery/contracts/interfaces/IQuoter');
-        var UniswapV3Pool = await compile('../node_modules/@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool');
+        var Quoter = await compile('util/uniswapV3/IQuoter');
+        var UniswapV3Pool = await compile('util/uniswapV3/IUniswapV3Pool');
         var quoter = new web3.eth.Contract(Quoter.abi, knowledgeBase.uniswapV3QuoterAddress);
         for(var i in operations) {
             var operation = operations[i];

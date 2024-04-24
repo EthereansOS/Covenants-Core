@@ -5,10 +5,10 @@ pragma abicoder v2;
 import "./IFarmMainRegular.sol";
 import "./IFarmExtensionRegular.sol";
 import "./util/IERC20.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
+import "../util/uniswapV3/IUniswapV3Pool.sol";
+import "../util/uniswapV3/TickMath.sol";
+import "../util/uniswapV3/INonfungiblePositionManager.sol";
+import "../util/uniswapV3/IMulticall.sol";
 
 contract FarmMainRegularMinStake is IFarmMainRegular {
 

@@ -19,7 +19,6 @@
     "author": "",
     "license": "ISC",
     "dependencies": {
-        "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git",
-        "@uniswap/v3-periphery": "^1.1.0"
+        "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git"
     }
 }

@@ -256,7 +256,7 @@ describe("Farming Regular Min Stake", () => {
         uniswapAMM = await new web3.eth.Contract(UniswapV3AMMV1.abi).deploy({ data: UniswapV3AMMV1.bin, arguments: [knowledgeBase.swapRouterAddress, knowledgeBase.uniswapV3NonfungiblePositionManagerAddress, knowledgeBase.uniswapV3QuoterAddress, "0".toDecimals(18)] }).send(blockchainConnection.getSendingOptions());
         amm = uniswapAMM;
 
-        uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('../node_modules/@uniswap/v3-periphery/contracts/interfaces/INonfungiblePositionManager')).abi, knowledgeBase.uniswapV3NonfungiblePositionManagerAddress);
+        uniswapV3NonfungiblePositionManager = new web3.eth.Contract((await compile('util/uniswapV3/INonfungiblePositionManager')).abi, knowledgeBase.uniswapV3NonfungiblePositionManagerAddress);
 
         uniswapV2Router = new web3.eth.Contract(knowledgeBase.uniswapV2RouterABI, knowledgeBase.uniswapV2RouterAddress);
         uniswapV2Factory = new web3.eth.Contract(knowledgeBase.uniswapV2FactoryABI, knowledgeBase.uniswapV2FactoryAddress);

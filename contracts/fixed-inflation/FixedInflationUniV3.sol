@@ -7,11 +7,11 @@ import "./IFixedInflationExtension.sol";
 import "./util/IERC20.sol";
 import "../amm-aggregator/common/IAMM.sol";
 import "./IFixedInflation.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
-import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
+import "../util/uniswapV3/IUniswapV3Pool.sol";
+import "../util/uniswapV3/ISwapRouter.sol";
+import "../util/uniswapV3/IMulticall.sol";
+import "../util/uniswapV3/IPeripheryPayments.sol";
+import "../util/uniswapV3/IPeripheryImmutableState.sol";
 
 contract FixedInflationUniV3 is IFixedInflation {
 
@@ -53,7 +53,7 @@ contract FixedInflationUniV3 is IFixedInflation {
         (bytes memory extensionPayload, FixedInflationEntry memory newEntry, FixedInflationOperation[] memory newOperations) = abi.decode(lazyInitData, (bytes, FixedInflationEntry, FixedInflationOperation[]));
 
         if(keccak256(extensionPayload) != keccak256("")) {
-            extensionInitResult = _call(_host, extensionPayload);
+            extensionInitResult = _call(extension, extensionPayload);
         }
         _set(newEntry, newOperations);
     }
