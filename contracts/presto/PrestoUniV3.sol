@@ -11,6 +11,7 @@ import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IMulticall.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryPayments.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/IPeripheryImmutableState.sol";
 
 contract PrestoUniV3 is IPrestoUniV3 {
 
@@ -24,14 +25,14 @@ contract PrestoUniV3 is IPrestoUniV3 {
     uint256 public override feePercentage;
     address private _ammAggregator;
 
-    address private constant UNISWAP_V3_SWAP_ROUTER_ADDRESS = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
+    address public immutable UNISWAP_V3_SWAP_ROUTER_ADDRESS;
     address public immutable ETHEREUM_ADDRESS;
 
-    constructor(address _doubleProxy, uint256 _feePercentage, address ammAggregator, address _eth) {
+    constructor(address _doubleProxy, uint256 _feePercentage, address ammAggregator, address uniswapV3SwapRouterAddress) {
         doubleProxy = _doubleProxy;
         feePercentage = _feePercentage;
         _ammAggregator = ammAggregator;
-        ETHEREUM_ADDRESS = _eth;
+        ETHEREUM_ADDRESS = IPeripheryImmutableState(UNISWAP_V3_SWAP_ROUTER_ADDRESS = uniswapV3SwapRouterAddress).WETH9();
     }
 
     receive() external payable {
