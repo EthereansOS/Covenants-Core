@@ -106,14 +106,14 @@ contract PrestoUniV3 is IPrestoUniV3 {
         }
     }
 
-    function _isAMMOfAggregator(address ammPlugin, address[] memory amms) private pure {
+    function _isAMMOfAggregator(address ammPlugin, address[] memory amms) private view {
         if(ammPlugin == address(0)) {
             return;
         }
+        if(ammPlugin == UNISWAP_V3_SWAP_ROUTER_ADDRESS) {
+            return;
+        }
         for(uint256 i = 0; i < amms.length; i++) {
-            if(ammPlugin == UNISWAP_V3_SWAP_ROUTER_ADDRESS) {
-                return;
-            }
             if(ammPlugin == amms[i]) {
                 return;
             }
