@@ -20,7 +20,6 @@
     "license": "ISC",
     "dependencies": {
         "@ethereansos/multiverse": "git+https://github.com/EthereansOS/multiverse.git",
-        "@ethereansos/swissknife": "git+https://github.com/EthereansOS/ethereansos-swissknife.git#os_up_4",
         "@uniswap/v3-periphery": "^1.1.0"
     }
 }
